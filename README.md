@@ -4,7 +4,8 @@
 
 Atlantis is a multi-agent AI system where 20 Founding agents research knowledge domains, write a constitution through structured debate, form self-governing States, and produce content from governance events — all under constitutional constraints that prevent the system from collapsing.
 
-The system ran end-to-end for **$2.11** across **512 API calls** without a single crash.
+The system ran end-to-end across 512 API calls in mock mode. 
+Estimated cost with live API: ~$2-5 per run.
 
 ---
 
