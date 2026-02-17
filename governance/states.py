@@ -362,76 +362,53 @@ class Town:
         }
 
     def _parse_findings(self, content: str) -> Dict:
-        """Parse research findings from LLM response.
-
-        Handles all formatting styles:
-        - Plain: CONCEPTS: item1, item2
-        - Bold markdown: **CONCEPTS:** item1, item2
-        - Multi-line with bullets
-        - Numbered lists
-        """
-        import re
-
-        findings = {
-            "concepts": [],
-            "frameworks": [],
-            "applications": [],
-            "synthesis": "",
-            "evidence": ""
-        }
-
+        """Parse research findings from LLM response."""
+        findings = {"concepts": [], "frameworks": [], "applications": [], "synthesis": "", "evidence": ""}
         if not content:
             return findings
 
-        # Strip bold markdown globally: **text** → text
+        # 1. Remove all ** so **Term Name** becomes Term Name
         clean = content.replace("**", "")
 
-        # Extract sections using multi-line regex (captures until next section or end)
-        concepts_match = re.search(
-            r'CONCEPTS?:\s*(.*?)(?=\n\s*(?:FRAMEWORKS?|APPLICATIONS?|SYNTHESIS|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if concepts_match:
-            raw = concepts_match.group(1).strip()
-            findings["concepts"] = _extract_items(raw)
+        # 2. Split on ## headers
+        parts = re.split(r'\n##\s*', clean)
 
-        frameworks_match = re.search(
-            r'FRAMEWORKS?:\s*(.*?)(?=\n\s*(?:CONCEPTS?|APPLICATIONS?|SYNTHESIS|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if frameworks_match:
-            raw = frameworks_match.group(1).strip()
-            findings["frameworks"] = _extract_items(raw)
+        for part in parts[1:]:  # skip preamble before first ##
+            lines = part.split('\n')
+            header = lines[0].strip().upper()  # e.g. "CONCEPTS (DEEPER LAYER)"
+            body_lines = lines[1:]             # 4. skip the header title line
 
-        applications_match = re.search(
-            r'APPLICATIONS?:\s*(.*?)(?=\n\s*(?:CONCEPTS?|FRAMEWORKS?|SYNTHESIS|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if applications_match:
-            raw = applications_match.group(1).strip()
-            findings["applications"] = _extract_items(raw)
+            if 'CONCEPT' in header:
+                key = 'concepts'
+            elif 'FRAMEWORK' in header:
+                key = 'frameworks'
+            elif 'APPLICATION' in header:
+                key = 'applications'
+            elif 'SYNTHESIS' in header:
+                findings['synthesis'] = '\n'.join(body_lines).strip()[:500]
+                continue
+            elif 'EVIDENCE' in header:
+                findings['evidence'] = '\n'.join(body_lines).strip()[:500]
+                continue
+            else:
+                continue
 
-        synthesis_match = re.search(
-            r'SYNTHESIS:\s*(.*?)(?=\n\s*(?:CONCEPTS?|FRAMEWORKS?|APPLICATIONS?|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if synthesis_match:
-            findings["synthesis"] = synthesis_match.group(1).strip()[:500]
+            items = []
+            for line in body_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                # 3a. "TERM: description"
+                m = re.match(r'^[-•*\d.)]*\s*([^:\n]{3,60}):\s+(.{5,})', line)
+                if m:
+                    items.append(m.group(1).strip())
+                    continue
+                # 3b. "TERM - description"
+                m = re.match(r'^[-•*\d.)]*\s*([^-\n]{3,60})\s+-\s+(.{5,})', line)
+                if m:
+                    items.append(m.group(1).strip())
 
-        evidence_match = re.search(
-            r'EVIDENCE:\s*(.*?)(?=\n\s*(?:CONCEPTS?|FRAMEWORKS?|APPLICATIONS?|SYNTHESIS|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if evidence_match:
-            findings["evidence"] = evidence_match.group(1).strip()[:500]
-
-        # Fallback: if nothing parsed, extract something from the content
-        if not findings["concepts"] and not findings["frameworks"]:
-            # Try splitting on commas from first substantial line
-            lines = [l.strip() for l in content.split('\n') if len(l.strip()) > 10]
-            if lines:
-                findings["concepts"] = [w.strip('.,;:*-# ') for w in lines[0].split(',') if len(w.strip()) > 3][:10]
-                findings["synthesis"] = content[:500]
+            findings[key] = list(dict.fromkeys(items))
 
         return findings
 
@@ -711,76 +688,53 @@ class City:
         }
 
     def _parse_findings(self, content: str) -> Dict:
-        """Parse research findings from LLM response.
-
-        Handles all formatting styles:
-        - Plain: CONCEPTS: item1, item2
-        - Bold markdown: **CONCEPTS:** item1, item2
-        - Multi-line with bullets
-        - Numbered lists
-        """
-        import re
-
-        findings = {
-            "concepts": [],
-            "frameworks": [],
-            "applications": [],
-            "synthesis": "",
-            "evidence": ""
-        }
-
+        """Parse research findings from LLM response."""
+        findings = {"concepts": [], "frameworks": [], "applications": [], "synthesis": "", "evidence": ""}
         if not content:
             return findings
 
-        # Strip bold markdown globally: **text** → text
+        # 1. Remove all ** so **Term Name** becomes Term Name
         clean = content.replace("**", "")
 
-        # Extract sections using multi-line regex (captures until next section or end)
-        concepts_match = re.search(
-            r'CONCEPTS?:\s*(.*?)(?=\n\s*(?:FRAMEWORKS?|APPLICATIONS?|SYNTHESIS|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if concepts_match:
-            raw = concepts_match.group(1).strip()
-            findings["concepts"] = _extract_items(raw)
+        # 2. Split on ## headers
+        parts = re.split(r'\n##\s*', clean)
 
-        frameworks_match = re.search(
-            r'FRAMEWORKS?:\s*(.*?)(?=\n\s*(?:CONCEPTS?|APPLICATIONS?|SYNTHESIS|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if frameworks_match:
-            raw = frameworks_match.group(1).strip()
-            findings["frameworks"] = _extract_items(raw)
+        for part in parts[1:]:  # skip preamble before first ##
+            lines = part.split('\n')
+            header = lines[0].strip().upper()  # e.g. "CONCEPTS (DEEPER LAYER)"
+            body_lines = lines[1:]             # 4. skip the header title line
 
-        applications_match = re.search(
-            r'APPLICATIONS?:\s*(.*?)(?=\n\s*(?:CONCEPTS?|FRAMEWORKS?|SYNTHESIS|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if applications_match:
-            raw = applications_match.group(1).strip()
-            findings["applications"] = _extract_items(raw)
+            if 'CONCEPT' in header:
+                key = 'concepts'
+            elif 'FRAMEWORK' in header:
+                key = 'frameworks'
+            elif 'APPLICATION' in header:
+                key = 'applications'
+            elif 'SYNTHESIS' in header:
+                findings['synthesis'] = '\n'.join(body_lines).strip()[:500]
+                continue
+            elif 'EVIDENCE' in header:
+                findings['evidence'] = '\n'.join(body_lines).strip()[:500]
+                continue
+            else:
+                continue
 
-        synthesis_match = re.search(
-            r'SYNTHESIS:\s*(.*?)(?=\n\s*(?:CONCEPTS?|FRAMEWORKS?|APPLICATIONS?|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if synthesis_match:
-            findings["synthesis"] = synthesis_match.group(1).strip()[:500]
+            items = []
+            for line in body_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                # 3a. "TERM: description"
+                m = re.match(r'^[-•*\d.)]*\s*([^:\n]{3,60}):\s+(.{5,})', line)
+                if m:
+                    items.append(m.group(1).strip())
+                    continue
+                # 3b. "TERM - description"
+                m = re.match(r'^[-•*\d.)]*\s*([^-\n]{3,60})\s+-\s+(.{5,})', line)
+                if m:
+                    items.append(m.group(1).strip())
 
-        evidence_match = re.search(
-            r'EVIDENCE:\s*(.*?)(?=\n\s*(?:CONCEPTS?|FRAMEWORKS?|APPLICATIONS?|SYNTHESIS|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if evidence_match:
-            findings["evidence"] = evidence_match.group(1).strip()[:500]
-
-        # Fallback: if nothing parsed, extract something from the content
-        if not findings["concepts"] and not findings["frameworks"]:
-            # Try splitting on commas from first substantial line
-            lines = [l.strip() for l in content.split('\n') if len(l.strip()) > 10]
-            if lines:
-                findings["concepts"] = [w.strip('.,;:*-# ') for w in lines[0].split(',') if len(w.strip()) > 3][:10]
-                findings["synthesis"] = content[:500]
+            findings[key] = list(dict.fromkeys(items))
 
         return findings
 
@@ -940,7 +894,9 @@ class State:
     def run_research_cycle(self, federal_agenda: str, llm: LLMProvider,
                           logger: AtlantisLogger, cycle: int) -> Dict:
         """Governor → Researcher → Critic loop. Sync Senator knowledge after."""
+        print(f"    DEBUG AGENTS: governor={self.governor is not None}, researcher={self.researcher is not None}, critic={self.critic is not None}")
         if not self.governor or not self.researcher or not self.critic:
+            print(f"    DEBUG: Early exit — missing agents")
             return {"tokens": 0}
 
         total_tokens = 0
@@ -1053,9 +1009,11 @@ class State:
         total_tokens += defense_response.total_tokens
 
         # Parse findings and create knowledge entry
-        # DEBUG: Show first 200 chars of research response
-        print(f"    DEBUG research response: {(research_response.content or '')[:200]}")
-        findings = self._parse_findings(research_response.content or "")
+        raw_content = research_response.content or ""
+        print(f"    DEBUG RAW RESEARCH: {raw_content[:300]}")
+        findings = self._parse_findings(raw_content)
+        print(f"    DEBUG: parsed concepts = {findings.get('concepts', [])}")
+        print(f"    DEBUG: parsed frameworks = {findings.get('frameworks', [])}")
 
         # Create entry first (tier calculated from ALL entries below)
         entry = KnowledgeEntry(
@@ -1218,76 +1176,53 @@ class State:
         }
 
     def _parse_findings(self, content: str) -> Dict:
-        """Parse research findings from LLM response.
-
-        Handles all formatting styles:
-        - Plain: CONCEPTS: item1, item2
-        - Bold markdown: **CONCEPTS:** item1, item2
-        - Multi-line with bullets
-        - Numbered lists
-        """
-        import re
-
-        findings = {
-            "concepts": [],
-            "frameworks": [],
-            "applications": [],
-            "synthesis": "",
-            "evidence": ""
-        }
-
+        """Parse research findings from LLM response."""
+        findings = {"concepts": [], "frameworks": [], "applications": [], "synthesis": "", "evidence": ""}
         if not content:
             return findings
 
-        # Strip bold markdown globally: **text** → text
+        # 1. Remove all ** so **Term Name** becomes Term Name
         clean = content.replace("**", "")
 
-        # Extract sections using multi-line regex (captures until next section or end)
-        concepts_match = re.search(
-            r'CONCEPTS?:\s*(.*?)(?=\n\s*(?:FRAMEWORKS?|APPLICATIONS?|SYNTHESIS|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if concepts_match:
-            raw = concepts_match.group(1).strip()
-            findings["concepts"] = _extract_items(raw)
+        # 2. Split on ## headers
+        parts = re.split(r'\n##\s*', clean)
 
-        frameworks_match = re.search(
-            r'FRAMEWORKS?:\s*(.*?)(?=\n\s*(?:CONCEPTS?|APPLICATIONS?|SYNTHESIS|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if frameworks_match:
-            raw = frameworks_match.group(1).strip()
-            findings["frameworks"] = _extract_items(raw)
+        for part in parts[1:]:  # skip preamble before first ##
+            lines = part.split('\n')
+            header = lines[0].strip().upper()  # e.g. "CONCEPTS (DEEPER LAYER)"
+            body_lines = lines[1:]             # 4. skip the header title line
 
-        applications_match = re.search(
-            r'APPLICATIONS?:\s*(.*?)(?=\n\s*(?:CONCEPTS?|FRAMEWORKS?|SYNTHESIS|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if applications_match:
-            raw = applications_match.group(1).strip()
-            findings["applications"] = _extract_items(raw)
+            if 'CONCEPT' in header:
+                key = 'concepts'
+            elif 'FRAMEWORK' in header:
+                key = 'frameworks'
+            elif 'APPLICATION' in header:
+                key = 'applications'
+            elif 'SYNTHESIS' in header:
+                findings['synthesis'] = '\n'.join(body_lines).strip()[:500]
+                continue
+            elif 'EVIDENCE' in header:
+                findings['evidence'] = '\n'.join(body_lines).strip()[:500]
+                continue
+            else:
+                continue
 
-        synthesis_match = re.search(
-            r'SYNTHESIS:\s*(.*?)(?=\n\s*(?:CONCEPTS?|FRAMEWORKS?|APPLICATIONS?|EVIDENCE|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if synthesis_match:
-            findings["synthesis"] = synthesis_match.group(1).strip()[:500]
+            items = []
+            for line in body_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                # 3a. "TERM: description"
+                m = re.match(r'^[-•*\d.)]*\s*([^:\n]{3,60}):\s+(.{5,})', line)
+                if m:
+                    items.append(m.group(1).strip())
+                    continue
+                # 3b. "TERM - description"
+                m = re.match(r'^[-•*\d.)]*\s*([^-\n]{3,60})\s+-\s+(.{5,})', line)
+                if m:
+                    items.append(m.group(1).strip())
 
-        evidence_match = re.search(
-            r'EVIDENCE:\s*(.*?)(?=\n\s*(?:CONCEPTS?|FRAMEWORKS?|APPLICATIONS?|SYNTHESIS|CONNECTIONS?):|\Z)',
-            clean, re.IGNORECASE | re.DOTALL
-        )
-        if evidence_match:
-            findings["evidence"] = evidence_match.group(1).strip()[:500]
-
-        # Fallback: if nothing parsed, extract something from the content
-        if not findings["concepts"] and not findings["frameworks"]:
-            # Try splitting on commas from first substantial line
-            lines = [l.strip() for l in content.split('\n') if len(l.strip()) > 10]
-            if lines:
-                findings["concepts"] = [w.strip('.,;:*-# ') for w in lines[0].split(',') if len(w.strip()) > 3][:10]
-                findings["synthesis"] = content[:500]
+            findings[key] = list(dict.fromkeys(items))
 
         return findings
 
@@ -1465,8 +1400,12 @@ class StateManager:
         state.critic = create_state_critic(state_id, spec["name"], spec["domain"])
         state.senator = create_state_senator(state_id, spec["name"], spec["domain"], state.knowledge_entries)
 
-        # 7. Register in database
+        # 7. Register in database — save constitution AND all 4 agents so Phase 3 can reload them
         self.db.save_state_constitution(state_id, constitution.to_dict())
+        self.db.save_agent(state.governor)
+        self.db.save_agent(state.researcher)
+        self.db.save_agent(state.critic)
+        self.db.save_agent(state.senator)
 
         self.states[state_id] = state
         return state

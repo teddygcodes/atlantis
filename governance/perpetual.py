@@ -164,6 +164,7 @@ class PerpetualEngine:
             federal_agenda=self._current_agenda or "Explore foundational concepts",
             cycle=self.cycle_count
         )
+        print(f"    DEBUG: raw research result = {result}")
 
         # Log tier advancements
         for state_id, findings in result["state_findings"].items():
@@ -192,6 +193,11 @@ class PerpetualEngine:
         permanent_agents = legislature.get_agents()
         state_senators = self.state_manager.get_senators()
         all_senators = permanent_agents + state_senators
+        print(f"    DEBUG: branch agents = {len(permanent_agents)}")
+        print(f"    DEBUG: state senators = {len(state_senators)}")
+        for s in state_senators:
+            print(f"      Senator: {s.name}")
+        print(f"    DEBUG VOTERS: {len(permanent_agents)} branch + {len(state_senators)} senators = {[a.name for a in all_senators]}")
 
         if not all_senators:
             return {"tokens": 0}

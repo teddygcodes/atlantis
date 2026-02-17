@@ -65,8 +65,15 @@ class AtlantisEngine:
     def run(self, governance_cycles: int = 10):
         """Run Atlantis from current phase forward."""
 
-        # Check for phase cache first - skip to Founding Era if it exists
-        if self.current_phase == "not_started" and self._load_phase_cache():
+        # If Phase 2 cache exists and government not loaded yet, skip to Phase 3
+        if os.path.exists(self._get_phase2_cache_path()) and not hasattr(self, "government"):
+            if self._load_phase_cache():  # loads government/blueprint/constitution
+                print(f"\n  ✓ Phase 2 cache found — skipping to Phase 3 (State Era)")
+                self.current_phase = "founders_retired"
+                self.db.set_state("current_phase", "founders_retired")
+
+        # Otherwise skip to Founding Era if Phase 0+1 cache exists
+        elif self.current_phase == "not_started" and self._load_phase_cache():
             print(f"\n  ✓ Loaded from cache - skipping to Founding Era")
             self.current_phase = "ready_for_founding_era"
             self.db.set_state("current_phase", "ready_for_founding_era")
@@ -381,6 +388,25 @@ class AtlantisEngine:
                     formed_cycle=sd["formed_cycle"]
                 )
                 state.tier = sd.get("tier", 0)
+
+                # Restore agents from DB
+                if sd.get("governor_id"):
+                    agent_data = self.db.get_agent_state(sd["governor_id"])
+                    if agent_data:
+                        state.governor = BaseAgent.from_dict(agent_data)
+                if sd.get("researcher_id"):
+                    agent_data = self.db.get_agent_state(sd["researcher_id"])
+                    if agent_data:
+                        state.researcher = BaseAgent.from_dict(agent_data)
+                if sd.get("critic_id"):
+                    agent_data = self.db.get_agent_state(sd["critic_id"])
+                    if agent_data:
+                        state.critic = BaseAgent.from_dict(agent_data)
+                if sd.get("senator_id"):
+                    agent_data = self.db.get_agent_state(sd["senator_id"])
+                    if agent_data:
+                        state.senator = BaseAgent.from_dict(agent_data)
+
                 state_manager.states[state_id] = state
 
             print(f"  ✓ Founding Era checkpoint loaded (cycle {ckpt['founding_era_cycle']}, {ckpt['states_formed']} states)")
