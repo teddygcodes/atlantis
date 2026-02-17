@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m py_compile:*)",
+      "Bash(wc -l:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(echo:*)",
+      "Bash(chmod:*)",
+      "Bash(pip3 list:*)",
+      "Bash(./run_mock.sh:*)",
+      "Bash(bash run_mock.sh)",
+      "Bash(kill:*)",
+      "Bash(pkill:*)",
+      "Bash(sqlite3:*)",
+      "Bash(while ! grep -q \"DEBUG: About to deposit\" /tmp/atlantis_debug.log)",
+      "Bash(do sleep 5:*)",
+      "Bash(done)",
+      "Bash(unzip:*)",
+      "Bash(while ! grep -q \"STEP 2: STATE FORMATION\" /tmp/atlantis_fixed2.log)",
+      "Bash(while ! grep -q \"DEBUG - State spec raw response\" /tmp/atlantis_fixed3.log)",
+      "Bash(do sleep 3)",
+      "Bash(tee:*)",
+      "Bash(jobs:*)",
+      "Bash(while:*)"
+    ]
+  }
+}
