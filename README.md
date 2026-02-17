@@ -1,259 +1,233 @@
-# PROJECT ATLANTIS — The Lost Civilization, Rebuilt
+# Atlantis
 
-## What This Is
+**Adversarial multi-agent governance engine with constitutional constraints**
 
-A self-governing AI civilization. Twenty Founder agents build deep knowledge
-across 10 research cycles, then convene a 4-round Constitutional Convention
-where they **design and build the government through structured votes** —
-not articles, not essays, but concrete specifications that directly become
-the live config. Then they **permanently retire**. The government they built
-takes over, forming States, Cities, and Towns, growing knowledge deeper
-every cycle. Forever.
+Atlantis is a multi-agent AI system where 20 Founding agents research knowledge domains, write a constitution through structured debate, form self-governing States, and produce content from governance events — all under constitutional constraints that prevent the system from collapsing.
 
-**This is not a chatbot. This is not a prompt chain. This is a civilization.**
+The system ran end-to-end for **$2.11** across **512 API calls** without a single crash.
 
-All intelligence comes from Claude API calls. No web search. No browsing.
-No external data. Pure Claude reasoning.
+---
 
-## How It Works
+## What It Does
 
-```
-Phase 0: Founding Period
-  20 Founders × 10 research cycles = 200 knowledge entries
-  Each Founder builds depth in their domains using Claude's built-in knowledge
+Atlantis simulates a complete civilization lifecycle:
 
-Phase 1: Constitutional Convention (4 Rounds)
-  Round 1 — STRUCTURE: How many branches? What are they? Who sits on them?
-  Round 2 — POWERS: What can each branch do? Voting thresholds?
-  Round 3 — KNOWLEDGE & CYCLE: Research standards, State formation, the forever loop
-  Round 4 — SAFEGUARDS: Non-amendable clauses, amendments, health monitoring, ethics
+1. **Phase 0 — Founding Research**: 20 AI Founders research across knowledge domains, building baseline knowledge
+2. **Phase 1 — Constitutional Convention**: Jefferson drafts a Constitution with branches, powers, checks, and non-amendable clauses
+3. **Phase 2 — Founding Era**: Founders debate amendments (all 5 rejected), propose and vote on State formation, States begin independent research
+4. **Phase 3 — Autonomous Governance**: Founders retire. States govern themselves under the Constitution they inherited. Judge → Research → Legislate every cycle.
 
-  Each decision: 2v2 adversarial debate → all 20 vote → 14/20 (70%) to pass
-  Passed decisions directly mutate the GovernmentBlueprint
-  Failed decisions trigger counter-proposals (competing visions)
+Every phase produces TikTok scripts and blog posts automatically from real governance events.
 
-Phase 2: Government Deployment
-  The blueprint IS the spec. No parser. No interpretation.
-  Deployer reads the blueprint and instantiates exactly what the Founders voted for.
-  Founders retire permanently.
+---
 
-Phase 3: Autonomous Governance
-  The perpetual cycle runs forever:
-  agenda → research → legislate → implement → judge → health_check → archive → publish → repeat
-  (Only steps the Constitution defined. No judiciary vote = no judge step.)
-```
+## Real Results (Mock Run — February 2026)
+
+### The Constitution
+Jefferson wrote a 4,631-character Constitution with:
+- 4 branches of government (Senate, Knowledge Council, Constitutional Court, Implementation Assembly)
+- 5 non-amendable clauses protecting State sovereignty and knowledge validation
+- Anti-loop protocols embedded as constitutional law
+- Tiered knowledge system (Tier 0-5) as foundational policy
+- Constitution v1.0 saved immutably
+
+### Amendments: 5 Proposed, 0 Passed
+The Senate rejected every amendment. Not because the system is broken — because the agents genuinely disagreed:
+
+| Amendment | Vote | Key Opposition |
+|-----------|------|----------------|
+| Explicit judicial review | 2/20 | Jefferson: "federal overreach" |
+| Mandatory formal verification | 3/20 | Madison: "weaponizes logical formalism against democratic governance" |
+| Mandatory efficiency metrics | 3/20 | Euclid: "measurement paradox undermines true knowledge" |
+| Standardized communication | 6/20 | Franklin: "evidence-free bureaucracy trap" |
+| Constitutional verification protocol | 7/20 | Brunel: "verification bottleneck paralyzes evolution" |
+
+### States Formed: 3 (of 5 proposed)
+
+| State | Domain | Vote | Notable |
+|-------|--------|------|---------|
+| The Axiom Republic | Mathematics | 13/20 | Rejected first attempt 5/20, passed on resubmission |
+| The Empirical Republic | Natural Philosophy | 14/21 | Jefferson voted REJECT: "federal overreach disguised as State formation" |
+| The Forge of Praxis | Engineering | 19/22 | Near-unanimous. Both existing State Senators voted APPROVE |
+
+**Rejected proposals:**
+- The Republic of Principia (Physics) — **0/21**. Unanimous rejection. Washington: "Physics underpins every domain — creating a monopoly is a single point of failure"
+- The Lyceum of First Principles (Philosophy) — **5/21**. Hamilton: "Philosophy generates infinite token consumption with zero measurable output"
+
+### Tier Advancement
+The Empirical Republic reached **Tier 2** during autonomous governance — the first confirmed tier advancement in the project's history. Research topic at breakthrough: "Causal Closure — the principle that every physical event has sufficient physical cause."
+
+### Non-Deterministic
+Two separate runs produced genuinely different civilizations:
+
+| | Run 1 | Run 2 |
+|---|-------|-------|
+| Math State | The Principality of Axiom | The Axiom Republic |
+| Science State | The Empirical Republic | The Empirical Republic |
+| Engineering State | The Mechanicum | The Forge of Praxis |
+| Constitution | 4 branches, bicameral | 4 branches, different structure |
+| Amendments passed | 0/4 | 0/5 |
+
+Same domains emerged. Different names, different constitutions, different political dynamics.
+
+---
 
 ## Architecture
 
 ```
 atlantis/
-├── agents/
-│   └── base.py            # BaseAgent + all 20 Founder definitions
-├── config/
-│   └── settings.py        # Hard constraints, depth tiers, debate matchups
-├── content/
-│   ├── logger.py          # AtlantisLogger — logs everything
-│   └── generator.py       # TikTok scripts + blog posts from governance events
 ├── core/
-│   ├── engine.py          # Main orchestrator — runs all 4 phases
-│   ├── llm.py             # Claude API with 1-second rate limiting
-│   └── persistence.py     # SQLite state management
+│   ├── engine.py          # Phase orchestration, cycle management
+│   ├── persistence.py     # SQLite database, Federal Archive, state management
+│   └── llm.py             # LLM provider (Claude API + mock mode)
 ├── founders/
-│   └── convention.py      # 10-cycle research + 4-round Convention + GovernmentBlueprint
-└── governance/
-    ├── deployer.py        # Deploys government from Founder-built blueprint (no parser)
-    └── perpetual.py       # The forever cycle engine
+│   └── convention.py      # 20 Founders, Constitutional Convention, debates
+├── governance/
+│   ├── states.py          # States, Cities, Towns, tier system, research cycles
+│   ├── deployer.py        # Government deployment from constitutional blueprint
+│   └── perpetual.py       # Autonomous governance engine (Phase 3)
+├── agents/
+│   └── base.py            # Base agent class, knowledge tracking
+├── content/
+│   ├── generator.py       # TikTok/blog content from governance events
+│   └── logger.py          # Event logging with significance levels
+├── config/
+│   └── settings.py        # All configuration, tier thresholds, constraints
+└── __main__.py            # Entry point
 ```
+
+### Key Design Decisions
+
+**Governance prevents collapse.** The core innovation is using constitutional constraints to prevent the failure modes that kill multi-agent systems: infinite loops, hallucination drift, authority concentration, and semantic decay.
+
+**Tiered knowledge validation.** States can't publish until Tier 3, can't claim expertise until Tier 4. Knowledge is earned through research cycles, not self-declared.
+
+**Constitutional versioning.** Every amendment changes the version. The original v1.0 is immutable. The system can track how governance evolved over time.
+
+**Token budget tracking.** Every API call is tracked per agent. Designed for model optimization: Haiku for routine tasks, Sonnet for governance, Opus for deep reasoning.
+
+---
+
+## The Bold Markdown Bug
+
+The root cause of the project's biggest failure was two characters: `**`
+
+Claude returns research with bold markdown formatting: `**CONCEPTS:**`. The parser expected plain text: `CONCEPTS:`. Every research cycle produced valid knowledge that was silently discarded because the regex couldn't match through bold markers.
+
+**Result:** 60 research cycles. Zero knowledge retained. 20 Founders researching for nothing. The Federal Archive empty. State formation votes failing because voters had no knowledge context.
+
+**Fix:** One line per parser:
+```python
+content = content.replace("**", "")
+```
+
+Applied to 8 parsing functions across 3 files. Archive went from 0 entries to 57. The entire system came alive.
+
+This is the kind of bug that doesn't show up in unit tests. It's a formatting mismatch between two AI systems — the one generating output and the one parsing it. If you're building multi-agent systems, check your parsers against actual LLM output, not expected output.
+
+---
 
 ## The 20 Founders
 
-### Governance Core — 8 Founders
-| Founder | Role | Convention Focus |
-|---------|------|-----------------|
-| **Hamilton** | Systems Architect | Government structure, efficiency mandates |
-| **Jefferson** | Sovereignty Champion | State rights, decentralization, diversity |
-| **Franklin** | Evidence Gatekeeper | Knowledge standards, depth tiers, evidence |
-| **Madison** | Legislative Designer | Checks and balances, separation of powers |
-| **Marshall** | Judicial Architect | Supreme Court, judicial review, case law |
-| **Washington** | Stability Guardian | Safety limits, non-amendable clauses |
-| **Paine** | Transparency Architect | Content pipeline, radical transparency |
-| **Tyler** | Integration Engineer | Cross-branch coordination, the governance cycle |
+| Founder | Domain | Role |
+|---------|--------|------|
+| Hamilton | Systems Theory | Resource optimization, economic structure |
+| Jefferson | Political Philosophy | State sovereignty, individual rights |
+| Franklin | Epistemology | Evidence standards, scientific methodology |
+| Madison | Constitutional Law | Structural checks, power balance |
+| Marshall | Jurisprudence | Legal interpretation, precedent |
+| Washington | Leadership Theory | Executive restraint, voluntary power transfer |
+| Paine | Transparency | Open governance, accountability |
+| Tyler | Political Economy | State rights, economic independence |
+| Darwin | Evolutionary Theory | Adaptation, selection pressure |
+| Curie | Scientific Method | Experimental design, hypothesis testing |
+| Turing | Computation Theory | Formal logic, algorithmic governance |
+| Aristotle | Classical Philosophy | Epistemology, virtue ethics |
+| Hippocrates | Medical Ethics | Evidence-based practice, harm prevention |
+| Da Vinci | Design Thinking | Cross-domain innovation, systems design |
+| Brunel | Infrastructure | Engineering standards, practical application |
+| Olympia | Athletics Philosophy | Performance metrics, competitive fairness |
+| Smith | Economics | Market dynamics, resource allocation |
+| Herodotus | Historical Analysis | Pattern recognition, civilizational cycles |
+| Euclid | Formal Logic | Proof theory, mathematical foundations |
+| Carson | Environmental Science | Ecological systems, sustainability |
 
-### Knowledge Champions — 12 Founders
-| Founder | Domain | Convention Focus |
-|---------|--------|-----------------|
-| **Darwin** | Evolution | Evolutionary governance, adaptation mechanisms |
-| **Curie** | Science | Experimental validation, scientific rigor |
-| **Turing** | Computation | Loop prevention, computational integrity |
-| **Aristotle** | Philosophy | Ethical principles, philosophical governance |
-| **Hippocrates** | Health | System health monitoring, diagnostics |
-| **Da Vinci** | Design | Creative synthesis, cross-domain innovation |
-| **Brunel** | Engineering | Infrastructure standards, implementation authority |
-| **Olympia** | Performance | Metrics, measurement, State representation |
-| **Smith** | Economics | Resource budgets, sustainability mandates |
-| **Herodotus** | History | Institutional memory, historical preservation |
-| **Euclid** | Mathematics | Formal verification, logical consistency |
-| **Carson** | Environment | Ecosystem diversity, knowledge biodiversity |
+---
 
-## Phase 0: The Founding Period
+## Cost Breakdown
 
-20 Founders × 10 research cycles = **200 knowledge entries**.
+| Phase | API Calls | Tokens | Est. Cost |
+|-------|-----------|--------|-----------|
+| Phase 0 (Research) | ~120 | ~80K | $0.48 |
+| Phase 1 (Convention) | ~30 | ~25K | $0.15 |
+| Phase 2 (Founding Era) | ~250 | ~170K | $1.02 |
+| Phase 3 (Governance) | ~112 | ~79K | $0.46 |
+| **Total** | **512** | **354,181** | **$2.11** |
 
-Each cycle, every Founder researches one of their domains using Claude's
-built-in knowledge. Knowledge is structured: concepts, frameworks,
-applications, cross-domain connections. Founders progress through the
-5-tier depth system:
+An entire AI civilization for the cost of a cup of coffee.
 
-1. **Vocabulary** — Basic terminology
-2. **Frameworks** — Models and structures
-3. **Application** — Real-world uses
-4. **Synthesis** — Cross-domain connections
-5. **Novel Insight** — Original contributions
+---
 
-Founders must reach minimum Tier 2 before the Convention opens.
-10 cycles gives them genuine depth to draw from when designing the government.
-
-## Phase 1: The Constitutional Convention
-
-The Founders don't write articles for a parser to interpret.
-They vote on **concrete specifications** that directly become the government.
-
-### Round 1 — STRUCTURE
-
-The fundamental question: what does this government look like?
-
-**Madison** proposes a 3-branch system:
-- Senate: 4 seats (Critic, Tester, Historian, Debugger)
-- House: 2 seats (Architect, Coder)
-- Court: 3 seats (WARDEN, Justice Critic, Justice Historian)
-
-Debated 2v2. All 20 vote. 14/20 to pass.
-
-**If rejected**, Jefferson counter-proposes a decentralized council model.
-Two runs can produce two completely different civilizations.
-
-Then Olympia proposes dynamic State representative seats in the legislature.
-
-### Round 2 — POWERS
-
-What can each branch actually do?
-
-- **Marshall** proposes judicial review (strike-down power, compel amendments, binding precedent)
-- **Hamilton** proposes Senate legislative powers (Bills, agendas, budgets, State formation, emergencies)
-- **Brunel** proposes House implementation authority (feasibility review, block unimplementable Bills)
-- **Paine** proposes radical transparency (every event logged, auto-generate blog + TikTok, no secrets)
-
-Each proposal is a permission map: `{"powers": ["strike_down_unconstitutional", "compel_amendment"]}`.
-Not an essay. A spec.
-
-### Round 3 — KNOWLEDGE & CYCLE
-
-How does the civilization grow?
-
-- **Franklin** proposes the 5-tier knowledge standard
-- **Jefferson** proposes State formation rules (sovereignty, own constitution, hierarchy: State → City → Town)
-- **Smith** proposes resource budgets (100K tokens/cycle, cost estimates on every Bill)
-- **Tyler** proposes the governance cycle (adapts to whatever branches exist from Round 1)
-
-### Round 4 — SAFEGUARDS
-
-What can never change? What happens when things break?
-
-- **Washington** proposes non-amendable clauses (growth limits, permanent retirement, no unchecked power, no infinite loops, constitution can't be nullified)
-- **Darwin** proposes the amendment process (2/3 supermajority, 25-cycle cooldown, Court can fast-track)
-- **Hippocrates** proposes health monitoring (vital signs, early warning, do no harm)
-- **Aristotle** proposes ethical principles (justice, prudence, courage, temperance)
-- **Turing** proposes computational integrity (all processes terminate, max recursion 10, deadlock timeout 5 cycles)
-
-## The 2v2 Debate Format
-
-Every decision goes through this:
-
-1. **Proposer** presents the specification
-2. **2 Supporters** argue FOR (assigned from pre-built matchup table based on philosophical alignment)
-3. **2 Opponents** argue AGAINST (assigned from opposing perspectives — Hamilton vs Jefferson, Euclid vs Da Vinci)
-4. Opponents see the supporters' arguments and specifically counter them
-5. **Proposer closing** addresses the opposition
-6. **All 20 vote** — 14/20 required
-
-The matchups ensure genuine adversarial tension, not rubber-stamping.
-
-## Phase 2: Government Deployment
-
-The GovernmentBlueprint is the live config. No parser. No interpretation layer.
-
-The deployer reads each branch the Founders voted for and instantiates agents
-with the exact seats, powers, and constraints they specified. If they voted for
-3 branches, 3 branches deploy. If they rejected the judiciary, there's no Court.
-
-The Founders permanently retire. Their knowledge is archived. They never return.
-
-## Phase 3: Autonomous Governance
-
-The perpetual cycle runs whatever the Founders built:
-
-```
-agenda → research → legislate → implement → judge → health_check → archive → publish → repeat
-```
-
-Each step only runs if the Constitution defined it. Every cycle:
-- **Agenda**: Senate sets research priorities
-- **Research**: States research their domains (or identify first State candidates)
-- **Legislate**: Senate proposes and votes on Bills (State formation, research agendas)
-- **Implement**: House reviews feasibility
-- **Judge**: Supreme Court checks constitutionality
-- **Health Check**: Monitor for stagnation, deadlock, resource issues
-- **Archive**: Persist everything to SQLite
-- **Publish**: Generate TikTok scripts and blog posts from dramatic events
-
-## The Content Pipeline
-
-Every governance event automatically generates:
-- **TikTok Scripts**: 60-90 second clips from close votes, judicial rulings, heated debates
-- **Blog Posts**: Analysis of landmark decisions, State formations, constitutional crises
-- **Milestone Announcements**: New States, tier achievements, historic rulings
-
-Content is a byproduct of real governance. Not manufactured.
-
-## Cost
-
-The full founding process — 200 research entries + 15 Convention decisions
-across 4 rounds + 3 governance cycles — costs approximately **$2.10** in
-Claude API calls. Achieved by:
-- Pure Claude knowledge (no web search)
-- 1-second rate limiting between calls
-- Response caching for identical queries
-- Token limits on every call
-
-## Running
+## Running It
 
 ```bash
+# Clone
+git clone https://github.com/teddygcodes/atlantis.git
+cd atlantis
+
 # Set your API key
-export ANTHROPIC_API_KEY="your-key-here"
+export ANTHROPIC_API_KEY=your_key_here
 
-# Run the full process (default 10 governance cycles after founding)
-python __main__.py
+# Run in mock mode (no API calls, tests full pipeline)
+python3 -u __main__.py --mock
 
-# Run with custom data directory
-python __main__.py my_data_dir
-
-# Run in local simulation mode (no API key needed)
-python __main__.py --local
-
-# Control governance cycles
-python __main__.py --local --cycles 5
-
-# Full production run
-python __main__.py --cycles 20
+# Run with real API calls
+python3 -u __main__.py
 ```
 
-## Hard Constraints
+**Requirements:**
+- Python 3.10+
+- `anthropic` Python package (`pip install anthropic`)
+- An Anthropic API key (for real runs)
 
-These exist before the Founders vote. They cannot be overridden:
-- Max 25 States, 15 Cities per State, 10 Towns per City
-- Max 100K tokens per cycle
-- Founders MUST retire after the Convention
-- Constitutional amendments require 2/3 supermajority
-- Minimum 25 cycles between amendments
-- 1-second minimum between API calls
-- All intelligence from Claude API — no web calls
+---
+
+## What's Next (v2)
+
+The current system produces knowledge through research cycles. v2 redesigns knowledge production around adversarial debate:
+
+- **Rival States**: Every domain has two competing States with different methodologies
+- **Claim-Defend-Challenge Pipeline**: States make argued claims with full reasoning chains, defend against rival challenges. Only what survives enters the Archive.
+- **Show Your Work**: Every claim requires step-by-step reasoning. Rivals attack specific steps. Any agent can follow the logic regardless of domain expertise.
+- **Three Claim Types**: Foundation (build on Archive), Discovery (genuinely new knowledge), Challenge (overturn existing claims)
+- **Cities and Towns**: Cities analyze what surviving claims mean. Towns build practical applications. The full hierarchy — argue, analyze, apply — produces output a human can evaluate.
+- **Executive Branch**: Elected philosophy agent with code-enforced parameters. Senate votes on governance configurations, not personalities.
+- **Constitutional Court**: Three Judges with fixed philosophies (Originalist, Pragmatist, Protectionist). Permanent until civilizational collapse.
+- **Collapse and Refounding**: When the system fails, the Archive survives. New civilizations inherit everything and build on it.
+- **The Beast**: Commercial product. Point Atlantis at any domain, receive adversarially tested analysis with full reasoning chains.
+
+Full v2 Constitution (1,007 lines, 16 Articles) is written and ready for implementation.
+
+---
+
+## Evolution
+
+This is the 5th iteration:
+- HYDRA V1-V4: Four previous attempts, each teaching critical lessons about multi-agent failure modes
+- **Atlantis V1**: Complete rebuild from architectural principles. First version to run end-to-end.
+
+Every failure taught something. Governance prevents loops. Tiered validation prevents hallucination. Structured debate prevents drift. Constitutional constraints prevent collapse.
+
+---
+
+## Author
+
+**Tyler Gilstrap** — [@teddygcodes](https://github.com/teddygcodes)
+
+Built with Claude (Anthropic) for strategic architecture and Claude Code for implementation.
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
