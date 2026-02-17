@@ -9,6 +9,7 @@ Knowledge flows: Town → City → State → Federal Archive.
 """
 
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List
@@ -1396,7 +1397,7 @@ class StateManager:
 
         try:
             raw = const_response.content or "{}"
-            print(f"    DEBUG constitution raw ({len(raw)} chars): {raw[:200]!r}")
+            print(f"    DEBUG constitution raw ({len(raw)} chars):\n{raw}")
             raw = re.sub(r'```json\s*', '', raw)
             raw = re.sub(r'```\s*', '', raw)
             const_draft = _extract_json(raw)
@@ -1425,7 +1426,7 @@ class StateManager:
             )
             try:
                 raw2 = const_response.content or "{}"
-                print(f"    DEBUG redraft raw ({len(raw2)} chars): {raw2[:200]!r}")
+                print(f"    DEBUG redraft raw ({len(raw2)} chars):\n{raw2}")
                 raw2 = re.sub(r'```json\s*', '', raw2)
                 raw2 = re.sub(r'```\s*', '', raw2)
                 const_draft = _extract_json(raw2)
@@ -1489,7 +1490,7 @@ class StateManager:
 
         try:
             raw = validation_response.content or "{}"
-            print(f"    DEBUG validation raw ({len(raw)} chars): {raw[:150]!r}")
+            print(f"    DEBUG validation raw ({len(raw)} chars):\n{raw}")
             raw = re.sub(r'```json\s*', '', raw)
             raw = re.sub(r'```\s*', '', raw)
             result = _extract_json(raw)

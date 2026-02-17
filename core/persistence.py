@@ -548,8 +548,8 @@ class AtlantisDB:
         try:
             self.conn.execute("ALTER TABLE federal_archive ADD COLUMN quality_score INTEGER DEFAULT 0")
             self.conn.commit()
-        except Exception as e:
-            print(f"DB error: {e}")
+        except Exception:
+            pass  # Column already exists
 
         archive_id = f"archive_{uuid.uuid4().hex[:12]}"
 

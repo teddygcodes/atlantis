@@ -304,6 +304,91 @@ class AtlantisEngine:
         """Get path to Phase 2 (Founding Era) cache file."""
         return os.path.join(self.data_dir, "phase2_cache.json")
 
+    def _get_founding_era_checkpoint_path(self):
+        return os.path.join(self.data_dir, "founding_era_checkpoint.json")
+
+    def _save_founding_era_checkpoint(self, state_manager, cycle, states_formed, amendments_passed, amendments_failed):
+        """Save mid-Founding-Era progress every N cycles so crashes don't restart from zero."""
+        from governance.states import StateConstitution, KnowledgeEntry
+
+        states_data = {}
+        for state_id, state in state_manager.states.items():
+            states_data[state_id] = {
+                "state_id": state.state_id,
+                "name": state.name,
+                "domain": state.domain,
+                "formed_cycle": state.formed_cycle,
+                "tier": state.tier,
+                "constitution": state.constitution.to_dict(),
+                "knowledge_entries": [e.to_dict() for e in state.knowledge_entries],
+                "governor_id": state.governor.id if state.governor else None,
+                "researcher_id": state.researcher.id if state.researcher else None,
+                "critic_id": state.critic.id if state.critic else None,
+                "senator_id": state.senator.id if state.senator else None,
+                "cities": [
+                    {
+                        "city_id": city.city_id if hasattr(city, 'city_id') else str(uuid.uuid4()),
+                        "name": city.name,
+                        "sub_domain": getattr(city, 'sub_domain', ''),
+                        "tier": city.tier,
+                        "knowledge_entries": len(getattr(city, 'knowledge_entries', [])),
+                    }
+                    for city in getattr(state, 'cities', [])
+                ]
+            }
+
+        checkpoint = {
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "founding_era_cycle": cycle,
+            "states_formed": states_formed,
+            "amendments_passed": amendments_passed,
+            "amendments_failed": amendments_failed,
+            "states": states_data,
+        }
+        with open(self._get_founding_era_checkpoint_path(), "w") as f:
+            json.dump(checkpoint, f, indent=2)
+        print(f"  ✓ Checkpoint saved (cycle {cycle}, {states_formed} states)")
+
+    def _load_founding_era_checkpoint(self, state_manager):
+        """Load mid-Founding-Era checkpoint. Returns dict of counters, or None if no checkpoint."""
+        from governance.states import StateConstitution, KnowledgeEntry, State
+        from agents.base import BaseAgent
+
+        path = self._get_founding_era_checkpoint_path()
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path) as f:
+                ckpt = json.load(f)
+
+            for state_id, sd in ckpt["states"].items():
+                const_dict = sd["constitution"]
+                constitution = StateConstitution(
+                    state_name=const_dict["state_name"],
+                    domain=const_dict["domain"],
+                    knowledge_areas=const_dict["knowledge_areas"],
+                    governance_principles=const_dict["governance_principles"],
+                    research_methodology=const_dict["research_methodology"],
+                    federal_compliance_check=const_dict["federal_compliance_check"],
+                    ratified_at_cycle=const_dict["ratified_at_cycle"],
+                    version=const_dict.get("version", 1)
+                )
+                state = State(
+                    state_id=sd["state_id"],
+                    name=sd["name"],
+                    domain=sd["domain"],
+                    constitution=constitution,
+                    formed_cycle=sd["formed_cycle"]
+                )
+                state.tier = sd.get("tier", 0)
+                state_manager.states[state_id] = state
+
+            print(f"  ✓ Founding Era checkpoint loaded (cycle {ckpt['founding_era_cycle']}, {ckpt['states_formed']} states)")
+            return ckpt
+        except Exception as e:
+            print(f"  ⚠ Could not load Founding Era checkpoint: {e}")
+            return None
+
     def _save_phase2_cache(self, state_manager):
         """Save Phase 2 state (Founding Era States) to cache."""
         from governance.states import StateConstitution, KnowledgeEntry
@@ -789,20 +874,29 @@ class AtlantisEngine:
         # Initialize
         state_manager = StateManager(llm=self.llm, logger=self.logger, db=self.db)
         constitution = self.db.get_constitution("federal")
-    
+
         if not hasattr(self, "founders"):
             from agents.base import get_all_founders
             self.founders = get_all_founders()
-    
+
         # Founders ARE the Senate initially (no permanent senators during Founding Era)
         all_senators = self.founders[:]  # 20 Founders
-    
+
         print(f"  Senate: {len(all_senators)} Founders (State Senators will join as States form)")
-    
+
+        # Try to resume from checkpoint
         founding_era_cycle = 0
         states_formed = 0
         amendments_passed = 0
         amendments_failed = 0
+
+        ckpt = self._load_founding_era_checkpoint(state_manager)
+        if ckpt:
+            founding_era_cycle = ckpt["founding_era_cycle"]
+            states_formed = ckpt["states_formed"]
+            amendments_passed = ckpt["amendments_passed"]
+            amendments_failed = ckpt["amendments_failed"]
+            print(f"  Resuming from cycle {founding_era_cycle} with {states_formed} states already formed")
     
         while states_formed < target_states and founding_era_cycle < max_cycles:
             founding_era_cycle += 1
@@ -1172,6 +1266,13 @@ class AtlantisEngine:
     
             # Advance cycle
             self.logger.advance_cycle()
+
+            # Checkpoint every 5 cycles
+            if founding_era_cycle % 5 == 0:
+                self._save_founding_era_checkpoint(
+                    state_manager, founding_era_cycle,
+                    states_formed, amendments_passed, amendments_failed
+                )
     
         # ─────────────────────────────────────────────────────────────
         # FOUNDING ERA COMPLETE
@@ -1195,6 +1296,12 @@ class AtlantisEngine:
 
         # Save Phase 2 cache (States persist across runs)
         self._save_phase2_cache(state_manager)
+
+        # Delete mid-run checkpoint — Founding Era is done, don't resume into it again
+        ckpt_path = self._get_founding_era_checkpoint_path()
+        if os.path.exists(ckpt_path):
+            os.remove(ckpt_path)
+            print(f"  ✓ Founding Era checkpoint cleared")
 
         self.db.set_state("current_phase", "founding_era_complete")
         self.current_phase = "founding_era_complete"
