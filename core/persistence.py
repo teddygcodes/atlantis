@@ -176,6 +176,7 @@ class AtlantisDB:
                 defense TEXT,
                 cycle_created INTEGER NOT NULL,
                 tokens_used INTEGER DEFAULT 0,
+                raw_text TEXT DEFAULT '',
                 created_at TEXT NOT NULL
             );
 
@@ -471,14 +472,19 @@ class AtlantisDB:
 
     def save_knowledge_entry(self, entry: dict) -> None:
         """Save a knowledge entry."""
+        try:
+            self.conn.execute("ALTER TABLE knowledge_entries ADD COLUMN raw_text TEXT DEFAULT ''")
+            self.conn.commit()
+        except Exception:
+            pass  # Column already exists
         now = datetime.now(timezone.utc).isoformat()
         self.conn.execute("""
             INSERT OR REPLACE INTO knowledge_entries
             (entry_id, entity_id, entity_type, domain, tier,
              concepts_json, frameworks_json, applications_json,
              synthesis, evidence, challenged_by, defense,
-             cycle_created, tokens_used, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             cycle_created, tokens_used, raw_text, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             entry["entry_id"], entry["entity_id"], entry["entity_type"],
             entry["domain"], entry["tier"],
@@ -491,6 +497,7 @@ class AtlantisDB:
             entry.get("defense", ""),
             entry.get("cycle_created", 0),
             entry.get("tokens_used", 0),
+            entry.get("raw_text", ""),
             now
         ))
         self.conn.commit()
@@ -524,7 +531,8 @@ class AtlantisDB:
                 "challenged_by": row["challenged_by"],
                 "defense": row["defense"],
                 "cycle_created": row["cycle_created"],
-                "tokens_used": row["tokens_used"]
+                "tokens_used": row["tokens_used"],
+                "raw_text": row["raw_text"] if "raw_text" in row.keys() else ""
             })
         return entries
 

@@ -163,6 +163,7 @@ class KnowledgeEntry:
     defense: str = ""
     cycle_created: int = 0
     tokens_used: int = 0
+    raw_text: str = ""
 
     def to_dict(self):
         return {
@@ -179,7 +180,8 @@ class KnowledgeEntry:
             "challenged_by": self.challenged_by,
             "defense": self.defense,
             "cycle_created": self.cycle_created,
-            "tokens_used": self.tokens_used
+            "tokens_used": self.tokens_used,
+            "raw_text": self.raw_text
         }
 
 
@@ -304,7 +306,7 @@ class Town:
             temperature=0.7
         )
 
-        findings = self._parse_findings(response.content or "")
+        findings = self._parse_findings(response.content or "", llm=llm)
 
         # Create entry first (tier calculated from ALL entries below)
         entry = KnowledgeEntry(
@@ -319,7 +321,8 @@ class Town:
             synthesis=findings["synthesis"],
             evidence=findings["evidence"],
             cycle_created=cycle,
-            tokens_used=response.total_tokens
+            tokens_used=response.total_tokens,
+            raw_text=response.content or ""
         )
 
         self.knowledge_entries.append(entry)
@@ -361,22 +364,46 @@ class Town:
             "latest_finding": latest.synthesis[:200]
         }
 
-    def _parse_findings(self, content: str) -> Dict:
-        """Parse research findings from LLM response."""
+    def _parse_findings(self, content: str, llm=None) -> Dict:
+        """Parse research findings using LLM extractor, with regex fallback."""
         findings = {"concepts": [], "frameworks": [], "applications": [], "synthesis": "", "evidence": ""}
         if not content:
             return findings
 
-        # 1. Remove all ** so **Term Name** becomes Term Name
-        clean = content.replace("**", "")
+        # LLM extraction (primary)
+        if llm is not None:
+            try:
+                prompt = (
+                    "You are a structured data extractor.\n\n"
+                    "Extract ALL concepts and frameworks from this research output.\n\n"
+                    "Return ONLY valid JSON:\n"
+                    "{\n"
+                    '  "concepts": ["concept1", "concept2"],\n'
+                    '  "frameworks": ["framework1", "framework2"]\n'
+                    "}\n\n"
+                    f"RESEARCH OUTPUT:\n{content}"
+                )
+                resp = llm.complete(
+                    system_prompt="You are a structured data extractor. Return only valid JSON.",
+                    user_prompt=prompt,
+                    max_tokens=400,
+                    temperature=0.0
+                )
+                extracted = _extract_json(resp.content or "")
+                findings["concepts"] = [str(c) for c in extracted.get("concepts", [])]
+                findings["frameworks"] = [str(f) for f in extracted.get("frameworks", [])]
+                return findings
+            except Exception:
+                pass  # Fall through to regex
 
-        # 2. Split on ## headers
+        # Regex fallback: remove ** then split on ## headers
+        clean = content.replace("**", "")
         parts = re.split(r'\n##\s*', clean)
 
-        for part in parts[1:]:  # skip preamble before first ##
+        for part in parts[1:]:
             lines = part.split('\n')
-            header = lines[0].strip().upper()  # e.g. "CONCEPTS (DEEPER LAYER)"
-            body_lines = lines[1:]             # 4. skip the header title line
+            header = lines[0].strip().upper()
+            body_lines = lines[1:]
 
             if 'CONCEPT' in header:
                 key = 'concepts'
@@ -398,12 +425,10 @@ class Town:
                 line = line.strip()
                 if not line:
                     continue
-                # 3a. "TERM: description"
                 m = re.match(r'^[-•*\d.)]*\s*([^:\n]{3,60}):\s+(.{5,})', line)
                 if m:
                     items.append(m.group(1).strip())
                     continue
-                # 3b. "TERM - description"
                 m = re.match(r'^[-•*\d.)]*\s*([^-\n]{3,60})\s+-\s+(.{5,})', line)
                 if m:
                     items.append(m.group(1).strip())
@@ -618,7 +643,7 @@ class City:
         )
         total_tokens += defense_response.total_tokens
 
-        findings = self._parse_findings(research_response.content or "")
+        findings = self._parse_findings(research_response.content or "", llm=llm)
 
         # Create entry first (tier calculated from ALL entries below)
         entry = KnowledgeEntry(
@@ -635,7 +660,8 @@ class City:
             challenged_by=(critique_response.content or "")[:200],
             defense=(defense_response.content or "")[:200],
             cycle_created=cycle,
-            tokens_used=total_tokens
+            tokens_used=total_tokens,
+            raw_text=research_response.content or ""
         )
 
         self.knowledge_entries.append(entry)
@@ -687,22 +713,46 @@ class City:
             "latest_finding": latest_finding
         }
 
-    def _parse_findings(self, content: str) -> Dict:
-        """Parse research findings from LLM response."""
+    def _parse_findings(self, content: str, llm=None) -> Dict:
+        """Parse research findings using LLM extractor, with regex fallback."""
         findings = {"concepts": [], "frameworks": [], "applications": [], "synthesis": "", "evidence": ""}
         if not content:
             return findings
 
-        # 1. Remove all ** so **Term Name** becomes Term Name
-        clean = content.replace("**", "")
+        # LLM extraction (primary)
+        if llm is not None:
+            try:
+                prompt = (
+                    "You are a structured data extractor.\n\n"
+                    "Extract ALL concepts and frameworks from this research output.\n\n"
+                    "Return ONLY valid JSON:\n"
+                    "{\n"
+                    '  "concepts": ["concept1", "concept2"],\n'
+                    '  "frameworks": ["framework1", "framework2"]\n'
+                    "}\n\n"
+                    f"RESEARCH OUTPUT:\n{content}"
+                )
+                resp = llm.complete(
+                    system_prompt="You are a structured data extractor. Return only valid JSON.",
+                    user_prompt=prompt,
+                    max_tokens=400,
+                    temperature=0.0
+                )
+                extracted = _extract_json(resp.content or "")
+                findings["concepts"] = [str(c) for c in extracted.get("concepts", [])]
+                findings["frameworks"] = [str(f) for f in extracted.get("frameworks", [])]
+                return findings
+            except Exception:
+                pass  # Fall through to regex
 
-        # 2. Split on ## headers
+        # Regex fallback: remove ** then split on ## headers
+        clean = content.replace("**", "")
         parts = re.split(r'\n##\s*', clean)
 
-        for part in parts[1:]:  # skip preamble before first ##
+        for part in parts[1:]:
             lines = part.split('\n')
-            header = lines[0].strip().upper()  # e.g. "CONCEPTS (DEEPER LAYER)"
-            body_lines = lines[1:]             # 4. skip the header title line
+            header = lines[0].strip().upper()
+            body_lines = lines[1:]
 
             if 'CONCEPT' in header:
                 key = 'concepts'
@@ -724,12 +774,10 @@ class City:
                 line = line.strip()
                 if not line:
                     continue
-                # 3a. "TERM: description"
                 m = re.match(r'^[-•*\d.)]*\s*([^:\n]{3,60}):\s+(.{5,})', line)
                 if m:
                     items.append(m.group(1).strip())
                     continue
-                # 3b. "TERM - description"
                 m = re.match(r'^[-•*\d.)]*\s*([^-\n]{3,60})\s+-\s+(.{5,})', line)
                 if m:
                     items.append(m.group(1).strip())
@@ -1011,7 +1059,7 @@ class State:
         # Parse findings and create knowledge entry
         raw_content = research_response.content or ""
         print(f"    DEBUG RAW RESEARCH: {raw_content[:300]}")
-        findings = self._parse_findings(raw_content)
+        findings = self._parse_findings(raw_content, llm=llm)
         print(f"    DEBUG: parsed concepts = {findings.get('concepts', [])}")
         print(f"    DEBUG: parsed frameworks = {findings.get('frameworks', [])}")
 
@@ -1030,7 +1078,8 @@ class State:
             challenged_by=(critique_response.content or "")[:200],
             defense=(defense_response.content or "")[:200],
             cycle_created=cycle,
-            tokens_used=total_tokens
+            tokens_used=total_tokens,
+            raw_text=raw_content
         )
 
         self.knowledge_entries.append(entry)
@@ -1175,22 +1224,46 @@ class State:
             "latest_finding": latest_finding
         }
 
-    def _parse_findings(self, content: str) -> Dict:
-        """Parse research findings from LLM response."""
+    def _parse_findings(self, content: str, llm=None) -> Dict:
+        """Parse research findings using LLM extractor, with regex fallback."""
         findings = {"concepts": [], "frameworks": [], "applications": [], "synthesis": "", "evidence": ""}
         if not content:
             return findings
 
-        # 1. Remove all ** so **Term Name** becomes Term Name
-        clean = content.replace("**", "")
+        # LLM extraction (primary)
+        if llm is not None:
+            try:
+                prompt = (
+                    "You are a structured data extractor.\n\n"
+                    "Extract ALL concepts and frameworks from this research output.\n\n"
+                    "Return ONLY valid JSON:\n"
+                    "{\n"
+                    '  "concepts": ["concept1", "concept2"],\n'
+                    '  "frameworks": ["framework1", "framework2"]\n'
+                    "}\n\n"
+                    f"RESEARCH OUTPUT:\n{content}"
+                )
+                resp = llm.complete(
+                    system_prompt="You are a structured data extractor. Return only valid JSON.",
+                    user_prompt=prompt,
+                    max_tokens=400,
+                    temperature=0.0
+                )
+                extracted = _extract_json(resp.content or "")
+                findings["concepts"] = [str(c) for c in extracted.get("concepts", [])]
+                findings["frameworks"] = [str(f) for f in extracted.get("frameworks", [])]
+                return findings
+            except Exception:
+                pass  # Fall through to regex
 
-        # 2. Split on ## headers
+        # Regex fallback: remove ** then split on ## headers
+        clean = content.replace("**", "")
         parts = re.split(r'\n##\s*', clean)
 
-        for part in parts[1:]:  # skip preamble before first ##
+        for part in parts[1:]:
             lines = part.split('\n')
-            header = lines[0].strip().upper()  # e.g. "CONCEPTS (DEEPER LAYER)"
-            body_lines = lines[1:]             # 4. skip the header title line
+            header = lines[0].strip().upper()
+            body_lines = lines[1:]
 
             if 'CONCEPT' in header:
                 key = 'concepts'
@@ -1212,12 +1285,10 @@ class State:
                 line = line.strip()
                 if not line:
                     continue
-                # 3a. "TERM: description"
                 m = re.match(r'^[-•*\d.)]*\s*([^:\n]{3,60}):\s+(.{5,})', line)
                 if m:
                     items.append(m.group(1).strip())
                     continue
-                # 3b. "TERM - description"
                 m = re.match(r'^[-•*\d.)]*\s*([^-\n]{3,60})\s+-\s+(.{5,})', line)
                 if m:
                     items.append(m.group(1).strip())
