@@ -368,7 +368,27 @@ class AtlantisEngine:
     @staticmethod
     def _generate_state_name(domain: str, side: str, pair_index: int) -> str:
         """Generate State name from domain and side."""
-        domain_short = domain.replace(" ", "_").replace("-", "_")[:12].title()
+        normalized = re.sub(r"[^A-Za-z0-9]+", "_", domain).strip("_")
+        parts = [p for p in normalized.split("_") if p]
+
+        # Prefer readability over hard truncation: keep whole words when possible.
+        domain_parts = []
+        char_budget = 20
+        consumed = 0
+        for part in parts:
+            part_len = len(part)
+            sep = 1 if domain_parts else 0
+            if consumed + sep + part_len > char_budget:
+                break
+            domain_parts.append(part.title())
+            consumed += sep + part_len
+
+        if not domain_parts:
+            fallback = (parts[0] if parts else "State")[:char_budget]
+            domain_short = fallback.title()
+        else:
+            domain_short = "_".join(domain_parts)
+
         return f"{domain_short}_{side}"
 
     def _fallback_pair(self, state_manager: StateManager) -> StateManager:
