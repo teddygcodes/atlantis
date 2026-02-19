@@ -154,6 +154,8 @@ class AtlantisEngine:
 
         formed = 0
         cycle = 0
+        formed_domains: List[str] = []
+        formed_domain_keys = set()
 
         print(f"\n  Senate: {len(founder_configs)} Founders. "
               f"Target: {target} pairs. Supermajority: {SENATE_PAIR_SUPERMAJORITY:.0%}")
@@ -164,7 +166,7 @@ class AtlantisEngine:
 
             # Each cycle: one Founder proposes a candidate pair
             proposer = founder_configs[cycle % len(founder_configs)]
-            candidate = self._founder_propose_pair(proposer)
+            candidate = self._founder_propose_pair(proposer, formed_domains)
             if not candidate:
                 print(f"    {proposer.name} did not propose a valid pair — skipping")
                 continue
@@ -172,6 +174,13 @@ class AtlantisEngine:
             domain = candidate["domain"]
             approach_a = candidate["approach_a"]
             approach_b = candidate["approach_b"]
+
+            domain_key = domain.strip().lower()
+            if domain_key in formed_domain_keys:
+                print(
+                    f"    Domain '{domain}' already has a formed rival pair — skipping before vote."
+                )
+                continue
 
             print(f"    Proposed by {proposer.name}: [{domain}] {approach_a} vs {approach_b}")
 
@@ -214,6 +223,8 @@ class AtlantisEngine:
                     warmup_remaining=0,
                 )
                 state_manager.add_pair(pair)
+                formed_domains.append(domain)
+                formed_domain_keys.add(domain_key)
                 formed += 1
                 print(f"    PAIR FORMED: {name_a} vs {name_b} in '{domain}'")
             else:
@@ -225,7 +236,9 @@ class AtlantisEngine:
 
         return state_manager
 
-    def _founder_propose_pair(self, fc: AgentConfig) -> Optional[dict]:
+    def _founder_propose_pair(
+        self, fc: AgentConfig, formed_domains: List[str]
+    ) -> Optional[dict]:
         """
         Founder proposes a knowledge domain and two competing approaches.
         Returns {"domain": str, "approach_a": str, "approach_b": str} or None.
@@ -237,6 +250,8 @@ class AtlantisEngine:
                 f"You are participating in the Founding Senate of Atlantis.\n"
                 f"Propose a knowledge domain and TWO competing intellectual approaches "
                 f"for a rival pair of research States.\n\n"
+                f"The following domains already have rival pairs and cannot be proposed again: "
+                f"[{', '.join(formed_domains) if formed_domains else 'none'}]\n\n"
                 f"Format your response EXACTLY as:\n"
                 f"DOMAIN: [one word or short phrase]\n"
                 f"APPROACH A: [one sentence — this approach to the domain]\n"
