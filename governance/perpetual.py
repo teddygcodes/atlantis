@@ -111,7 +111,20 @@ class PerpetualEngine:
             "pairs": [],
             "federal_lab": None,
             "content": [],
+            "governance": {
+                "senate_quorum": {
+                    "active_states": 0,
+                    "minimum": SENATE_MIN_QUORUM,
+                    "suspended": False,
+                },
+                "senate_votes": [],
+            },
         }
+
+        active_states = self.state_manager.get_all_active_states()
+        quorum = self.cycle_log_data["governance"]["senate_quorum"]
+        quorum["active_states"] = len(active_states)
+        quorum["suspended"] = len(active_states) < SENATE_MIN_QUORUM
 
         # Steps 1-17: All rival pairs
         for pair in self.state_manager.get_active_pairs():
@@ -803,7 +816,7 @@ class PerpetualEngine:
         Senate vote (simple majority, quorum >= SENATE_MIN_QUORUM).
         """
         active_states = self.state_manager.get_all_active_states()
-        quorum_met = len(active_states) >= 3  # SENATE_MIN_QUORUM
+        quorum_met = len(active_states) >= SENATE_MIN_QUORUM
 
         for state in active_states:
             row = self.db.get_state_budget_row(state.name)
@@ -840,6 +853,7 @@ class PerpetualEngine:
         """
         eligible = [s for s in voters if s.name != candidate.name]
         yes_votes = 0
+        vote_records = []
 
         for voter in eligible:
             vote_text = voter.produce_senate_vote(
@@ -852,9 +866,20 @@ class PerpetualEngine:
             )
             if vote_text.upper().strip().startswith("YES"):
                 yes_votes += 1
+                vote_value = "YES"
+            else:
+                vote_value = "NO"
+            vote_records.append({"senator": voter.name, "vote": vote_value, "rationale": vote_text.strip()})
 
         ratio = yes_votes / len(eligible) if eligible else 0
         _log(f"  Dissolution vote: {yes_votes}/{len(eligible)} ({ratio:.0%})")
+        self.cycle_log_data["governance"]["senate_votes"].append({
+            "motion": f"Dissolve {candidate.name}",
+            "yes_votes": yes_votes,
+            "total_votes": len(eligible),
+            "ratio": ratio,
+            "records": vote_records,
+        })
         return ratio > SENATE_SIMPLE_MAJORITY
 
     def _dissolve_state(self, state: State):
@@ -1106,6 +1131,27 @@ class PerpetualEngine:
             f"# Atlantis V2 — Cycle {self.cycle}",
             f"\n_Generated: {_now()}_\n",
         ]
+
+        governance = self.cycle_log_data.get("governance", {})
+        quorum = governance.get("senate_quorum", {})
+        lines.append("\n## Governance\n")
+        lines.append(
+            f"- Senate quorum: {quorum.get('active_states', 0)}/{quorum.get('minimum', SENATE_MIN_QUORUM)} active States"
+            f" ({'SUSPENDED' if quorum.get('suspended') else 'ACTIVE'})\n"
+        )
+
+        senate_votes = governance.get("senate_votes", [])
+        if senate_votes:
+            lines.append("- Senate votes this cycle:\n")
+            for vote in senate_votes:
+                lines.append(
+                    f"  - Motion: {vote.get('motion', '?')} | Result: {vote.get('yes_votes', 0)}/{vote.get('total_votes', 0)} "
+                    f"({vote.get('ratio', 0.0):.0%})\n"
+                )
+                for record in vote.get("records", []):
+                    lines.append(f"    - {record.get('senator', '?')}: {record.get('vote', '?')}\n")
+        else:
+            lines.append("- Senate votes this cycle: none\n")
 
         for pair_result in self.cycle_log_data.get("pairs", []):
             if pair_result.get("skipped"):
