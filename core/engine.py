@@ -15,6 +15,7 @@ CONSTITUTION.md must exist in the project root.
 
 import argparse
 import os
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -249,8 +250,27 @@ class AtlantisEngine:
         approach_a = self._parse_field(content, "APPROACH A")
         approach_b = self._parse_field(content, "APPROACH B")
 
+        # Fallback for analysis-style responses that provide adjacent fields.
+        if not domain:
+            concepts = self._parse_field(content, "CONCEPTS")
+            if concepts:
+                domain = concepts.split(",", 1)[0].strip()
+        if not approach_a:
+            framework = self._parse_field(content, "FRAMEWORKS")
+            if framework:
+                approach_a = framework.split(",", 1)[0].strip()
+        if not approach_b:
+            applications = self._parse_field(content, "APPLICATIONS")
+            if applications:
+                approach_b = applications.split(",", 1)[0].strip()
+
         if domain and approach_a and approach_b:
             return {"domain": domain, "approach_a": approach_a, "approach_b": approach_b}
+
+        print(
+            f"    [!] Failed to parse pair proposal from {fc.name}. "
+            f"Raw response:\n{content}"
+        )
         return None
 
     def _founder_vote_on_pair(
@@ -272,15 +292,29 @@ class AtlantisEngine:
             ),
             max_tokens=10,
         )
-        content = (response.content or "").strip().upper()
+        content = re.sub(r"[*_`#\s]+", "", (response.content or "").upper())
+        if content.startswith("YES"):
+            return True
+        if content.startswith("NO"):
+            return False
+        # Non-binary answer fallback: treat explicit support language as YES.
+        if "APPROVE" in content or "SUPPORT" in content:
+            return True
         return content.startswith("YES")
 
     @staticmethod
     def _parse_field(text: str, field: str) -> str:
         """Extract a field value from formatted LLM response."""
         for line in text.split("\n"):
-            if line.upper().startswith(field.upper() + ":"):
-                return line.split(":", 1)[1].strip()
+            cleaned_line = re.sub(r"[*_`]", "", line).strip()
+            cleaned_line = re.sub(r"^[#>\-\s]+", "", cleaned_line)
+            match = re.match(
+                rf"^{re.escape(field)}\s*:\s*(.*)$",
+                cleaned_line,
+                flags=re.IGNORECASE,
+            )
+            if match:
+                return match.group(1).strip()
         return ""
 
     @staticmethod
