@@ -90,7 +90,7 @@ class FoundingPeriod:
 
         try:
             response = self.models.complete(
-                task_type="researcher_claims",
+                task_type="founder_research",
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 max_tokens=800,

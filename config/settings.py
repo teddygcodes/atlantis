@@ -52,10 +52,10 @@ MOCK_CONFIG = {
 # PRODUCTION CONFIG
 # ═══════════════════════════════════════
 PRODUCTION_CONFIG = {
-    "founding_era_target_pairs": 10,       # 20 States
-    "phase0_research_cycles": 5,
-    "founding_era_max_cycles": 20,
-    "governance_cycles": 0,                # Indefinite
+    "founding_era_target_pairs": 3,        # TEMP: 3 for testing (restore to 10)
+    "phase0_research_cycles": 1,
+    "founding_era_max_cycles": 5,
+    "governance_cycles": 3,                # TEMP: 3 for testing (restore to 0 for indefinite)
     "initial_token_budget": 50000,
     "cycle_cost": 3000,
     "federal_lab_activation_cycle": 5,
@@ -71,7 +71,9 @@ PRODUCTION_CONFIG = {
 JUDGE_MODEL = "claude"  # Future: "gpt", "gemini", "multi"
 
 MODEL_ALLOCATION = {
-    # Haiku: structured extraction, pattern matching, content (cheap + fast)
+    # Haiku: structured extraction, pattern matching, content, free-form research (cheap + fast)
+    "founder_research": "haiku",
+    "founder_vote": "haiku",
     "normalization": "haiku",
     "premise_decomposition": "haiku",
     "rebuttal_newness": "haiku",
@@ -273,7 +275,7 @@ DEBATE_MATCHUPS = {
 # API CONFIGURATION
 # ═══════════════════════════════════════
 API_CONFIG = {
-    "rate_limit_seconds": 0.5,
+    "rate_limit_seconds": 0.1,
     "rate_limit_enabled": True,
     "temperature_research": 0.7,
     "temperature_judge": 0.2,        # Lower temp for consistent judging

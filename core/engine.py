@@ -281,7 +281,7 @@ class AtlantisEngine:
         Returns True for YES.
         """
         response = self.models.complete(
-            task_type="founder_panels",
+            task_type="founder_vote",
             system_prompt=fc.get_system_prompt(),
             user_prompt=(
                 f"Senate vote: Should we form a rival pair in the domain '{domain}'?\n\n"

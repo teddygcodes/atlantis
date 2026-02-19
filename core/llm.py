@@ -69,8 +69,21 @@ class LLMProvider:
     Handles API calls, token counting, rate limiting, caching, and cost tracking.
     """
 
+    @staticmethod
+    def _read_dotenv_key() -> str:
+        """Read ANTHROPIC_API_KEY directly from .env, searching upward from this file."""
+        for search_dir in [Path(__file__).parent.parent, Path.cwd()]:
+            env_file = search_dir / ".env"
+            if env_file.exists():
+                for line in env_file.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line.startswith("ANTHROPIC_API_KEY="):
+                        return line.split("=", 1)[1].strip().strip('"').strip("'")
+        return ""
+
     def __init__(self, api_key: Optional[str] = None, mode: str = "auto"):
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        # .env always wins; fallback to explicit arg then shell env var
+        self.api_key = self._read_dotenv_key() or api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self.client = None
         self.mode = mode
 

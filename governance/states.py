@@ -189,8 +189,19 @@ class State:
             base += (
                 f"LAB HYPOTHESIS (optional — you may formalize this):\n{lab_hypothesis}\n\n"
             )
+        archive_is_empty = (
+            not archive_context.strip()
+            or "no surviving claims" in archive_context.lower()
+        )
+        claim_type_hint = (
+            "NOTE: The Archive has no surviving claims yet. Produce a DISCOVERY claim "
+            "(first-principles reasoning — no citations required).\n\n"
+            if archive_is_empty
+            else "Produce a Foundation, Discovery, or Challenge claim.\n\n"
+        )
         base += (
-            "Produce a Foundation, Discovery, or Challenge claim. Use this structure:\n\n"
+            f"{claim_type_hint}"
+            "Use this structure:\n\n"
             "CLAIM TYPE: [Foundation|Discovery|Challenge]\n"
             "POSITION: [one sentence]\n"
             "STEP 1: [reasoning]\n"
@@ -436,11 +447,15 @@ def validate_claim(
     if not (has_position_header or has_conclusion_header or has_natural_conclusion):
         errors.append("Missing POSITION or CONCLUSION statement")
 
-    # Foundation claims must include at least one archive citation.
+    # Foundation claims must include at least one archive citation —
+    # but only if surviving/partial entries actually exist to cite.
     is_foundation_claim = bool(re.search(r"\bFOUNDATION\b", text_upper, re.IGNORECASE))
     has_citation = bool(re.search(r"#\d{3}", claim_text))
     if is_foundation_claim and not has_citation:
-        errors.append("Foundation claims require at least one citation (e.g., #001)")
+        # Check whether there are any citable entries in the Archive yet.
+        has_citable = len(db.get_surviving_claims()) > 0 if db else False
+        if has_citable:
+            errors.append("Foundation claims require at least one citation (e.g., #001)")
 
     if errors:
         print("[validate_claim] claim rejected. reasons=", errors)
