@@ -447,11 +447,13 @@ def validate_claim(
     if not (has_position_header or has_conclusion_header or has_natural_conclusion):
         errors.append("Missing POSITION or CONCLUSION statement")
 
-    # Foundation claims must include at least one archive citation —
+    # Discovery claims do not require citations.
+    # Foundation claims must include at least one archive citation,
     # but only if surviving/partial entries actually exist to cite.
+    is_discovery_claim = bool(re.search(r"\bDISCOVERY\b", text_upper, re.IGNORECASE))
     is_foundation_claim = bool(re.search(r"\bFOUNDATION\b", text_upper, re.IGNORECASE))
     has_citation = bool(re.search(r"#\d{3}", claim_text))
-    if is_foundation_claim and not has_citation:
+    if is_foundation_claim and not is_discovery_claim and not has_citation:
         # Check whether there are any citable entries in the Archive yet.
         has_citable = len(db.get_surviving_claims()) > 0 if db else False
         if has_citable:

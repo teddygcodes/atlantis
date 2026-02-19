@@ -926,6 +926,7 @@ def create_state_researcher(state_name: str, domain: str, approach: str) -> Agen
         constraints=[
             f"Always use the structured claim format (Type, Position, Reasoning Chain, Therefore)",
             f"Foundation claims MUST cite surviving Archive entries",
+            f"If there are no surviving claims in your domain to cite, submit a Discovery claim, not Foundation",
             f"Challenge claims MUST target a specific surviving claim by display ID",
             f"Discovery claims MUST include Gap Addressed section",
         ],

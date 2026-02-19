@@ -89,6 +89,7 @@ def test_founding_deposit(db):
 
 
 def test_claim_validation_foundation(db):
+    _make_entry(db, status="surviving")
     claim = """CLAIM TYPE: Foundation\nPOSITION: Gravity causes acceleration.\nSTEP 1: Masses attract each other.\nCONCLUSION: Therefore acceleration occurs."""
     is_valid, errors = validate_claim(claim, StubModels("{}"), db)
     assert not is_valid
@@ -101,6 +102,14 @@ def test_claim_validation_discovery(db):
     assert is_valid
     assert errors == []
 
+
+
+def test_claim_validation_discovery_no_citations_with_survivors(db):
+    _make_entry(db, status="survived")
+    claim = """CLAIM TYPE: Discovery\nPOSITION: I propose a new battery architecture.\nSTEP 1: Because layered anodes reduce dendrite growth.\nCONCLUSION: Therefore cycle life improves."""
+    is_valid, errors = validate_claim(claim, StubModels("{}"), db)
+    assert is_valid
+    assert errors == []
 
 def test_normalize_claim():
     models = StubModels('{"claim_type": "discovery", "position": "P", "reasoning_chain": ["A", "B"], "conclusion": "C", "citations": [], "keywords": ["k"]}')
