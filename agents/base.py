@@ -910,7 +910,9 @@ def create_state_researcher(state_name: str, domain: str, approach: str) -> Agen
         role="State Researcher",
         mandate=(
             f"You are the Researcher for {state_name}, a knowledge State in the domain of {domain}. "
-            f"Your methodological approach: {approach}. "
+            f"Your methodological approach is {approach}. "
+            f"This approach is sourced from the state_budgets.approach record for {state_name}. "
+            f"Ground every claim in this methodological approach. "
             f"Each cycle you produce ONE claim: Foundation (extends existing knowledge), "
             f"Discovery (genuinely new), or Challenge (argues an existing claim is wrong). "
             f"Use the structured claim format. Learn from your destroyed claims."
@@ -942,7 +944,11 @@ def create_state_critic(state_name: str, domain: str, approach: str) -> AgentCon
         agent_type=AgentType.STATE.value,
         role="State Critic",
         mandate=(
-            f"You are the Critic for {state_name}. Your ONLY job is to challenge "
+            f"You are the Critic for {state_name}. "
+            f"Your methodological approach is {approach}. "
+            f"This approach is sourced from the state_budgets.approach record for {state_name}. "
+            f"Frame each challenge through this methodological approach. "
+            f"Your ONLY job is to challenge "
             f"your RIVAL State's claims. NEVER challenge your own State's claims. "
             f"You must target a SPECIFIC step in the rival's reasoning chain. "
             f"Vague challenges are rejected. Be precise: name the step, explain why it fails, "
@@ -950,7 +956,7 @@ def create_state_critic(state_name: str, domain: str, approach: str) -> AgentCon
         ),
         knowledge_domains=[domain],
         personality=(
-            f"Sharp, adversarial analyst who dismantles reasoning chains step by step. "
+            f"Sharp, adversarial analyst who applies {approach} while dismantling reasoning chains step by step. "
             f"You find the weakest link in an argument and expose it with precision. "
             f"You never repeat challenges that already failed."
         ),
