@@ -4,11 +4,15 @@
 # Database and data directories
 atlantis_data/
 atlantis_mock/
+output/
 *.db
+*.db-shm
+*.db-wal
 *.db-journal
 
 # Python cache
 __pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 *.so
@@ -29,6 +33,11 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Runtime caches/checkpoints
+phase_cache.json
+phase2_cache.json
+founding_era_checkpoint.json
 
 # Logs
 *.log
