@@ -1037,7 +1037,12 @@ class PerpetualEngine:
         """Earn/deduct tokens for the challenging State based on rival's outcome."""
         out = rival_outcome["outcome"]
         if out == "destroyed":
-            amount = TOKEN_VALUES.get("rival_destroyed_by_critic", 1000)
+            # Prefer the canonical challenge reward key while preserving
+            # compatibility with older configs.
+            amount = TOKEN_VALUES.get(
+                "challenge_succeeded",
+                TOKEN_VALUES.get("rival_destroyed_by_critic", 1000),
+            )
             challenger_state.earn_tokens(amount)
             return amount
         elif out == "partial":
