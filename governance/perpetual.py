@@ -276,9 +276,9 @@ class PerpetualEngine:
         self.db.increment_pipeline_claims(sb.name, b_survived)
 
         # Step 16: Apply token outcomes
-        claim_token_earnings = self._apply_token_outcomes(sa, a_norm, a_outcome, sb, b_norm, b_outcome)
-        self.db.update_tokens_earned(a_entry.display_id, claim_token_earnings[sa.name])
-        self.db.update_tokens_earned(b_entry.display_id, claim_token_earnings[sb.name])
+        token_ledger = self._apply_token_outcomes(sa, a_norm, a_outcome, sb, b_norm, b_outcome)
+        self.db.update_tokens_earned(a_entry.display_id, token_ledger[sa.name]["claim_tokens"])
+        self.db.update_tokens_earned(b_entry.display_id, token_ledger[sb.name]["claim_tokens"])
 
         # Step 17: Update stability scores for surviving claims in domain
         self._update_stability_scores(pair.domain)
@@ -328,11 +328,15 @@ class PerpetualEngine:
                 "novelty": int(a_outcome["scores"].get("novelty", 0)),
                 "depth": int(a_outcome["scores"].get("depth", 0)),
             },
+            "a_judge_reasoning": a_outcome.get("reasoning", ""),
+            "a_tokens": token_ledger[sa.name],
             "b_scores": {
                 "drama": int(b_outcome["scores"].get("drama", 0)),
                 "novelty": int(b_outcome["scores"].get("novelty", 0)),
                 "depth": int(b_outcome["scores"].get("depth", 0)),
             },
+            "b_judge_reasoning": b_outcome.get("reasoning", ""),
+            "b_tokens": token_ledger[sb.name],
         }
 
     def _run_warmup_pair(self, pair: RivalPair) -> dict:
@@ -484,10 +488,19 @@ class PerpetualEngine:
                 _log(f"  Chain collapse: {len(collapsed)} entries flagged")
 
         _log(f"  Federal Lab outcome: {outcome['outcome']} (target: {target['display_id']})")
+        inverted_assumption = "Not explicitly labeled by Federal Lab output"
+        for line in challenge_text.splitlines():
+            if line.strip().upper().startswith("ASSUMPTION INVERTED:"):
+                parsed = line.split(":", 1)[1].strip()
+                if parsed:
+                    inverted_assumption = parsed
+                break
+
         return {
             "domain": domain,
             "target_display_id": target["display_id"],
             "lab_entry_display_id": fed_entry.display_id,
+            "inverted_assumption": inverted_assumption,
             "outcome": outcome["outcome"],
         }
 
@@ -970,7 +983,7 @@ class PerpetualEngine:
         self,
         sa: State, a_norm: dict, a_outcome: dict,
         sb: State, b_norm: dict, b_outcome: dict,
-    ) -> Dict[str, int]:
+    ) -> Dict[str, Dict[str, int]]:
         """
         Apply token rewards/penalties for both States based on their outcomes.
         A's Critic challenged B's claim. B's Critic challenged A's claim.
@@ -978,14 +991,25 @@ class PerpetualEngine:
         # A's claim (challenged by B)
         a_claim_tokens = self._apply_single_token_outcome(sa, a_norm.get("claim_type", "discovery"), a_outcome)
         # B's challenge on A
-        self._apply_challenge_tokens(sb, a_outcome)
+        b_challenge_tokens = self._apply_challenge_tokens(sb, a_outcome)
 
         # B's claim (challenged by A)
         b_claim_tokens = self._apply_single_token_outcome(sb, b_norm.get("claim_type", "discovery"), b_outcome)
         # A's challenge on B
-        self._apply_challenge_tokens(sa, b_outcome)
+        a_challenge_tokens = self._apply_challenge_tokens(sa, b_outcome)
 
-        return {sa.name: a_claim_tokens, sb.name: b_claim_tokens}
+        return {
+            sa.name: {
+                "claim_tokens": a_claim_tokens,
+                "challenge_tokens": a_challenge_tokens,
+                "net_tokens": a_claim_tokens + a_challenge_tokens,
+            },
+            sb.name: {
+                "claim_tokens": b_claim_tokens,
+                "challenge_tokens": b_challenge_tokens,
+                "net_tokens": b_claim_tokens + b_challenge_tokens,
+            },
+        }
 
     def _apply_single_token_outcome(
         self, state: State, claim_type: str, outcome: dict
@@ -1009,15 +1033,22 @@ class PerpetualEngine:
         # destroyed → 0
         return 0
 
-    def _apply_challenge_tokens(self, challenger_state: State, rival_outcome: dict):
+    def _apply_challenge_tokens(self, challenger_state: State, rival_outcome: dict) -> int:
         """Earn/deduct tokens for the challenging State based on rival's outcome."""
         out = rival_outcome["outcome"]
         if out == "destroyed":
-            challenger_state.earn_tokens(TOKEN_VALUES.get("rival_destroyed_by_critic", 1000))
+            amount = TOKEN_VALUES.get("rival_destroyed_by_critic", 1000)
+            challenger_state.earn_tokens(amount)
+            return amount
         elif out == "partial":
-            challenger_state.earn_tokens(TOKEN_VALUES.get("rival_narrowed_by_critic", 800))
+            amount = TOKEN_VALUES.get("rival_narrowed_by_critic", 800)
+            challenger_state.earn_tokens(amount)
+            return amount
         elif out in ("survived", "founding"):
-            challenger_state.deduct_tokens(abs(TOKEN_VALUES.get("challenge_failed", -1000)))
+            amount = TOKEN_VALUES.get("challenge_failed", -1000)
+            challenger_state.deduct_tokens(abs(amount))
+            return amount
+        return 0
 
     # ─── STABILITY & DOMAIN HEALTH ────────────────────────────────
 
@@ -1166,18 +1197,47 @@ class PerpetualEngine:
                     f"**Challenge**\n{pair_result.get('a_challenge', '')}\n\n"
                     f"**Rebuttal**\n{pair_result.get('a_rebuttal', '')}\n\n"
                     f"**Outcome**: {pair_result.get('a_outcome', '?')}\n"
+                    f"**Judge reasoning**: {pair_result.get('a_judge_reasoning', '').strip() or 'No judge reasoning recorded.'}\n"
                     f"**Scores**: drama={pair_result.get('a_scores', {}).get('drama', 0)}, "
                     f"novelty={pair_result.get('a_scores', {}).get('novelty', 0)}, "
                     f"depth={pair_result.get('a_scores', {}).get('depth', 0)}\n"
+                    f"**Tokens**: claim={pair_result.get('a_tokens', {}).get('claim_tokens', 0)}, "
+                    f"challenge={pair_result.get('a_tokens', {}).get('challenge_tokens', 0)}, "
+                    f"net={pair_result.get('a_tokens', {}).get('net_tokens', 0)}\n"
                     f"\n### Exchange B ({pair_result.get('b_entry', '?')})\n"
                     f"**Claim**\n{pair_result.get('b_claim', '')}\n\n"
                     f"**Challenge**\n{pair_result.get('b_challenge', '')}\n\n"
                     f"**Rebuttal**\n{pair_result.get('b_rebuttal', '')}\n\n"
                     f"**Outcome**: {pair_result.get('b_outcome', '?')}\n"
+                    f"**Judge reasoning**: {pair_result.get('b_judge_reasoning', '').strip() or 'No judge reasoning recorded.'}\n"
                     f"**Scores**: drama={pair_result.get('b_scores', {}).get('drama', 0)}, "
                     f"novelty={pair_result.get('b_scores', {}).get('novelty', 0)}, "
                     f"depth={pair_result.get('b_scores', {}).get('depth', 0)}\n"
+                    f"**Tokens**: claim={pair_result.get('b_tokens', {}).get('claim_tokens', 0)}, "
+                    f"challenge={pair_result.get('b_tokens', {}).get('challenge_tokens', 0)}, "
+                    f"net={pair_result.get('b_tokens', {}).get('net_tokens', 0)}\n"
                 )
+
+        domains_seen = []
+        for pair_result in self.cycle_log_data.get("pairs", []):
+            pair_name = pair_result.get("pair", "")
+            if " vs " not in pair_name:
+                continue
+            left_state = pair_name.split(" vs ", 1)[0]
+            state = self.state_manager.get_state(left_state)
+            if state and state.domain not in domains_seen:
+                domains_seen.append(state.domain)
+
+        for domain in domains_seen:
+            domain_health = self.db.get_domain_health(domain, latest_only=True) or {}
+            lines.append(
+                f"\n## Domain Health — {domain}\n"
+                f"- Surviving claims: {domain_health.get('surviving_claims', 0)}\n"
+                f"- Survival rate: {domain_health.get('survival_rate', 0.0)}\n"
+                f"- Credibility (State A): {domain_health.get('credibility_a', 1.0)}\n"
+                f"- Credibility (State B): {domain_health.get('credibility_b', 1.0)}\n"
+                f"- Maturity phase: {domain_health.get('maturity_phase', 'unknown')}\n"
+            )
 
         fed = self.cycle_log_data.get("federal_lab")
         if fed:
@@ -1188,6 +1248,7 @@ class PerpetualEngine:
                     f"\n## Federal Lab\n"
                     f"- Domain: {fed.get('domain', '?')}\n"
                     f"- Target: `{fed.get('target_display_id', '?')}`\n"
+                    f"- Inverted assumption: {fed.get('inverted_assumption', 'not captured')}\n"
                     f"- Lab entry: `{fed.get('lab_entry_display_id', '?')}`\n"
                     f"- Outcome: **{fed.get('outcome', '?')}**\n"
                 )
@@ -1196,7 +1257,9 @@ class PerpetualEngine:
         if content_files:
             lines.append(f"\n## Content Generated ({len(content_files)} files)\n")
             for f in content_files:
-                lines.append(f"- {f}\n")
+                suffix = Path(f).suffix.lower().lstrip(".")
+                fmt = suffix or "unknown"
+                lines.append(f"- [{fmt}] {f}\n")
 
         path.write_text("".join(lines), encoding="utf-8")
 
