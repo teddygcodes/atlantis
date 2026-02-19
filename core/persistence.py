@@ -154,6 +154,18 @@ class PersistenceLayer:
                 updated_at TEXT NOT NULL
             );
 
+            -- Executive elections
+            CREATE TABLE IF NOT EXISTS elections (
+                election_id TEXT PRIMARY KEY,
+                cycle INTEGER NOT NULL,
+                winner TEXT NOT NULL,
+                platform_json TEXT NOT NULL,
+                votes_json TEXT NOT NULL,
+                term_ends_cycle INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_elections_cycle ON elections(cycle);
+
             -- Event log
             CREATE TABLE IF NOT EXISTS log_entries (
                 id TEXT PRIMARY KEY,
@@ -1008,6 +1020,69 @@ class PersistenceLayer:
                 "SELECT value FROM system_state WHERE key = ?", (key,)
             ).fetchone()
         return json.loads(row["value"]) if row else default
+
+    # ═══════════════════════════════════════════════════════
+    # EXECUTIVE ELECTIONS
+    # ═══════════════════════════════════════════════════════
+
+    def save_election_result(
+        self,
+        election_id: str,
+        cycle: int,
+        winner: str,
+        platform: Dict[str, Any],
+        votes: List[Dict[str, Any]],
+        term_ends_cycle: int,
+    ):
+        with self._get_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO elections (election_id, cycle, winner, platform_json, votes_json, term_ends_cycle)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    election_id,
+                    cycle,
+                    winner,
+                    json.dumps(platform),
+                    json.dumps(votes),
+                    term_ends_cycle,
+                ),
+            )
+
+    def get_latest_election(self) -> Optional[Dict[str, Any]]:
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM elections ORDER BY cycle DESC LIMIT 1"
+            ).fetchone()
+
+        if not row:
+            return None
+
+        return {
+            "election_id": row["election_id"],
+            "cycle": row["cycle"],
+            "winner": row["winner"],
+            "platform": json.loads(row["platform_json"] or "{}"),
+            "votes": json.loads(row["votes_json"] or "[]"),
+            "term_ends_cycle": row["term_ends_cycle"],
+        }
+
+    def get_elections(self) -> List[Dict[str, Any]]:
+        with self._get_conn() as conn:
+            rows = conn.execute("SELECT * FROM elections ORDER BY cycle ASC").fetchall()
+
+        out = []
+        for row in rows:
+            out.append({
+                "election_id": row["election_id"],
+                "cycle": row["cycle"],
+                "winner": row["winner"],
+                "platform": json.loads(row["platform_json"] or "{}"),
+                "votes": json.loads(row["votes_json"] or "[]"),
+                "term_ends_cycle": row["term_ends_cycle"],
+            })
+        return out
 
     # ═══════════════════════════════════════════════════════
     # EVENT LOG

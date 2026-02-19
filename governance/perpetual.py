@@ -14,6 +14,7 @@ Knowledge enters the Archive ONLY if it survives challenge.
 """
 
 import json
+import copy
 import os
 import uuid
 from pathlib import Path
@@ -51,6 +52,8 @@ from config.settings import (
     WARMUP_CYCLES,
     V2_TIERS,
     CONTENT_THRESHOLDS,
+    EXECUTIVE_ELECTION_INTERVAL,
+    EXECUTIVE_TERM_CYCLES,
 )
 
 
@@ -91,6 +94,14 @@ class PerpetualEngine:
         self.federal_lab_config: AgentConfig = create_federal_lab_agent()
         self.federal_lab_last_domain: Optional[str] = None
         self.cycle_log_data: dict = {}
+        self._default_cycle_cost = self.config.get("cycle_cost")
+        self._default_token_values = copy.deepcopy(TOKEN_VALUES)
+        self._default_tier_thresholds = {
+            tier: data.get("surviving_claims", 0)
+            for tier, data in V2_TIERS.items()
+            if tier > 0
+        }
+        self.active_executive: Optional[Dict] = None
 
     def run_cycles(self, num_cycles: int):
         """num_cycles=0 runs indefinitely."""
@@ -118,6 +129,7 @@ class PerpetualEngine:
                     "suspended": False,
                 },
                 "senate_votes": [],
+                "executive": None,
             },
         }
 
@@ -522,15 +534,17 @@ class PerpetualEngine:
         self._check_tier_advancement()
         # 19f. Probation and dissolution
         self._check_probation_and_dissolution()
+        # 19g. Executive election and term management
+        self._check_executive_election()
         # Refresh domain health after all system-level operations (federal lab,
         # abstraction, cities/towns) so domain_health.json reflects final cycle state.
         for domain in self._get_all_domains():
             self._compute_domain_health(domain)
-        # 19g. Write cycle log
+        # 19h. Write cycle log
         self._write_cycle_log()
-        # 19h. Update domain_health.json
+        # 19i. Update domain_health.json
         self._update_domain_health_file()
-        # 19i. Export archive
+        # 19j. Export archive
         self._export_archive()
 
     def _check_city_formation(self):
@@ -1155,6 +1169,255 @@ class PerpetualEngine:
             return "Stabilizing Foundation"
         return "Volatile Exploration"
 
+
+    def _check_executive_election(self):
+        """Run Executive elections every 10 cycles and enforce term locking."""
+        if self.active_executive and self.cycle > self.active_executive.get("term_ends_cycle", 0):
+            self._clear_executive_parameters()
+
+        if self.cycle % EXECUTIVE_ELECTION_INTERVAL != 0:
+            return
+
+        election = self._run_executive_election()
+        if election:
+            self.cycle_log_data["governance"]["executive"] = election
+
+    def _clear_executive_parameters(self):
+        self.config["cycle_cost"] = self._default_cycle_cost
+        TOKEN_VALUES.clear()
+        TOKEN_VALUES.update(copy.deepcopy(self._default_token_values))
+        for tier, threshold in self._default_tier_thresholds.items():
+            if tier in V2_TIERS:
+                V2_TIERS[tier]["surviving_claims"] = threshold
+        self.active_executive = None
+
+    def _collect_system_metrics(self) -> Dict[str, object]:
+        active_states = self.state_manager.get_all_active_states()
+        domains = self._get_all_domains()
+        domain_health = {
+            domain: self.db.get_domain_health(domain, latest_only=True) or {}
+            for domain in domains
+        }
+
+        total_surviving = sum(
+            self.db.get_surviving_claims_count(state.name) for state in active_states
+        )
+
+        return {
+            "cycle": self.cycle,
+            "active_states": len(active_states),
+            "domains": domain_health,
+            "total_surviving_claims": total_surviving,
+            "avg_survival_rate": (
+                sum((d.get("survival_rate", 0.0) or 0.0) for d in domain_health.values()) / len(domain_health)
+                if domain_health
+                else 0.0
+            ),
+            "current_parameters": {
+                "cycle_cost": self.config.get("cycle_cost", self._default_cycle_cost),
+                "token_values": dict(TOKEN_VALUES),
+                "tier_thresholds": {
+                    str(tier): data.get("surviving_claims", 0)
+                    for tier, data in V2_TIERS.items() if tier > 0
+                },
+            },
+        }
+
+    def _run_executive_election(self) -> Optional[Dict]:
+        active_states = self.state_manager.get_all_active_states()
+        metrics = self._collect_system_metrics()
+        history = self.db.get_elections()
+        candidates = self._generate_executive_candidates(metrics, history)
+        if not candidates:
+            return {"skipped": True, "reason": "candidate_generation_failed"}
+
+        vote_records = []
+        tally: Dict[str, int] = {c["name"]: 0 for c in candidates}
+
+        for senator in active_states:
+            vote = self._senator_vote_for_executive(senator, candidates, metrics)
+            selected = vote.get("candidate")
+            if selected not in tally:
+                selected = candidates[0]["name"]
+            tally[selected] += 1
+            vote_records.append({
+                "senator": senator.name,
+                "vote": selected,
+                "reasoning": vote.get("reasoning", "")
+            })
+
+        winner_name = max(tally.items(), key=lambda kv: kv[1])[0]
+        winner_candidate = next(c for c in candidates if c["name"] == winner_name)
+        term_ends = self.cycle + EXECUTIVE_TERM_CYCLES
+        election_id = f"exec_{self.cycle}_{uuid.uuid4().hex[:8]}"
+
+        self.db.save_election_result(
+            election_id=election_id,
+            cycle=self.cycle,
+            winner=winner_name,
+            platform=winner_candidate["platform"],
+            votes=vote_records,
+            term_ends_cycle=term_ends,
+        )
+
+        self._apply_executive_platform(winner_candidate["platform"], term_ends)
+
+        _log(f"  Executive election winner: {winner_name} ({tally[winner_name]}/{len(active_states)} votes)")
+        return {
+            "election_id": election_id,
+            "cycle": self.cycle,
+            "winner": winner_name,
+            "candidates": candidates,
+            "votes": vote_records,
+            "vote_tally": tally,
+            "term_ends_cycle": term_ends,
+            "platform": winner_candidate["platform"],
+        }
+
+    def _generate_executive_candidates(self, metrics: Dict[str, object], history: List[Dict]) -> List[Dict]:
+        candidates = []
+
+        def build(name: str, mandate: str) -> Optional[Dict]:
+            response = self.models.complete(
+                task_type="executive_election",
+                system_prompt=(
+                    "You are an Executive candidate for Atlantis governance. "
+                    "Produce strict JSON only."
+                ),
+                user_prompt=(
+                    f"Constitutional constraints: only adjust cycle_cost, token_values, tier_thresholds. "
+                    f"Do not alter constitutional or non-amendable clauses.\n"
+                    f"Role: {name}. Mandate: {mandate}.\n"
+                    f"System metrics JSON:\n{json.dumps(metrics, indent=2)}\n\n"
+                    f"Election history JSON:\n{json.dumps(history[-5:], indent=2)}\n\n"
+                    "Return JSON object with keys: summary (string), platform (object). "
+                    "platform must include cycle_cost (int), token_values (object of ints), tier_thresholds (object tier->int)."
+                ),
+                max_tokens=800,
+            )
+            raw = (response.content or "").strip()
+            try:
+                parsed = json.loads(raw)
+                platform = parsed.get("platform") or {}
+                summary = parsed.get("summary", "")
+            except json.JSONDecodeError:
+                parsed = {}
+                summary = ""
+                platform = {}
+
+            sanitized = self._sanitize_platform(platform)
+            if not summary:
+                if name == "Synthesis":
+                    summary = "Balance all domains with moderate parameter changes anchored to constitutional defaults."
+                else:
+                    summary = "Boost underperforming domains via lower cycle cost and stronger survival incentives."
+
+            if not platform and name == "Challenger":
+                sanitized["cycle_cost"] = max(100, int(self.config.get("cycle_cost", self._default_cycle_cost) * 0.9))
+                for key in ("discovery_survived", "foundation_survived", "challenge_succeeded"):
+                    if key in sanitized["token_values"]:
+                        sanitized["token_values"][key] = int(sanitized["token_values"][key] * 1.1)
+
+            return {
+                "name": name,
+                "summary": summary,
+                "platform": sanitized,
+                "raw": raw,
+            }
+
+        is_first = len(history) == 0
+        synth = build("Synthesis", "Balance all domains and preserve constitutional intent while optimizing performance.")
+        chall = build("Challenger", "Favor underperforming domains and correct weakest system metrics.")
+        if synth:
+            candidates.append(synth)
+        if chall:
+            candidates.append(chall)
+
+        if not is_first and self.active_executive:
+            incumbent = {
+                "name": "Incumbent",
+                "summary": "Continue current executive platform with iterative refinement based on term outcomes.",
+                "platform": copy.deepcopy(self.active_executive.get("platform", {})),
+                "raw": "",
+            }
+            candidates.insert(0, incumbent)
+
+        return candidates
+
+    def _sanitize_platform(self, platform: Dict) -> Dict:
+        cycle_cost = int(platform.get("cycle_cost", self._default_cycle_cost))
+        cycle_cost = max(100, cycle_cost)
+
+        token_updates = platform.get("token_values") or {}
+        token_values = dict(self._default_token_values)
+        for key, value in token_updates.items():
+            if key in token_values:
+                token_values[key] = int(value)
+
+        tier_updates = platform.get("tier_thresholds") or {}
+        tier_thresholds = {str(t): v for t, v in self._default_tier_thresholds.items()}
+        for tier, value in tier_updates.items():
+            tier_key = str(tier)
+            if tier_key in tier_thresholds:
+                tier_thresholds[tier_key] = max(1, int(value))
+
+        return {
+            "cycle_cost": cycle_cost,
+            "token_values": token_values,
+            "tier_thresholds": tier_thresholds,
+        }
+
+    def _senator_vote_for_executive(self, senator: State, candidates: List[Dict], metrics: Dict[str, object]) -> Dict[str, str]:
+        options = "\n".join(
+            f"- {c['name']}: {c['summary']}\n  PLATFORM: {json.dumps(c['platform'])}"
+            for c in candidates
+        )
+        response = senator.models.complete(
+            task_type="researcher_claims",
+            system_prompt=senator.senator_config.system_prompt,
+            user_prompt=(
+                "Executive election vote. You are one Senator with one vote.\n"
+                f"Current system metrics:\n{json.dumps(metrics, indent=2)}\n\n"
+                f"Candidate platforms:\n{options}\n\n"
+                "Reply in JSON with keys candidate and reasoning. Candidate must exactly match one option."
+            ),
+            max_tokens=300,
+        )
+        raw = (response.content or "").strip()
+        try:
+            parsed = json.loads(raw)
+            return {
+                "candidate": str(parsed.get("candidate", "")).strip(),
+                "reasoning": str(parsed.get("reasoning", "")).strip(),
+            }
+        except json.JSONDecodeError:
+            pick = candidates[0]["name"]
+            for c in candidates:
+                if c["name"].lower() in raw.lower():
+                    pick = c["name"]
+                    break
+            return {"candidate": pick, "reasoning": raw}
+
+    def _apply_executive_platform(self, platform: Dict, term_ends_cycle: int):
+        self.config["cycle_cost"] = int(platform.get("cycle_cost", self._default_cycle_cost))
+
+        TOKEN_VALUES.clear()
+        TOKEN_VALUES.update(dict(platform.get("token_values", self._default_token_values)))
+
+        thresholds = platform.get("tier_thresholds", {})
+        for tier, data in V2_TIERS.items():
+            if tier == 0:
+                continue
+            key = str(tier)
+            if key in thresholds:
+                data["surviving_claims"] = int(thresholds[key])
+
+        self.active_executive = {
+            "platform": copy.deepcopy(platform),
+            "term_ends_cycle": term_ends_cycle,
+        }
+
+
     # ─── ARCHIVE EXPORT ───────────────────────────────────────────
 
     def _write_cycle_log(self):
@@ -1175,6 +1438,28 @@ class PerpetualEngine:
             f"- Senate quorum: {quorum.get('active_states', 0)}/{quorum.get('minimum', SENATE_MIN_QUORUM)} active States"
             f" ({'SUSPENDED' if quorum.get('suspended') else 'ACTIVE'})\n"
         )
+
+        executive = governance.get("executive")
+        if executive:
+            if executive.get("skipped"):
+                lines.append(f"- Executive election: skipped ({executive.get('reason', 'unknown')})\n")
+            else:
+                lines.append(
+                    f"- Executive election: winner {executive.get('winner', '?')} | term ends cycle {executive.get('term_ends_cycle', '?')}\n"
+                )
+
+                lines.append("  - Candidate platforms:\n")
+                for candidate in executive.get("candidates", []):
+                    lines.append(
+                        f"    - {candidate.get('name', '?')}: {candidate.get('summary', '')}\n"
+                        f"      platform: {json.dumps(candidate.get('platform', {}), ensure_ascii=False)}\n"
+                    )
+
+                lines.append("  - Vote records:\n")
+                for record in executive.get("votes", []):
+                    lines.append(
+                        f"    - {record.get('senator', '?')}: {record.get('vote', '?')} — {record.get('reasoning', '')}\n"
+                    )
 
         senate_votes = governance.get("senate_votes", [])
         if senate_votes:
