@@ -49,6 +49,7 @@ class AtlantisEngine:
         self,
         config: dict = None,
         mock: bool = False,
+        dry_run: bool = False,
         force_clean: bool = False,
         api_key: Optional[str] = None,
     ):
@@ -56,6 +57,7 @@ class AtlantisEngine:
         self.constitution_text = self._load_constitution()
         self.config = config or MOCK_CONFIG
         self.mock = mock
+        self.dry_run = dry_run
         self.output_dir = Path("output")
         self._setup_output_dirs()
         self._clear_output_data(force_clean)
@@ -64,6 +66,7 @@ class AtlantisEngine:
         self.models = ModelRouter(
             api_key=api_key or os.getenv("ANTHROPIC_API_KEY"),
             mock_mode=mock,
+            dry_run=dry_run,
         )
         self.content_gen = ContentGenerator(
             output_dir=str(self.output_dir / "content"),
@@ -78,9 +81,11 @@ class AtlantisEngine:
         print(f"  The Lost Civilization, Rebuilt — Adversarial Knowledge Engine")
         print(f"{'='*60}")
         print(f"\n  Constitution: {len(self.constitution_text)} chars")
-        print(f"  Config: {'MOCK' if self.mock else 'PRODUCTION'}")
+        mode = "MOCK" if self.mock else ("DRY-RUN" if self.dry_run else "PRODUCTION")
+        print(f"  Config: {mode}")
         print(f"  Target pairs: {self.config['founding_era_target_pairs']}")
         print(f"  Governance cycles: {self.config['governance_cycles'] or 'indefinite'}")
+        self._print_model_allocation_validation()
 
         # Phase 0: Founding Period
         print(f"\n{'─'*60}")
@@ -122,6 +127,15 @@ class AtlantisEngine:
         perpetual.run_cycles(self.config["governance_cycles"])
 
         self._final_report()
+
+    def _print_model_allocation_validation(self):
+        print("\n  Model allocation validation")
+        for record in self.models.validate_model_allocation():
+            status = "OK" if record["valid"] else "INVALID"
+            print(
+                f"    - {record['task_type']}: tier={record['tier']} "
+                f"model={record['model_id']} [{status}]"
+            )
 
     # ─── FOUNDING ERA ────────────────────────────────────────────
 
@@ -385,6 +399,12 @@ class AtlantisEngine:
         print(f"    output/domain_health.json — DMI metrics")
         print(f"    output/logs/            — Per-cycle logs")
         print(f"    output/content/         — Generated content (blog, newsroom, debate, explorer)")
+        self.models.print_cost_summary()
+        stats = self.models.get_stats()
+        print(f"  Total LLM calls: {stats['total_calls']}")
+        if self.config["governance_cycles"]:
+            per_cycle = stats["model_router_cost_usd"] / self.config["governance_cycles"]
+            print(f"  Estimated cost per governance cycle: ${per_cycle:.6f}")
         print(f"\n  Done.\n")
 
 
@@ -401,6 +421,7 @@ def main():
             "  python -m atlantis --mock              # Quick test (3 pairs, 5 cycles)\n"
             "  python -m atlantis                     # Full production run\n"
             "  python -m atlantis --force-clean       # Remove V1 data first\n"
+            "  python -m atlantis --dry-run           # Print prompts, skip API calls\n"
         ),
     )
     parser.add_argument(
@@ -411,6 +432,10 @@ def main():
         "--force-clean", action="store_true",
         help="Remove detected V1 data directories and start fresh"
     )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Run full pipeline and print prompts/model settings without live API calls"
+    )
     args = parser.parse_args()
 
     config = MOCK_CONFIG if args.mock else PRODUCTION_CONFIG
@@ -418,6 +443,7 @@ def main():
     engine = AtlantisEngine(
         config=config,
         mock=args.mock,
+        dry_run=args.dry_run,
         force_clean=args.force_clean,
     )
     engine.run()
