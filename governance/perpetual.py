@@ -126,6 +126,9 @@ class PerpetualEngine:
         quorum["active_states"] = len(active_states)
         quorum["suspended"] = len(active_states) < SENATE_MIN_QUORUM
 
+        # Per-cycle operating cost for every active State
+        self._apply_cycle_cost(active_states)
+
         # Steps 1-17: All rival pairs
         for pair in self.state_manager.get_active_pairs():
             if pair.warmup_remaining > 0:
@@ -264,10 +267,10 @@ class PerpetualEngine:
         # Update referenced_by for all citations
         for cid in a_entry.citations:
             if cid:
-                self.db.update_referenced_by(cid, a_entry.display_id)
+                self._process_citation(cited_display_id=cid, citing_display_id=a_entry.display_id)
         for cid in b_entry.citations:
             if cid:
-                self.db.update_referenced_by(cid, b_entry.display_id)
+                self._process_citation(cited_display_id=cid, citing_display_id=b_entry.display_id)
 
         # Update pipeline claim counts
         a_survived = a_outcome["outcome"] in ("survived", "partial")
@@ -463,10 +466,11 @@ class PerpetualEngine:
             citations=[target["display_id"]],
         )
         self.db.save_archive_entry(fed_entry)
-        self.db.update_referenced_by(target["display_id"], fed_entry.display_id)
+        self._process_citation(target["display_id"], fed_entry.display_id)
 
         # Apply token outcome to target State (Federal Lab earns nothing)
-        self._apply_single_token_outcome(target_state, "discovery", outcome)
+        fed_tokens = self._apply_single_token_outcome(target_state, "discovery", outcome)
+        self.db.update_tokens_earned(fed_entry.display_id, fed_tokens)
 
         # Update the original claim's status if overturned
         if outcome["outcome"] == "destroyed":
@@ -555,10 +559,9 @@ class PerpetualEngine:
                 analysis_entry = city.run_analysis(cluster_claims)
                 self.db.save_archive_entry(analysis_entry)
                 for cid in cluster:
-                    self.db.update_referenced_by(cid, analysis_entry.display_id)
+                    self._process_citation(cid, analysis_entry.display_id)
 
                 state.cities.append(city)
-                state.earn_tokens(TOKEN_VALUES.get("city_published", 1000))
                 _log(f"  City formed: {city_id} ({len(cluster)} claims)")
 
                 # Content: new_city event
@@ -615,7 +618,6 @@ class PerpetualEngine:
                 self.db.save_archive_entry(proposal_entry)
 
                 state.towns.append(town)
-                state.earn_tokens(TOKEN_VALUES.get("town_published", 500))
                 _log(f"  Town formed: {town_id}")
 
                 self.content_gen.evaluate_and_generate({
@@ -748,7 +750,6 @@ class PerpetualEngine:
             if qualifies:
                 state.tier = target_tier
                 self.db.update_state_tier(state.name, target_tier)
-                state.earn_tokens(TOKEN_VALUES.get("tier_advancement", 10000))
                 _log(f"  {state.name} → Tier {target_tier} ({tier_info.get('name', '?')})")
 
                 self.content_gen.evaluate_and_generate({
@@ -966,6 +967,60 @@ class PerpetualEngine:
 
     # ─── TOKEN OUTCOMES ───────────────────────────────────────────
 
+    def _apply_cycle_cost(self, active_states: List[State]):
+        """Deduct per-cycle operating cost from each active State."""
+        cycle_cost = int(self.config.get("cycle_cost", 0) or 0)
+        if cycle_cost <= 0:
+            return
+        for state in active_states:
+            state.deduct_tokens(cycle_cost)
+
+    def _record_token_event(self, state: State, amount: int, reason: str):
+        """Persist non-claim token changes so ledger sums match state budgets."""
+        event_entry = ArchiveEntry(
+            entry_id=str(uuid.uuid4()),
+            display_id=self.db.next_display_id(),
+            entry_type="token_event",
+            source_state=state.name,
+            source_entity=f"{state.name} Treasury",
+            cycle_created=self.cycle,
+            status="surviving",
+            claim_type="foundation",
+            position=f"TOKEN_EVENT: {reason}",
+            reasoning_chain=[],
+            conclusion=reason,
+            keywords=["token_event", reason],
+            raw_claim_text=f"Token event: {reason}",
+            outcome="survived",
+            outcome_reasoning="",
+            tokens_earned=amount,
+        )
+        self.db.save_archive_entry(event_entry)
+
+    def _process_citation(self, cited_display_id: str, citing_display_id: str):
+        """
+        Update citation graph and award one-time Discovery first-citation bonus.
+        """
+        cited = self.db.get_archive_entry(cited_display_id)
+        if not cited:
+            return
+
+        existing_refs = cited.get("referenced_by", []) or []
+        is_first_citation = len(existing_refs) == 0 and citing_display_id not in existing_refs
+
+        self.db.update_referenced_by(cited_display_id, citing_display_id)
+
+        if (
+            is_first_citation
+            and (cited.get("claim_type") or "").lower() == "discovery"
+            and cited.get("source_state")
+        ):
+            bonus = TOKEN_VALUES.get("discovery_first_cited", 3000)
+            discoverer = self.state_manager.get_state(cited["source_state"])
+            if discoverer:
+                discoverer.earn_tokens(bonus)
+            self.db.update_tokens_earned(cited_display_id, bonus)
+
     def _apply_token_outcomes(
         self,
         sa: State, a_norm: dict, a_outcome: dict,
@@ -973,16 +1028,14 @@ class PerpetualEngine:
     ) -> Dict[str, int]:
         """
         Apply token rewards/penalties for both States based on their outcomes.
-        A's Critic challenged B's claim. B's Critic challenged A's claim.
+        Claim rewards are recorded on claim entries; critic rewards/penalties are
+        recorded as separate token_event entries.
         """
-        # A's claim (challenged by B)
         a_claim_tokens = self._apply_single_token_outcome(sa, a_norm.get("claim_type", "discovery"), a_outcome)
-        # B's challenge on A
-        self._apply_challenge_tokens(sb, a_outcome)
-
-        # B's claim (challenged by A)
         b_claim_tokens = self._apply_single_token_outcome(sb, b_norm.get("claim_type", "discovery"), b_outcome)
-        # A's challenge on B
+
+        # Critic outcomes are separate economic events
+        self._apply_challenge_tokens(sb, a_outcome)
         self._apply_challenge_tokens(sa, b_outcome)
 
         return {sa.name: a_claim_tokens, sb.name: b_claim_tokens}
@@ -1009,15 +1062,20 @@ class PerpetualEngine:
         # destroyed → 0
         return 0
 
-    def _apply_challenge_tokens(self, challenger_state: State, rival_outcome: dict):
+    def _apply_challenge_tokens(self, challenger_state: State, rival_outcome: dict) -> int:
         """Earn/deduct tokens for the challenging State based on rival's outcome."""
         out = rival_outcome["outcome"]
         if out == "destroyed":
-            challenger_state.earn_tokens(TOKEN_VALUES.get("rival_destroyed_by_critic", 1000))
-        elif out == "partial":
-            challenger_state.earn_tokens(TOKEN_VALUES.get("rival_narrowed_by_critic", 800))
+            amount = TOKEN_VALUES.get("rival_destroyed_by_critic", 1000)
+            challenger_state.earn_tokens(amount)
+            self._record_token_event(challenger_state, amount, "rival_destroyed_by_critic")
+            return amount
         elif out in ("survived", "founding"):
-            challenger_state.deduct_tokens(abs(TOKEN_VALUES.get("challenge_failed", -1000)))
+            amount = abs(TOKEN_VALUES.get("challenge_failed", -1000))
+            challenger_state.deduct_tokens(amount)
+            self._record_token_event(challenger_state, -amount, "challenge_failed")
+            return -amount
+        return 0
 
     # ─── STABILITY & DOMAIN HEALTH ────────────────────────────────
 
