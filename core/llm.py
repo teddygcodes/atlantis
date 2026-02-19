@@ -225,6 +225,91 @@ class LLMProvider:
         prompt_lower = user_prompt.lower()
         name_lower = agent_name.lower()
 
+        # ─── Structured governance pipeline responses (must run before generic branches) ───
+        if "produce a foundation, discovery, or challenge claim" in prompt_lower:
+            return (
+                "CLAIM TYPE: Discovery\n"
+                f"POSITION: {agent_name} argues adaptive governance needs explicit feedback loops to stay truthful under adversarial pressure.\n"
+                "STEP 1: Systems that publish intermediate reasoning are easier to challenge and therefore self-correct faster.\n"
+                "STEP 2: Rebuttal requirements force states to expose hidden assumptions, reducing silent failure modes.\n"
+                "STEP 3: Cross-citation between rival claims creates a dependency graph that reveals fragile foundations early.\n"
+                "CONCLUSION: Adversarial transparency increases long-run knowledge reliability even when short-run conflict rises.\n"
+                "CITATIONS: []\n"
+                "KEYWORDS: governance, feedback_loops, adversarial_testing, transparency"
+            )
+
+        if "challenge this claim" in prompt_lower and "step targeted" in prompt_lower:
+            return (
+                "STEP TARGETED: STEP 2\n"
+                "FLAW: The claim assumes rebuttal quality is consistently high, but weak rebuttals can create false confidence instead of correction.\n"
+                "ALTERNATIVE: Reliability improves only when rebuttals add genuinely new reasoning that can be independently tested.\n"
+                "EVIDENCE: Historical policy reviews show iterative debate helps only when counterarguments are specific and evidence-linked."
+            )
+
+        if "choose your response:" in prompt_lower and "option a" in prompt_lower:
+            return (
+                "OPTION B: I concede that low-quality rebuttals can amplify noise, so the original claim was too broad. "
+                "Narrowed claim: adversarial transparency improves reliability when rebuttals must introduce testable, non-redundant reasoning "
+                "and are archived for later dependency audits."
+            )
+
+        if "return json:" in prompt_lower and "\"outcome\": \"survived|partial|destroyed\"" in prompt_lower:
+            selector = int(hashlib.md5(user_prompt.encode()).hexdigest(), 16) % 3
+            if selector == 0:
+                outcome = "survived"
+                reasoning = "The challenge raises pressure but fails to overturn the claim's core mechanism under the provided evidence."
+                scores = {"drama": 6, "novelty": 5, "depth": 7}
+            elif selector == 1:
+                outcome = "partial"
+                reasoning = "The challenge identifies a real boundary condition and the rebuttal concedes it while preserving a narrower core claim."
+                scores = {"drama": 7, "novelty": 6, "depth": 8}
+            else:
+                outcome = "destroyed"
+                reasoning = "The challenge targets a central step and the rebuttal does not supply a sufficient replacement chain of reasoning."
+                scores = {"drama": 8, "novelty": 6, "depth": 7}
+            return json.dumps({
+                "outcome": outcome,
+                "reasoning": reasoning,
+                "open_questions": [
+                    "How should rebuttal quality be measured before archival?",
+                    "Which audit signals best predict false confidence loops?"
+                ],
+                "scores": scores
+            })
+
+
+        if "extract and return json" in prompt_lower and "\"claim_type\"" in prompt_lower:
+            return json.dumps({
+                "claim_type": "discovery",
+                "position": "Adaptive governance needs explicit feedback loops to stay truthful under adversarial pressure.",
+                "reasoning_chain": [
+                    "Systems that publish intermediate reasoning are easier to challenge.",
+                    "Structured rebuttals surface hidden assumptions before they calcify.",
+                    "Citation graphs expose fragile dependencies for earlier correction."
+                ],
+                "conclusion": "Adversarial transparency increases reliability when criticism is specific and testable.",
+                "citations": [],
+                "keywords": ["governance", "feedback_loops", "adversarial_testing", "transparency"]
+            })
+
+        if "extract explicit and implicit premises" in prompt_lower and "\"explicit_premises\"" in prompt_lower:
+            return json.dumps({
+                "explicit_premises": [
+                    "Publishing reasoning enables targeted critique.",
+                    "Rebuttals can reveal hidden assumptions."
+                ],
+                "implicit_assumptions": [
+                    "Critics act in good faith often enough to improve outcomes.",
+                    "Archival systems preserve enough context for later audits."
+                ]
+            })
+
+        if "does rebuttal introduce genuinely new reasoning" in prompt_lower:
+            return json.dumps({
+                "new_reasoning": True,
+                "explanation": "The rebuttal narrows scope and adds a verifiable condition on rebuttal quality."
+            })
+
         # ─── Constitutional Amendment proposals (check BEFORE research!) ───
         if "constitutional amendment" in prompt_lower and "round" in prompt_lower:
             amendments = [
