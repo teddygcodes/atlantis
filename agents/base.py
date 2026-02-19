@@ -78,6 +78,31 @@ class AgentConfig:
     max_tokens_per_response: int = 1000
     prefer_concise: bool = True
 
+    def get_system_prompt(self) -> str:
+        """Build a standalone system prompt from this config."""
+        parts = [
+            f"You are {self.name}, a {self.role} in Project Atlantis.",
+            f"\nYour mandate: {self.mandate}",
+        ]
+
+        if self.personality:
+            parts.append(f"\nYour thinking style: {self.personality}")
+
+        if self.constitutional_role:
+            parts.append(f"\nYour governance role: {self.constitutional_role}")
+
+        if self.constraints:
+            parts.append("\nHard constraints you must follow:")
+            for constraint in self.constraints:
+                parts.append(f"  - {constraint}")
+
+        return "\n".join(parts)
+
+    @property
+    def system_prompt(self) -> str:
+        """Backward-compatible prompt accessor used across the codebase."""
+        return self.get_system_prompt()
+
     def to_dict(self):
         return {
             "id": self.id,

@@ -159,6 +159,8 @@ class PerpetualEngine:
         # Step 1-2: Both States produce claims
         a_raw = sa.produce_claim(a_ctx, a_meta, a_lab)
         b_raw = sb.produce_claim(b_ctx, b_meta, b_lab)
+        _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
+        _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
 
         # Step 3: Structural validation
         a_valid, a_errors = validate_claim(a_raw, self.models, self.db)
@@ -298,6 +300,22 @@ class PerpetualEngine:
             "b_entry": b_entry.display_id,
             "a_outcome": a_outcome["outcome"],
             "b_outcome": b_outcome["outcome"],
+            "a_claim": a_entry.raw_claim_text,
+            "b_claim": b_entry.raw_claim_text,
+            "a_challenge": a_entry.raw_challenge_text,
+            "b_challenge": b_entry.raw_challenge_text,
+            "a_rebuttal": a_entry.raw_rebuttal_text,
+            "b_rebuttal": b_entry.raw_rebuttal_text,
+            "a_scores": {
+                "drama": int(a_outcome["scores"].get("drama", 0)),
+                "novelty": int(a_outcome["scores"].get("novelty", 0)),
+                "depth": int(a_outcome["scores"].get("depth", 0)),
+            },
+            "b_scores": {
+                "drama": int(b_outcome["scores"].get("drama", 0)),
+                "novelty": int(b_outcome["scores"].get("novelty", 0)),
+                "depth": int(b_outcome["scores"].get("depth", 0)),
+            },
         }
 
     def _run_warmup_pair(self, pair: RivalPair) -> dict:
@@ -972,17 +990,20 @@ class PerpetualEngine:
 
     def _compute_domain_health(self, domain: str) -> dict:
         """Compute DMI metrics and save to DB."""
-        all_claims = self.db.get_surviving_claims(domain=domain)
-        total = len(all_claims)
-        surviving = sum(1 for c in all_claims if c.get("status") == "surviving")
-        partial = sum(1 for c in all_claims if c.get("status") == "partial")
-        destroyed = sum(1 for c in all_claims if c.get("status") == "destroyed")
+        domain_states = {s.get("state_name") for s in self.db.get_all_active_states() if s.get("domain") == domain}
+        all_entries = [
+            e for e in self.db.get_all_archive_entries()
+            if e.get("source_state") in domain_states and e.get("entry_type") == "claim"
+        ]
 
+        total = len(all_entries)
+        surviving = sum(1 for c in all_entries if c.get("status") == "surviving")
+        partial = sum(1 for c in all_entries if c.get("status") == "partial")
+        destroyed = sum(1 for c in all_entries if c.get("status") == "destroyed")
         survival_rate = surviving / total if total > 0 else 0.0
 
         principles = self.db.get_principle_count(domain)
-        surviving_nonzero = max(surviving, 1)
-        compression_ratio = principles / surviving_nonzero
+        compression_ratio = principles / max(surviving, 1)
 
         lab_stats = self.db.get_lab_origin_stats(domain)
         lab_total = lab_stats.get("total", 0)
@@ -992,41 +1013,71 @@ class PerpetualEngine:
         cities = self.db.get_active_cities_in_domain(domain)
         towns = self.db.get_active_towns_in_domain(domain)
 
+        state_rows = [r for r in self.db.get_all_active_states() if r.get("domain") == domain]
+        cred = []
+        for row in state_rows[:2]:
+            t = row.get("total_pipeline_claims", 0)
+            s_count = row.get("surviving_pipeline_claims", 0)
+            cred.append(round(s_count / t, 3) if t > 0 else 1.0)
+        while len(cred) < 2:
+            cred.append(1.0)
+
+        cross_domain_citations = 0
+        for entry in all_entries:
+            for cid in (entry.get("citations") or []):
+                cited = self.db.get_archive_entry(cid)
+                if cited and cited.get("source_state") not in domain_states:
+                    cross_domain_citations += 1
+
+        contradiction_trend = "increasing" if destroyed > (surviving + partial) else "stable"
         maturity_phase = self._get_maturity_phase(
-            surviving=surviving,
             survival_rate=survival_rate,
-            cities=len(cities),
+            contradiction_trend=contradiction_trend,
             compression_ratio=compression_ratio,
+            active_cities=len(cities),
+            active_towns=len(towns),
+            cross_domain_citations=cross_domain_citations,
         )
 
         metrics = {
             "cycle": self.cycle,
-            "total_entries": total,
-            "surviving": surviving,
-            "partial": partial,
-            "destroyed": destroyed,
+            "total_claims": total,
+            "surviving_claims": surviving,
+            "partial_claims": partial,
+            "destroyed_claims": destroyed,
             "survival_rate": round(survival_rate, 3),
+            "credibility_a": cred[0],
+            "credibility_b": cred[1],
             "compression_ratio": round(compression_ratio, 3),
+            "contradiction_trend": contradiction_trend,
+            "cross_domain_citations": cross_domain_citations,
             "lab_survival_rate": round(lab_survival_rate, 3),
             "active_cities": len(cities),
             "active_towns": len(towns),
+            "maturity_phase": maturity_phase,
         }
 
         self.db.save_domain_health(domain, self.cycle, metrics)
         return metrics
 
     def _get_maturity_phase(
-        self, surviving: int, survival_rate: float, cities: int, compression_ratio: float
+        self,
+        survival_rate: float,
+        contradiction_trend: str,
+        compression_ratio: float,
+        active_cities: int,
+        active_towns: int,
+        cross_domain_citations: int,
     ) -> str:
-        if surviving < 5:
-            return "Genesis"
-        if surviving < 15:
-            return "Emergence"
-        if cities > 0:
-            return "Complexity"
-        if compression_ratio > 0.1:
-            return "Refinement"
-        return "Maturity"
+        if cross_domain_citations > 10 and survival_rate > 0.6:
+            return "Mature Influence"
+        if active_towns > 0 and cross_domain_citations > 3:
+            return "Applied Integration"
+        if survival_rate > 0.5 and compression_ratio > 0.2 and active_cities > 0:
+            return "Structured Abstraction"
+        if 0.3 <= survival_rate <= 0.5 and contradiction_trend != "increasing":
+            return "Stabilizing Foundation"
+        return "Volatile Exploration"
 
     # ─── ARCHIVE EXPORT ───────────────────────────────────────────
 
@@ -1049,8 +1100,22 @@ class PerpetualEngine:
             else:
                 lines.append(
                     f"\n## {pair_result.get('pair', '?')}\n"
-                    f"- A Entry: `{pair_result.get('a_entry', '?')}` → **{pair_result.get('a_outcome', '?')}**\n"
-                    f"- B Entry: `{pair_result.get('b_entry', '?')}` → **{pair_result.get('b_outcome', '?')}**\n"
+                    f"\n### Exchange A ({pair_result.get('a_entry', '?')})\n"
+                    f"**Claim**\n{pair_result.get('a_claim', '')}\n\n"
+                    f"**Challenge**\n{pair_result.get('a_challenge', '')}\n\n"
+                    f"**Rebuttal**\n{pair_result.get('a_rebuttal', '')}\n\n"
+                    f"**Outcome**: {pair_result.get('a_outcome', '?')}\n"
+                    f"**Scores**: drama={pair_result.get('a_scores', {}).get('drama', 0)}, "
+                    f"novelty={pair_result.get('a_scores', {}).get('novelty', 0)}, "
+                    f"depth={pair_result.get('a_scores', {}).get('depth', 0)}\n"
+                    f"\n### Exchange B ({pair_result.get('b_entry', '?')})\n"
+                    f"**Claim**\n{pair_result.get('b_claim', '')}\n\n"
+                    f"**Challenge**\n{pair_result.get('b_challenge', '')}\n\n"
+                    f"**Rebuttal**\n{pair_result.get('b_rebuttal', '')}\n\n"
+                    f"**Outcome**: {pair_result.get('b_outcome', '?')}\n"
+                    f"**Scores**: drama={pair_result.get('b_scores', {}).get('drama', 0)}, "
+                    f"novelty={pair_result.get('b_scores', {}).get('novelty', 0)}, "
+                    f"depth={pair_result.get('b_scores', {}).get('depth', 0)}\n"
                 )
 
         fed = self.cycle_log_data.get("federal_lab")
@@ -1082,6 +1147,20 @@ class PerpetualEngine:
             row = self.db.get_domain_health(domain, latest_only=True)
             if row:
                 health[domain] = row
+            else:
+                health[domain] = {
+                    "cycle": self.cycle,
+                    "total_entries": 0,
+                    "surviving": 0,
+                    "partial": 0,
+                    "destroyed": 0,
+                    "survival_rate": 0.0,
+                    "compression_ratio": 0.0,
+                    "lab_survival_rate": 0.0,
+                    "active_cities": 0,
+                    "active_towns": 0,
+                    "status": "no_eligible_claims",
+                }
         out_path = self.output_dir / "domain_health.json"
         out_path.write_text(json.dumps(health, indent=2), encoding="utf-8")
 
@@ -1107,8 +1186,12 @@ class PerpetualEngine:
             md_lines.append(
                 f"## {did} [{status.upper()}]\n"
                 f"**Source**: {source} / {entity}  |  **Type**: {cltype}  |  **Cycle**: {e.get('cycle_created', '?')}\n\n"
-                f"{e.get('raw_claim_text', '')[:800]}\n\n"
+                f"### Claim\n{e.get('raw_claim_text', '')}\n\n"
             )
+            if e.get("raw_challenge_text"):
+                md_lines.append(f"### Challenge\n{e.get('raw_challenge_text', '')}\n\n")
+            if e.get("raw_rebuttal_text"):
+                md_lines.append(f"### Rebuttal\n{e.get('raw_rebuttal_text', '')}\n\n")
             if outcome:
                 md_lines.append(f"_Outcome: {outcome}_\n\n")
             md_lines.append("---\n\n")
