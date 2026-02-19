@@ -1082,6 +1082,20 @@ class PerpetualEngine:
             row = self.db.get_domain_health(domain, latest_only=True)
             if row:
                 health[domain] = row
+            else:
+                health[domain] = {
+                    "cycle": self.cycle,
+                    "total_entries": 0,
+                    "surviving": 0,
+                    "partial": 0,
+                    "destroyed": 0,
+                    "survival_rate": 0.0,
+                    "compression_ratio": 0.0,
+                    "lab_survival_rate": 0.0,
+                    "active_cities": 0,
+                    "active_towns": 0,
+                    "status": "no_eligible_claims",
+                }
         out_path = self.output_dir / "domain_health.json"
         out_path.write_text(json.dumps(health, indent=2), encoding="utf-8")
 
