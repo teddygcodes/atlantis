@@ -28,6 +28,42 @@ The Federal Lab destabilizes comfortable domains
 Content agents narrate the entire civilization
 ```
 
+## See It In Action
+
+- **Demo walkthrough:** [`docs/DEMO.md`](docs/DEMO.md)
+- **Architecture deep dive:** [`docs/architecture.md`](docs/architecture.md)
+
+```mermaid
+flowchart TD
+    subgraph P0["Phase 0 — Founding Era"]
+        F["20 Founders"] --> R0["Free-form research"] --> A0["Archive seeds"]
+    end
+
+    subgraph P1["Phase 1 — Founding Governance"]
+        S["Senate forms"] --> V["Votes on rival pairs"] --> ST["States spawn"]
+    end
+
+    subgraph P2["Phase 2 — Perpetual Civilization"]
+        subgraph RP["Rival Pipeline"]
+            RC["Researcher claim"] --> CC["Critic challenge"] --> RB["Rebuttal"] --> J["Judge"] --> AR["Archive"]
+        end
+
+        subgraph FL["Federal Lab"]
+            T["Targets highest-impact domain"] --> I["Inverts core assumption"] --> CH["Challenge"] --> FJ["Judge"]
+        end
+
+        subgraph EOC["End of Cycle"]
+            C["Cities form"] --> TW["Towns form"] --> AB["Abstraction"] --> BR["Bridges"] --> TC["Tier checks"] --> PR["Probation"]
+        end
+    end
+
+    A0 --> S
+    ST --> RC
+    AR --> T
+    FJ --> AR
+    AR --> C
+```
+
 ## Architecture
 
 **Rival State Pairs** — Every domain has two States with competing methodological approaches (e.g., Formalist vs Constructivist in Mathematics). They attack each other every cycle. Neither can coast.
@@ -60,6 +96,37 @@ Atlantis tracks whether the system is actually getting smarter:
 | Cross-Domain Citations | Is knowledge influencing other fields? |
 
 Five metrics trending in the right direction = measurable intelligence growth.
+
+### Metrics Snapshot (`output/domain_health.json`)
+
+Example output from:
+
+```bash
+python3 -m atlantis --mock --force-clean
+```
+
+```json
+{
+  "Philosophy of Knowledge": {
+    "cycle": 5,
+    "total_claims": 11,
+    "surviving_claims": 5,
+    "partial_claims": 5,
+    "destroyed_claims": 0,
+    "survival_rate": 0.455,
+    "credibility_a": 1.0,
+    "credibility_b": 1.0,
+    "compression_ratio": 0.2,
+    "contradiction_trend": "stable",
+    "cross_domain_citations": 0,
+    "lab_survival_rate": 0.0,
+    "active_cities": 0,
+    "active_towns": 0,
+    "maturity_phase": "Stabilizing Foundation"
+  }
+}
+```
+
 
 ## Domain Maturity Phases
 
@@ -176,3 +243,13 @@ MIT
 ## Author
 
 Tyler Gilstrap — [@teddygcodes](https://github.com/teddygcodes)
+
+## Testing
+
+```bash
+# Mock-mode validation (fresh output)
+python3 -m atlantis --mock --force-clean
+
+# Full test suite
+pytest
+```
