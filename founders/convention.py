@@ -46,7 +46,7 @@ class FoundingPeriod:
     def run(self, num_cycles: int = 3) -> List[FounderProfile]:
         """
         Run Phase 0 research cycles.
-        Each Founder researches in their top 2 expertise domains each cycle.
+        Each Founder researches in their primary expertise domain each cycle.
         Returns FounderProfile list (used for Tier 2/3 panels).
         """
         print(f"\n[Phase 0] Founding Period — {len(self.founder_configs)} Founders × {num_cycles} cycles")
@@ -56,11 +56,10 @@ class FoundingPeriod:
         for cycle in range(1, num_cycles + 1):
             print(f"\n  Research Cycle {cycle}/{num_cycles}")
             for fc in self.founder_configs:
-                # Research in top 2 expertise domains
-                domains = fc.knowledge_domains[:2] if fc.knowledge_domains else ["general"]
-                for domain in domains:
-                    entry_count = self._research_and_deposit(fc, domain, cycle)
-                    total_entries += entry_count
+                # Research in primary expertise domain
+                domain = fc.knowledge_domains[0] if fc.knowledge_domains else "general"
+                entry_count = self._research_and_deposit(fc, domain, cycle)
+                total_entries += entry_count
 
         print(f"\n  Phase 0 complete. {total_entries} founding entries deposited.")
 
