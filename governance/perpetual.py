@@ -261,7 +261,9 @@ class PerpetualEngine:
         self.db.increment_pipeline_claims(sb.name, b_survived)
 
         # Step 16: Apply token outcomes
-        self._apply_token_outcomes(sa, a_norm, a_outcome, sb, b_norm, b_outcome)
+        claim_token_earnings = self._apply_token_outcomes(sa, a_norm, a_outcome, sb, b_norm, b_outcome)
+        self.db.update_tokens_earned(a_entry.display_id, claim_token_earnings[sa.name])
+        self.db.update_tokens_earned(b_entry.display_id, claim_token_earnings[sb.name])
 
         # Step 17: Update stability scores for surviving claims in domain
         self._update_stability_scores(pair.domain)
@@ -937,37 +939,44 @@ class PerpetualEngine:
         self,
         sa: State, a_norm: dict, a_outcome: dict,
         sb: State, b_norm: dict, b_outcome: dict,
-    ):
+    ) -> Dict[str, int]:
         """
         Apply token rewards/penalties for both States based on their outcomes.
         A's Critic challenged B's claim. B's Critic challenged A's claim.
         """
         # A's claim (challenged by B)
-        self._apply_single_token_outcome(sa, a_norm.get("claim_type", "discovery"), a_outcome)
+        a_claim_tokens = self._apply_single_token_outcome(sa, a_norm.get("claim_type", "discovery"), a_outcome)
         # B's challenge on A
         self._apply_challenge_tokens(sb, a_outcome)
 
         # B's claim (challenged by A)
-        self._apply_single_token_outcome(sb, b_norm.get("claim_type", "discovery"), b_outcome)
+        b_claim_tokens = self._apply_single_token_outcome(sb, b_norm.get("claim_type", "discovery"), b_outcome)
         # A's challenge on B
         self._apply_challenge_tokens(sa, b_outcome)
 
+        return {sa.name: a_claim_tokens, sb.name: b_claim_tokens}
+
     def _apply_single_token_outcome(
         self, state: State, claim_type: str, outcome: dict
-    ):
+    ) -> int:
         """Earn/deduct tokens for claim outcome (source State)."""
         out = outcome["outcome"]
         if out == "survived":
             key = "foundation_survived" if claim_type == "foundation" else "discovery_survived"
             amount = TOKEN_VALUES.get(key, 1000)
             state.earn_tokens(amount)
+            return amount
         elif out == "partial":
             key = "foundation_partial" if claim_type == "foundation" else "discovery_partial"
             amount = TOKEN_VALUES.get(key, 600)
             state.earn_tokens(amount)
+            return amount
         elif out == "retracted":
-            state.earn_tokens(TOKEN_VALUES.get("retracted", 500))
+            amount = TOKEN_VALUES.get("retracted", 500)
+            state.earn_tokens(amount)
+            return amount
         # destroyed → 0
+        return 0
 
     def _apply_challenge_tokens(self, challenger_state: State, rival_outcome: dict):
         """Earn/deduct tokens for the challenging State based on rival's outcome."""
