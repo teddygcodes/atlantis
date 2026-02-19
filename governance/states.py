@@ -436,6 +436,12 @@ def validate_claim(
     if not (has_position_header or has_conclusion_header or has_natural_conclusion):
         errors.append("Missing POSITION or CONCLUSION statement")
 
+    # Foundation claims must include at least one archive citation.
+    is_foundation_claim = bool(re.search(r"\bFOUNDATION\b", text_upper, re.IGNORECASE))
+    has_citation = bool(re.search(r"#\d{3}", claim_text))
+    if is_foundation_claim and not has_citation:
+        errors.append("Foundation claims require at least one citation (e.g., #001)")
+
     if errors:
         print("[validate_claim] claim rejected. reasons=", errors)
         print("[validate_claim] claim excerpt=", repr(claim_text[:800]))
