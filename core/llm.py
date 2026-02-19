@@ -284,6 +284,36 @@ class LLMProvider:
 
         # ─── Structured governance pipeline responses (must run before generic branches) ───
         if "produce a foundation, discovery, or challenge claim" in prompt_lower:
+            approach = ""
+            for line in user_prompt.splitlines():
+                if line.lower().startswith("approach:"):
+                    approach = line.split(":", 1)[1].strip()
+                    break
+
+            approach_lower = approach.lower()
+            if "empiricism" in approach_lower:
+                return (
+                    "CLAIM TYPE: Discovery\n"
+                    f"POSITION: {agent_name} argues governance theories should be accepted only after repeated observational validation.\n"
+                    "STEP 1: Compare governance predictions against measurable outcomes such as error correction speed and claim survival rates.\n"
+                    "STEP 2: Reject frameworks that fail replication across multiple cycles and independent rival states.\n"
+                    "STEP 3: Promote only methods whose improvements remain observable under adversarial stress tests.\n"
+                    "CONCLUSION: Governance knowledge is reliable when grounded in replicable evidence rather than untested assumptions.\n"
+                    "CITATIONS: []\n"
+                    "KEYWORDS: empiricism, observation, replication, measurement"
+                )
+            if "rationalism" in approach_lower:
+                return (
+                    "CLAIM TYPE: Discovery\n"
+                    f"POSITION: {agent_name} argues governance frameworks should be derived from coherent first principles before empirical deployment.\n"
+                    "STEP 1: Start from explicit axioms about consistency, accountability, and non-contradiction in institutional rules.\n"
+                    "STEP 2: Deduce policy constraints logically and reject proposals that violate core axioms even if short-term metrics look favorable.\n"
+                    "STEP 3: Use observations as secondary checks while preserving the primacy of internally consistent reasoning.\n"
+                    "CONCLUSION: Durable governance emerges from logically coherent design validated by reason-guided implementation.\n"
+                    "CITATIONS: []\n"
+                    "KEYWORDS: rationalism, axioms, coherence, deduction"
+                )
+
             return (
                 "CLAIM TYPE: Discovery\n"
                 f"POSITION: {agent_name} argues adaptive governance needs explicit feedback loops to stay truthful under adversarial pressure.\n"
