@@ -1244,9 +1244,25 @@ class PerpetualEngine:
             entity = e.get("source_entity", "?")
             cltype = e.get("claim_type", "?")
             outcome = e.get("outcome", "")
+            outcome_reasoning = e.get("outcome_reasoning", "")
+            citations = e.get("citations") or []
+
+            scores = {
+                "Novelty": e.get("novelty_score"),
+                "Impact": e.get("impact_score"),
+                "Depth": e.get("depth_score"),
+                "Drama": e.get("drama_score"),
+                "Stability": e.get("stability_score"),
+                "Tokens": e.get("tokens_earned"),
+            }
+            score_line = " | ".join(
+                f"{label}: {value}" for label, value in scores.items() if value is not None
+            )
+
             md_lines.append(
                 f"## {did} [{status.upper()}]\n"
-                f"**Source**: {source} / {entity}  |  **Type**: {cltype}  |  **Cycle**: {e.get('cycle_created', '?')}\n\n"
+                f"**Source State**: {source}  |  **Entity**: {entity}\n"
+                f"**Claim Type**: {cltype}  |  **Cycle**: {e.get('cycle_created', '?')}\n\n"
                 f"### Claim\n{e.get('raw_claim_text', '')}\n\n"
             )
             if e.get("raw_challenge_text"):
@@ -1254,7 +1270,22 @@ class PerpetualEngine:
             if e.get("raw_rebuttal_text"):
                 md_lines.append(f"### Rebuttal\n{e.get('raw_rebuttal_text', '')}\n\n")
             if outcome:
-                md_lines.append(f"_Outcome: {outcome}_\n\n")
+                md_lines.append(f"### Outcome\n- Status: {outcome}\n")
+                if outcome_reasoning:
+                    md_lines.append(f"- Judge reasoning: {outcome_reasoning}\n")
+                md_lines.append("\n")
+
+            md_lines.append("### Scores\n")
+            md_lines.append(f"{score_line if score_line else 'No scores recorded.'}\n\n")
+
+            md_lines.append("### Citations\n")
+            if citations:
+                for citation in citations:
+                    md_lines.append(f"- {citation}\n")
+                md_lines.append("\n")
+            else:
+                md_lines.append("- None\n\n")
+
             md_lines.append("---\n\n")
 
         (self.output_dir / "archive.md").write_text("".join(md_lines), encoding="utf-8")
