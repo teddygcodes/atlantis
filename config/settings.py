@@ -86,6 +86,7 @@ MODEL_ALLOCATION = {
     "court_judges": "sonnet",
     "founder_panels": "sonnet",
     "federal_lab": "sonnet",
+    "executive_election": "sonnet",
     # Sonnet/Opus: judge is the quality gate — use strongest available
     "judge": "sonnet",
 }
@@ -140,6 +141,19 @@ PROBATION_RESET_OUTCOMES = ["survived", "partial"]
 OPTION_C_UNDER_FIRE_COUNTS_PROBATION = True
 
 APPEAL_COST_TOKENS = 2000           # Deducted from State budget
+
+
+
+# ═══════════════════════════════════════
+# EXECUTIVE ELECTIONS
+# ═══════════════════════════════════════
+EXECUTIVE_ELECTION_INTERVAL = 10
+EXECUTIVE_TERM_CYCLES = 10
+EXECUTIVE_PLATFORM_ADJUSTABLE_KEYS = [
+    "cycle_cost",
+    "token_values",
+    "tier_thresholds",
+]
 
 # ═══════════════════════════════════════
 # SCORING RUBRIC (included in judge prompt)
