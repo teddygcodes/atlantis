@@ -75,11 +75,11 @@ class FoundingPeriod:
         Deposits as founding Archive entry. Returns 1.
         """
         system_prompt = (
-            f"You are {fc.name}. {fc.mandate}\n\n"
-            f"Your personality: {fc.personality}\n\n"
-            f"This is Phase 0 — free research before adversarial governance begins. "
-            f"Write clearly and substantively. Your findings become the Archive's foundation."
-        )
+            f"Founder: {fc.name}\n"
+            f"Domain: {domain}\n"
+            f"Mandate: {fc.mandate}\n"
+            "Produce your most important findings."
+        )[:500]
 
         user_prompt = (
             f"Research cycle {cycle}. Domain: {domain}.\n\n"

@@ -56,6 +56,7 @@ class AtlantisEngine:
     ):
         self._check_v1_data(force_clean)
         self.constitution_text = self._load_constitution()
+        self.phase1_constitution_extract = self._build_phase1_constitution_extract()
         self.config = config or MOCK_CONFIG
         self.mock = mock
         self.dry_run = dry_run
@@ -231,7 +232,7 @@ class AtlantisEngine:
         """
         response = self.models.complete(
             task_type="founder_panels",
-            system_prompt=fc.get_system_prompt(),
+            system_prompt=self._phase1_system_prompt(fc),
             user_prompt=(
                 f"You are participating in the Founding Senate of Atlantis.\n"
                 f"Propose a knowledge domain and TWO competing intellectual approaches "
@@ -282,7 +283,7 @@ class AtlantisEngine:
         """
         response = self.models.complete(
             task_type="founder_vote",
-            system_prompt=fc.get_system_prompt(),
+            system_prompt=self._phase1_system_prompt(fc),
             user_prompt=(
                 f"Senate vote: Should we form a rival pair in the domain '{domain}'?\n\n"
                 f"Approach A: {approach_a}\n"
@@ -301,6 +302,38 @@ class AtlantisEngine:
         if "APPROVE" in content or "SUPPORT" in content:
             return True
         return content.startswith("YES")
+
+
+    def _phase1_system_prompt(self, fc: AgentConfig) -> str:
+        """Compact Phase 1 system prompt with only pair-formation constitutional rules."""
+        return (
+            f"You are {fc.name}, serving in the Founding Senate of Atlantis.\n"
+            f"Mandate: {fc.mandate}\n\n"
+            "Constitution extract (pair formation only):\n"
+            f"{self.phase1_constitution_extract}"
+        )
+
+    @staticmethod
+    def _build_phase1_constitution_extract() -> str:
+        """Build a short constitutional extract for Phase 1 pair proposal/voting."""
+        extract = (
+            "Article III, State Formation (Extract)\n"
+            "1) Rival pair structure: Each knowledge domain is governed by exactly two rival States, "
+            "created together as a pair and pursuing competing approaches. The Senate votes on the pair, "
+            "not individual States.\n"
+            "2) Supermajority requirement: Pair approval requires at least 60% YES votes from voting Senate members. "
+            "If below 60%, the pair is rejected.\n"
+            "3) Valid domain requirement: A valid domain is a coherent field of knowledge where sustained "
+            "adversarial inquiry is possible and meaningful unresolved questions exist.\n"
+            "4) Valid opposing approaches requirement: The two approaches must be distinct, genuinely conflicting "
+            "methodologies or epistemic strategies applied to the same domain; they cannot be synonyms, cosmetic "
+            "relabels, or different scopes of the same method.\n"
+        )
+        if len(extract) <= 3000:
+            return extract
+
+        # Defensive fallback: if edited longer in future, clamp to hard limit.
+        return extract[:3000]
 
     @staticmethod
     def _parse_field(text: str, field: str) -> str:
