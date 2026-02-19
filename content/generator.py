@@ -1,334 +1,334 @@
 """
-Atlantis Content Generator
-============================
-Transforms governance events into publishable content IMMEDIATELY.
-Every debate, vote, and constitutional moment becomes a TikTok script
-and/or a blog post as it happens — not after the fact.
+Atlantis V2 — Content Generator
+==================================
+Four formats, score-based thresholds.
 
-This is the Press Room of Atlantis.
+Selection logic:
+  drama >= 8 AND depth >= 7        → ALL FOUR formats
+  drama >= 7 OR novelty >= 8       → newsroom + debate
+  drama >= 5 AND tier/destroyed    → blog
+  event in new_state/city/town...  → explorer
+  dissolution                      → ALL FOUR, drama forced to 10
+
+Format personas:
+  Blog     — Science journalist, 500-1000 words, rolling context (max 20 entries × 200w)
+  Newsroom — Breaking news anchor, 150-200 words, hook-first
+  Debate   — Sports commentator TikTok script, 60-90 seconds
+  Explorer — First-person travel blog, 200-300 words, visits ruins on dissolution
 """
 
 import json
 import os
 from datetime import datetime, timezone
-from typing import Optional
+from pathlib import Path
+from typing import List, Optional
 
-from core.llm import LLMProvider, get_llm
-from config.settings import CONTENT_CONFIG
+from core.models import ModelRouter
+
+
+def _now_stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
 
 class ContentGenerator:
     """
-    Generates publishable TikTok scripts and blog posts from log entries.
-    Called automatically by the logger when events meet drama/significance thresholds.
+    Evaluates each exchange against score thresholds and generates content.
+    Called by PerpetualEngine after every significant event.
     """
 
-    def __init__(self, output_dir: str = "content_output", llm: LLMProvider = None):
-        self.output_dir = output_dir
-        self.llm = llm or get_llm()
-        self.tiktok_scripts = []
-        self.blog_posts = []
+    def __init__(self, output_dir: str, models: ModelRouter):
+        self.output_dir = Path(output_dir)
+        self.models = models
+        self.blog_context_path = self.output_dir / "blog_context.json"
+        self.blog_context: List[dict] = self._load_blog_context()
 
-        os.makedirs(os.path.join(output_dir, "tiktok"), exist_ok=True)
-        os.makedirs(os.path.join(output_dir, "blog"), exist_ok=True)
+        # Ensure output dirs exist
+        for sub in ("blog", "newsroom", "debate", "explorer"):
+            (self.output_dir / sub).mkdir(parents=True, exist_ok=True)
 
-    def generate_tiktok_script(self, entry_data: dict) -> dict:
+    # ─── PUBLIC ENTRY POINT ───────────────────────────────────────
+
+    def evaluate_and_generate(self, exchange_data: dict) -> List[str]:
         """
-        Generate a TikTok script from a dramatic governance event.
-        60-90 seconds, hook-heavy, designed for engagement.
+        Determine which formats to generate and produce them.
+        Returns list of output file paths.
         """
-        title = entry_data.get("title", "")
-        summary = entry_data.get("summary", "")
-        category = entry_data.get("category", "")
-        messages = entry_data.get("messages", [])
-        votes = entry_data.get("votes", {})
+        drama = exchange_data.get("drama_score", 0)
+        novelty = exchange_data.get("novelty_score", 0)
+        depth = exchange_data.get("depth_score", 0)
+        event_type = exchange_data.get("event_type", "routine")
 
-        # Build the best quotes
-        quotes = []
-        for msg in messages[:6]:
-            name = msg.get("agent_name", "Unknown")
-            content = msg.get("content", "")
-            role = msg.get("metadata", {}).get("debate_role", "")
-            if content and len(content) > 30:
-                first_sentence = content.split(". ")[0] + "."
-                if len(first_sentence) < 200:
-                    quotes.append({"name": name, "role": role, "quote": first_sentence})
+        formats_to_gen: List[str] = []
 
-        # Generate hook based on category
-        hook = self._get_hook(category, title, votes)
+        if event_type == "dissolution":
+            exchange_data["drama_score"] = 10  # forced
+            formats_to_gen = ["blog", "newsroom", "debate", "explorer"]
+        elif event_type == "ruins":
+            formats_to_gen = ["explorer"]
+        elif drama >= 8 and depth >= 7:
+            formats_to_gen = ["blog", "newsroom", "debate", "explorer"]
+        elif drama >= 7 or novelty >= 8:
+            formats_to_gen = ["newsroom", "debate"]
+        elif drama >= 5 and event_type in ("tier_advancement", "destroyed"):
+            formats_to_gen = ["blog"]
+        elif event_type in ("new_state", "new_city", "new_town", "milestone", "ruins"):
+            formats_to_gen = ["explorer"]
+        # else: routine, skip
 
-        # Build vote drama if applicable
-        vote_drama = ""
-        if votes:
-            approve = sum(1 for v in votes.values() if v == "approve")
-            reject = sum(1 for v in votes.values() if v == "reject")
-            total = len(votes)
-            vote_drama = f"The vote: {approve} for, {reject} against, out of {total}."
-            if abs(approve - reject) <= 2:
-                vote_drama += " It was razor-close."
+        outputs = []
+        for fmt in formats_to_gen:
+            path = self._generate(fmt, exchange_data)
+            if path:
+                outputs.append(path)
+        return outputs
 
-        script = {
-            "type": "tiktok_script",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "source_event": title,
-            "duration_target": "60-90 seconds",
-            "hook": hook,
-            "body": {
-                "setup": summary[:200],
-                "key_quotes": quotes[:3],
-                "vote_drama": vote_drama,
-                "stakes": self._get_stakes(category),
-            },
-            "closing": self._get_closing(category),
-            "tags": self._get_tags(category, title),
-            "caption_suggestion": f"🏛️ {hook[:80]} #ProjectAtlantis #AIGovernance #ConstitutionalDebate",
+    # ─── FORMAT DISPATCH ──────────────────────────────────────────
+
+    def _generate(self, fmt: str, data: dict) -> Optional[str]:
+        generators = {
+            "blog": self._generate_blog,
+            "newsroom": self._generate_newsroom,
+            "debate": self._generate_debate,
+            "explorer": self._generate_explorer,
         }
+        fn = generators.get(fmt)
+        if not fn:
+            return None
+        try:
+            return fn(data)
+        except Exception as e:
+            print(f"  [ContentGenerator] Error generating {fmt}: {e}")
+            return None
 
-        # Save to disk
-        filename = f"tiktok_{len(self.tiktok_scripts):04d}_{self._slugify(title)}.json"
-        filepath = os.path.join(self.output_dir, "tiktok", filename)
-        with open(filepath, "w") as f:
-            json.dump(script, f, indent=2)
+    # ─── BLOG ─────────────────────────────────────────────────────
 
-        self.tiktok_scripts.append(script)
-        return script
-
-    def generate_blog_post(self, entry_data: dict) -> dict:
+    def _generate_blog(self, data: dict) -> str:
         """
-        Generate a blog post from a significant governance event.
-        400-1500 words depending on significance.
+        500-1000 words. Science journalist voice.
+        Rolling context (max 20 prior entries × 200 words each).
         """
-        title = entry_data.get("title", "")
-        summary = entry_data.get("summary", "")
-        level = entry_data.get("level", "significant")
-        category = entry_data.get("category", "")
-        messages = entry_data.get("messages", [])
-        votes = entry_data.get("votes", {})
-        metadata = entry_data.get("metadata", {})
+        ctx_summary = "\n\n".join(
+            f"[{e.get('timestamp', '?')}] {e.get('summary', '')}"
+            for e in self.blog_context[-20:]
+        ) or "(no prior blog context)"
 
-        max_words = (CONTENT_CONFIG["blog_max_words"]
-                     if level in ["dramatic", "historic"]
-                     else CONTENT_CONFIG["blog_short_max_words"])
+        exchange = data.get("exchange", {})
+        drama = data.get("drama_score", 0)
+        event_type = data.get("event_type", "claim_exchange")
 
-        # Build debate narrative
-        debate_sections = []
-        for msg in messages:
-            name = msg.get("agent_name", "Unknown")
-            role = msg.get("metadata", {}).get("debate_role", "participant")
-            content = msg.get("content", "")[:300]
-            debate_sections.append({
-                "speaker": name,
-                "role": role,
-                "argument": content,
-            })
+        response = self.models.complete(
+            task_type="content_generation",
+            system_prompt=(
+                "You are a science journalist covering the Atlantis adversarial knowledge engine. "
+                "Write in plain, vivid prose. No jargon. Make abstract ideas concrete. "
+                "Your readers follow this series — reference prior events when relevant."
+            ),
+            user_prompt=(
+                f"PRIOR COVERAGE CONTEXT:\n{ctx_summary}\n\n"
+                f"TODAY'S EVENT (drama score: {drama}/10):\n"
+                f"Event type: {event_type}\n"
+                f"Domain: {exchange.get('domain', exchange.get('state_name', '?'))}\n"
+                f"State: {exchange.get('source_state', exchange.get('state_name', '?'))}\n"
+                f"Claim: {exchange.get('claim', '')[:600]}\n"
+                f"Challenge: {exchange.get('challenge', '')[:400]}\n"
+                f"Outcome: {exchange.get('outcome', data.get('outcome', {}).get('outcome', '?'))}\n\n"
+                f"Write a 500-1000 word blog post covering this event. "
+                f"Lead with what's at stake. End with what it means for the Archive."
+            ),
+            max_tokens=1200,
+        )
 
-        # Build vote analysis
-        vote_analysis = {}
-        if votes:
-            approve = sum(1 for v in votes.values() if v == "approve")
-            reject = sum(1 for v in votes.values() if v == "reject")
-            vote_analysis = {
-                "approve": approve,
-                "reject": reject,
-                "total": len(votes),
-                "margin": approve - reject,
-                "passed": approve >= 14,  # 14/20 threshold
-            }
+        content = response.content or "(no content generated)"
 
-        post = {
-            "type": "blog_post",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "source_event": title,
-            "max_words": max_words,
-            "headline": f"Atlantis Constitutional Convention: {title}",
-            "subheadline": summary[:150],
-            "sections": {
-                "opening": self._blog_opening(category, title, summary),
-                "the_proposal": metadata.get("article_text", summary)[:500],
-                "the_debate": debate_sections,
-                "the_vote": vote_analysis,
-                "analysis": self._blog_analysis(category, vote_analysis),
-                "whats_next": self._blog_whats_next(category, vote_analysis),
-            },
-            "tags": self._get_tags(category, title),
-            "seo_description": f"In the Atlantis Constitutional Convention, 20 AI Founders debated '{title}'. Here's what happened.",
-        }
+        # Save
+        stamp = _now_stamp()
+        filename = f"blog_{stamp}.md"
+        path = self.output_dir / "blog" / filename
+        path.write_text(
+            f"# Atlantis Blog — {event_type.replace('_', ' ').title()}\n\n{content}\n",
+            encoding="utf-8",
+        )
 
-        # Save to disk
-        filename = f"blog_{len(self.blog_posts):04d}_{self._slugify(title)}.json"
-        filepath = os.path.join(self.output_dir, "blog", filename)
-        with open(filepath, "w") as f:
-            json.dump(post, f, indent=2)
+        # Update rolling context (max 20 entries)
+        self.blog_context.append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "summary": content[:200],
+            "event_type": event_type,
+        })
+        self.blog_context = self.blog_context[-20:]
+        self._save_blog_context()
 
-        self.blog_posts.append(post)
-        return post
+        return str(path)
 
-    # ─── HOOKS & CLOSINGS ──────────────────────────────────────
+    # ─── NEWSROOM ─────────────────────────────────────────────────
 
-    def _get_hook(self, category, title, votes):
-        hooks = {
-            "constitutional_vote": "20 AI agents just voted on a constitutional article. Not all of them agreed.",
-            "constitution_ratified": "An AI civilization just wrote its own constitution. From scratch.",
-            "founder_debate": "The Founders can't agree. This 2v2 debate is getting heated.",
-            "warden_veto": "WARDEN just shut it down. Here's why that matters.",
-            "supreme_court_ruling": "The Supreme Court just made a ruling that changes everything.",
-            "state_formed": "A new State was just born inside an AI civilization.",
-        }
-        default = f"Something just happened in Atlantis: {title[:50]}"
+    def _generate_newsroom(self, data: dict) -> str:
+        """
+        150-200 words. Breaking news anchor. Hook-driven, urgent.
+        """
+        exchange = data.get("exchange", {})
+        drama = data.get("drama_score", 0)
+        event_type = data.get("event_type", "claim_exchange")
 
-        hook = hooks.get(category, default)
+        response = self.models.complete(
+            task_type="content_generation",
+            system_prompt=(
+                "You are a breaking news anchor for Atlantis Intelligence Daily. "
+                "Lead with the most dramatic fact. Every sentence earns its place. "
+                "Write 150-200 words. Urgent tone."
+            ),
+            user_prompt=(
+                f"BREAKING: {event_type.replace('_', ' ').upper()}\n\n"
+                f"Drama score: {drama}/10\n"
+                f"Domain: {exchange.get('domain', '?')}\n"
+                f"Claim (excerpt): {exchange.get('claim', '')[:300]}\n"
+                f"Outcome: {exchange.get('outcome', '?')}\n\n"
+                f"Write the breaking news report. Start with 'BREAKING:' or a strong hook."
+            ),
+            max_tokens=400,
+        )
 
-        # Add vote drama to hook if close
-        if votes:
-            approve = sum(1 for v in votes.values() if v == "approve")
-            reject = sum(1 for v in votes.values() if v == "reject")
-            if abs(approve - reject) <= 2:
-                hook = f"This vote was decided by {abs(approve - reject)} vote{'s' if abs(approve-reject) != 1 else ''}. {hook}"
+        content = response.content or "(no content generated)"
 
-        return hook
+        stamp = _now_stamp()
+        filename = f"newsroom_{stamp}.md"
+        path = self.output_dir / "newsroom" / filename
+        path.write_text(
+            f"# Atlantis Newsroom — {stamp}\n\n{content}\n",
+            encoding="utf-8",
+        )
+        return str(path)
 
-    def _get_stakes(self, category):
-        stakes = {
-            "constitutional_vote": "This article, if passed, becomes permanent law in an AI civilization.",
-            "constitution_ratified": "This constitution will govern an autonomous AI society. The Founders will never return.",
-            "founder_debate": "The outcome of this debate shapes the Constitution forever.",
-        }
-        return stakes.get(category, "The stakes are higher than you think.")
+    # ─── DEBATE (TikTok) ──────────────────────────────────────────
 
-    def _get_closing(self, category):
-        closings = {
-            "constitutional_vote": "Follow for more from Project Atlantis — where AI governs itself.",
-            "constitution_ratified": "The Founders are gone. The civilization begins. Follow the journey.",
-            "founder_debate": "Which side would you be on? Comment below.",
-        }
-        return closings.get(category, "This is Project Atlantis. Follow for more.")
+    def _generate_debate(self, data: dict) -> str:
+        """
+        60-90 second TikTok script. Sports commentary style.
+        Play-by-play of the exchange.
+        """
+        exchange = data.get("exchange", {})
+        drama = data.get("drama_score", 0)
+        event_type = data.get("event_type", "claim_exchange")
 
-    def _get_tags(self, category, title):
-        tags = ["ProjectAtlantis", "AIGovernance", "AICivilization"]
-        if "constitution" in category.lower():
-            tags.extend(["Constitution", "ConstitutionalConvention"])
-        if "debate" in category.lower():
-            tags.extend(["Debate", "AIDebate"])
-        if "vote" in category.lower():
-            tags.extend(["Vote", "Democracy"])
-        if "court" in category.lower():
-            tags.extend(["SupremeCourt", "JudicialReview"])
-        return tags
+        response = self.models.complete(
+            task_type="content_generation",
+            system_prompt=(
+                "You are a hyped-up sports commentator covering AI knowledge battles. "
+                "Write a TikTok script — 60 to 90 seconds when read aloud (~200-300 words). "
+                "Play-by-play format. Use dramatic pauses [...]. Name the 'players'. "
+                "End with the score and what it means for the championship."
+            ),
+            user_prompt=(
+                f"MATCH ALERT: {event_type.replace('_', ' ').upper()}\n"
+                f"Drama score: {drama}/10\n\n"
+                f"Domain arena: {exchange.get('domain', '?')}\n"
+                f"Attacker: {exchange.get('source_state', '?')} Critic\n"
+                f"Defender: {exchange.get('source_state', '?')} Researcher\n\n"
+                f"The claim: {exchange.get('claim', '')[:300]}\n"
+                f"The challenge: {exchange.get('challenge', '')[:200]}\n"
+                f"Outcome: {exchange.get('outcome', '?')}\n\n"
+                f"Write the 60-90 second TikTok commentary script."
+            ),
+            max_tokens=500,
+        )
 
-    # ─── BLOG HELPERS ──────────────────────────────────────────
+        content = response.content or "(no content generated)"
 
-    def _blog_opening(self, category, title, summary):
-        if "ratified" in category:
-            return (f"In a historic moment for Project Atlantis, the Constitutional Convention "
-                    f"has produced a new article: {title}. {summary[:200]}")
-        if "debate" in category:
-            return (f"The Founders clashed today over '{title}.' In a 2v2 adversarial debate, "
-                    f"supporters and opponents made their cases before all 20 Founders voted.")
-        return f"Today in Atlantis: {summary[:200]}"
+        stamp = _now_stamp()
+        filename = f"debate_{stamp}.md"
+        path = self.output_dir / "debate" / filename
+        path.write_text(
+            f"# Atlantis Debate — {stamp}\n\n{content}\n",
+            encoding="utf-8",
+        )
+        return str(path)
 
-    def _blog_analysis(self, category, vote_analysis):
-        if not vote_analysis:
-            return "The full implications of this event will unfold in subsequent cycles."
-        if vote_analysis.get("passed"):
-            margin = vote_analysis["margin"]
-            if margin <= 4:
-                return f"This passed by a narrow margin of {margin} votes — signaling deep division among the Founders."
-            return f"Strong consensus: {vote_analysis['approve']}/{vote_analysis['total']} Founders supported this article."
-        return f"Rejected with only {vote_analysis.get('approve', 0)} votes — well below the 14/20 threshold."
+    # ─── EXPLORER ─────────────────────────────────────────────────
 
-    def _blog_whats_next(self, category, vote_analysis):
-        if vote_analysis and not vote_analysis.get("passed"):
-            return "The proposer may submit a revised version in the next Convention round."
-        return "This article is now part of the Federal Constitution and will shape governance going forward."
+    def _generate_explorer(self, data: dict) -> str:
+        """
+        200-300 words. First-person travel blog.
+        Visits new cities/towns when formed, ruins when a State dissolves.
+        """
+        exchange = data.get("exchange", {})
+        event_type = data.get("event_type", "new_city")
 
-    def _slugify(self, text):
-        return "".join(c if c.isalnum() else "_" for c in text.lower())[:50]
+        if event_type in ("dissolution", "ruins"):
+            location_desc = (
+                f"the ruins of {exchange.get('state_name', 'an unknown State')} "
+                f"in the domain of '{exchange.get('domain', '?')}'"
+            )
+            mood = "melancholic, archaeological"
+            action = (
+                f"This State once had {exchange.get('surviving_claims', '?')} surviving claims. "
+                f"Now only ruins remain."
+            )
+        elif event_type == "new_city":
+            location_desc = (
+                f"the newly formed city of {exchange.get('city_id', '?')} "
+                f"in {exchange.get('state_name', '?')}"
+            )
+            mood = "excited, exploratory"
+            action = (
+                f"A cluster of {exchange.get('cluster_count', '?')} surviving claims "
+                f"crystallized into this city."
+            )
+        elif event_type == "new_town":
+            location_desc = (
+                f"the new settlement of {exchange.get('town_id', '?')} "
+                f"in {exchange.get('state_name', '?')}"
+            )
+            mood = "optimistic, pioneering"
+            action = "Multiple City analyses converged into this town."
+        else:
+            location_desc = (
+                f"the domain of '{exchange.get('domain', exchange.get('state_name', '?'))}'"
+            )
+            mood = "curious"
+            action = f"Event: {event_type.replace('_', ' ')}"
 
-    def get_stats(self):
-        return {
-            "tiktok_scripts_generated": len(self.tiktok_scripts),
-            "blog_posts_generated": len(self.blog_posts),
-        }
+        response = self.models.complete(
+            task_type="content_generation",
+            system_prompt=(
+                "You are a travel blogger visiting the living landscape of the Atlantis knowledge engine. "
+                "Each State, City, and Town is a real place you visit. Write in first person. "
+                f"Mood: {mood}. Vivid descriptions. 200-300 words."
+            ),
+            user_prompt=(
+                f"I've just arrived at {location_desc}.\n\n"
+                f"{action}\n\n"
+                f"Write a 200-300 word first-person travel blog entry about this visit. "
+                f"Describe what you see, what the 'architecture' of knowledge looks like, "
+                f"and what it feels like to be here."
+            ),
+            max_tokens=500,
+        )
 
+        content = response.content or "(no content generated)"
 
-# ═══════════════════════════════════════════════════════════════════════
-# STATE RESEARCH NEWSROOM
-# ═══════════════════════════════════════════════════════════════════════
+        stamp = _now_stamp()
+        filename = f"explorer_{stamp}.md"
+        path = self.output_dir / "explorer" / filename
+        path.write_text(
+            f"# Atlantis Explorer — {event_type.replace('_', ' ').title()} ({stamp})\n\n"
+            f"{content}\n",
+            encoding="utf-8",
+        )
+        return str(path)
 
-def generate_research_script(state, cycle, research_output, llm):
-    """
-    Generate TikTok script covering State research breakthrough.
+    # ─── BLOG CONTEXT PERSISTENCE ─────────────────────────────────
 
-    This is a NEWSROOM, not a governance reporter. We cover what States are
-    LEARNING, not what they're VOTING on.
+    def _load_blog_context(self) -> List[dict]:
+        if self.blog_context_path.exists():
+            try:
+                return json.loads(self.blog_context_path.read_text(encoding="utf-8"))
+            except Exception:
+                return []
+        return []
 
-    Args:
-        state: State object (has name, domain, tier, knowledge_entries)
-        cycle: Current cycle number
-        research_output: Dict with concepts, frameworks, applications, synthesis, critique, defense
-        llm: LLM manager for API call
-
-    Returns:
-        Script text (150-200 words) or None if generation fails
-    """
-
-    # Extract actual research content
-    concepts = research_output.get("concepts", [])
-    frameworks = research_output.get("frameworks", [])
-    synthesis = research_output.get("synthesis", "")
-    critique = research_output.get("critique", "")
-    defense = research_output.get("defense", "")
-
-    # Skip if no real content
-    if not concepts and not frameworks:
-        return None
-
-    # Construct prompt
-    prompt = f"""You are a science journalist covering breakthroughs from an AI research civilization.
-
-RESEARCH OUTPUT:
-State: {state.name} | Domain: {state.domain} | Tier: {state.tier} | Cycle: {cycle}
-
-Researcher's Findings:
-- Concepts: {', '.join(concepts[:5])}
-- Frameworks: {', '.join(frameworks[:3])}
-- Synthesis: {synthesis[:300]}
-
-Critic's Challenge:
-{critique[:200]}
-
-Researcher's Defense:
-{defense[:200]}
-
-Write a 60-second TikTok script (150-200 words) covering this research cycle as a news story.
-
-STRUCTURE:
-1. Headline: Hook that captures the discovery (1 sentence)
-2. Context: What were they researching? What tier? How many cycles? (2 sentences)
-3. Discovery: What specific concept/framework did they find? Use ACTUAL findings above. (2-3 sentences)
-4. Challenge: What did the Critic say? How did Researcher defend? (2 sentences)
-5. Why It Matters: What does this change? What door does it open? (1-2 sentences)
-6. Tease: What's next cycle? (1 sentence)
-
-TONE: Authoritative but accessible. Smart friend explaining a breakthrough over coffee. Not academic. Not clickbait. Real substance with energy. Think BBC documentary meets New Scientist.
-
-BAD EXAMPLE: "AI agents in Atlantis completed a research cycle about economics!"
-GOOD EXAMPLE: "The State of Resource Economics just connected Adam Smith's invisible hand to game theory's Nash equilibrium — and found a gap nobody's published about. Their Critic said prove it. They did."
-
-Write the script using the ACTUAL research findings above. The real concepts and frameworks ARE the story."""
-
-    response = llm.complete(
-        system_prompt="You are a science journalist covering AI research breakthroughs.",
-        user_prompt=prompt,
-        max_tokens=300,
-        temperature=0.7
-    )
-
-    script = (response.content or "").strip()
-
-    # Validate script length
-    word_count = len(script.split())
-    if word_count < 100 or word_count > 250:
-        print(f"  ⚠ Script for {state.name} cycle {cycle} is {word_count} words (target 150-200)")
-
-    return script
+    def _save_blog_context(self):
+        """Persist rolling blog context (max 20 entries)."""
+        self.blog_context_path.write_text(
+            json.dumps(self.blog_context, indent=2),
+            encoding="utf-8",
+        )

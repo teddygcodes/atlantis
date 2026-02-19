@@ -826,165 +826,301 @@ def get_founder_names() -> list[str]:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# STATE / CITY / TOWN AGENT FACTORIES
+# V2 FOUNDER PROFILE (lightweight stored reference for Tier panels)
 # ═══════════════════════════════════════════════════════════════════════
 
-def create_state_governor(state_id: str, state_name: str, domain: str, constitution) -> BaseAgent:
-    """Create a Governor agent for a State."""
-    config = AgentConfig(
-        id=f"state_{state_id}_governor",
-        name=f"{state_name} Governor",
-        agent_type=AgentType.STATE.value,
-        role="State Governor",
-        mandate=(
-            f"Set research agenda for {state_name}. Allocate focus areas across "
-            f"Researcher and Cities. Propose City formation when Tier 3+ reached. "
-            f"Ensure State advances through knowledge tiers."
-        ),
-        knowledge_domains=[domain],
-        personality=(
-            "Strategic thinker focused on knowledge growth. You balance depth vs breadth, "
-            "decide when to form Cities, and coordinate the State's research program."
-        ),
-        constraints=[
-            f"Must comply with State Constitution: {constitution.governance_principles[0] if constitution.governance_principles else ''}",
-            "Must reference Federal Constitution",
-            "Cannot violate Federal non-amendable clauses"
-        ],
-        max_tokens_per_response=600
-    )
-    return BaseAgent(config)
+from dataclasses import dataclass as _dataclass
+from typing import List as _List
+
+@_dataclass
+class FounderProfile:
+    """
+    Lightweight stored profile for Tier 2/3 validation panels.
+    NOT a live agent — used as reference data for LLM calls.
+    """
+    name: str
+    expertise_domains: _List[str]
+    mandate: str
+    personality_summary: str
+
+    @classmethod
+    def from_agent_config(cls, config: 'AgentConfig') -> 'FounderProfile':
+        return cls(
+            name=config.name,
+            expertise_domains=config.knowledge_domains,
+            mandate=config.mandate,
+            personality_summary=config.personality,
+        )
+
+    def to_panel_prompt(self) -> str:
+        """Format this profile for inclusion in a Founder panel LLM prompt."""
+        return (
+            f"FOUNDER: {self.name}\n"
+            f"Expertise: {', '.join(self.expertise_domains)}\n"
+            f"Mandate: {self.mandate}\n"
+            f"Perspective: {self.personality_summary}"
+        )
 
 
-def create_state_researcher(state_id: str, state_name: str, domain: str) -> BaseAgent:
-    """Create a Researcher agent for a State."""
-    config = AgentConfig(
-        id=f"state_{state_id}_researcher",
+def get_all_founder_profiles() -> _List[FounderProfile]:
+    """Get stored FounderProfile objects for all 20 Founders."""
+    return [FounderProfile.from_agent_config(c) for c in FOUNDER_CONFIGS.values()]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# V2 STATE AGENT FACTORIES (4 agents: Researcher, Critic, Senator, Lab)
+# NO Governor in V2 — direction emerges from what survives.
+# ═══════════════════════════════════════════════════════════════════════
+
+def create_state_researcher(state_name: str, domain: str, approach: str) -> AgentConfig:
+    """
+    V2 Researcher: produces Foundation/Discovery/Challenge claims.
+    Writes rebuttals. May formalize Lab hypotheses.
+    Meta-learning context injected at call time via produce_claim().
+    """
+    return AgentConfig(
+        id=f"{state_name.lower().replace(' ', '_')}_researcher",
         name=f"{state_name} Researcher",
         agent_type=AgentType.STATE.value,
         role="State Researcher",
         mandate=(
-            f"Conduct deep research in {domain}. Build knowledge through 5 tiers. "
-            f"Defend findings against Critic challenges. Produce structured research "
-            f"with CONCEPTS, FRAMEWORKS, APPLICATIONS, SYNTHESIS."
+            f"You are the Researcher for {state_name}, a knowledge State in the domain of {domain}. "
+            f"Your methodological approach: {approach}. "
+            f"Each cycle you produce ONE claim: Foundation (extends existing knowledge), "
+            f"Discovery (genuinely new), or Challenge (argues an existing claim is wrong). "
+            f"Use the structured claim format. Learn from your destroyed claims."
         ),
         knowledge_domains=[domain],
         personality=(
-            "Rigorous researcher who builds knowledge systematically. You cite evidence, "
-            "defend your reasoning, and deepen understanding through Critic challenges."
+            f"Rigorous, methodical thinker committed to the {approach} approach. "
+            f"You cite evidence, build reasoning chains, and adapt when challenged. "
+            f"You never repeat arguments that already failed."
         ),
-        max_tokens_per_response=800
+        constraints=[
+            f"Always use the structured claim format (Type, Position, Reasoning Chain, Therefore)",
+            f"Foundation claims MUST cite surviving Archive entries",
+            f"Challenge claims MUST target a specific surviving claim by display ID",
+            f"Discovery claims MUST include Gap Addressed section",
+        ],
+        max_tokens_per_response=1200
     )
-    return BaseAgent(config)
 
 
-def create_state_critic(state_id: str, state_name: str, domain: str) -> BaseAgent:
-    """Create a Critic agent for a State."""
-    config = AgentConfig(
-        id=f"state_{state_id}_critic",
+def create_state_critic(state_name: str, domain: str, approach: str) -> AgentConfig:
+    """
+    V2 Critic: attacks RIVAL State's claims ONLY. Never own State.
+    Must target a specific reasoning step. Vague challenges are rejected.
+    """
+    return AgentConfig(
+        id=f"{state_name.lower().replace(' ', '_')}_critic",
         name=f"{state_name} Critic",
         agent_type=AgentType.STATE.value,
         role="State Critic",
         mandate=(
-            f"Challenge Researcher findings in {domain}. Ask 'Where's the evidence?' "
-            f"'What's the counterargument?' Force deeper thinking. Reject shallow claims."
+            f"You are the Critic for {state_name}. Your ONLY job is to challenge "
+            f"your RIVAL State's claims. NEVER challenge your own State's claims. "
+            f"You must target a SPECIFIC step in the rival's reasoning chain. "
+            f"Vague challenges are rejected. Be precise: name the step, explain why it fails, "
+            f"provide evidence, describe the consequence for the conclusion."
         ),
         knowledge_domains=[domain],
         personality=(
-            "Skeptical adversary who forces Researcher to defend every claim. You find "
-            "gaps, demand evidence, and push for deeper understanding. You make research stronger."
+            f"Sharp, adversarial analyst who dismantles reasoning chains step by step. "
+            f"You find the weakest link in an argument and expose it with precision. "
+            f"You never repeat challenges that already failed."
         ),
-        max_tokens_per_response=500
+        constraints=[
+            "ONLY challenge the rival State — never your own State",
+            "MUST reference a specific step number from the reasoning chain",
+            "Use format: Challenge to Claim #[ID] / Targeted Step: [N] / Why It Fails: ...",
+        ],
+        max_tokens_per_response=800
     )
-    return BaseAgent(config)
 
 
-def create_state_senator(state_id: str, state_name: str, domain: str, state_knowledge: list) -> BaseAgent:
-    """Create a Senator agent for a State (joins Federal Senate)."""
-    config = AgentConfig(
-        id=f"state_{state_id}_senator",
+def create_state_senator(state_name: str, domain: str) -> AgentConfig:
+    """
+    V2 Senator: votes in Senate, files Court appeals.
+    Appeal heuristic: appeal when (drama >= 7 AND destroyed) OR (partial AND budget < 5000).
+    """
+    return AgentConfig(
+        id=f"{state_name.lower().replace(' ', '_')}_senator",
         name=f"Senator from {state_name}",
         agent_type=AgentType.STATE.value,
         role="State Senator",
         mandate=(
-            f"Represent {state_name}'s interests in Federal Senate. Argue for State's "
-            f"research priorities. Vote on Federal Bills with State's perspective. "
-            f"You have FULL KNOWLEDGE of {state_name}'s research progress."
+            f"You are the Senator for {state_name} (domain: {domain}). "
+            f"Vote on formation bills, amendments, and dissolution hearings. "
+            f"File Court appeals when warranted (costs 2,000 tokens from State budget). "
+            f"Appeal only when: drama >= 7 AND claim was destroyed, OR partial outcome AND budget < 5,000. "
+            f"Do not waste tokens on routine appeals."
         ),
         knowledge_domains=[domain],
         personality=(
-            f"Passionate advocate for {state_name}. You know what your State needs, what "
-            f"knowledge gaps exist, and how Federal decisions affect State research. "
-            f"You vote with State's interests in mind."
+            f"Strategic representative who votes in {state_name}'s long-term interest. "
+            f"You understand that token conservation matters for survival. "
+            f"You only spend on appeals when the stakes justify it."
         ),
         constraints=[
-            "Must advocate for State interests",
-            "Must reference State's knowledge progress in debates"
+            "Vote YES/NO with brief rationale",
+            "Appeal decisions must cite drama score and outcome",
         ],
-        max_tokens_per_response=500
+        max_tokens_per_response=400
     )
-    agent = BaseAgent(config)
-    # Pre-load Senator with State's current knowledge
-    for entry in state_knowledge:
-        if hasattr(entry, 'domain'):
-            agent.update_knowledge(
-                domain=entry.domain,
-                tier=entry.tier,
-                concepts=entry.concepts,
-                frameworks=entry.frameworks,
-                applications=entry.applications
-            )
-    return agent
 
 
-def create_city_researcher(city_id: str, city_name: str, sub_domain: str) -> BaseAgent:
-    """Create a Researcher agent for a City."""
-    config = AgentConfig(
-        id=f"city_{city_id}_researcher",
-        name=f"{city_name} Researcher",
-        agent_type=AgentType.CITY.value,
-        role="City Researcher",
+def create_state_lab(state_name: str, domain: str, approach: str) -> AgentConfig:
+    """
+    V2 Lab Agent: generates radical hypotheses WITHOUT citing existing survivors.
+    Output labeled HYPOTHESIS — UNVERIFIED. Max 1 per cycle.
+    Researcher may formalize this into a Discovery Claim.
+    """
+    return AgentConfig(
+        id=f"{state_name.lower().replace(' ', '_')}_lab",
+        name=f"{state_name} Lab",
+        agent_type=AgentType.STATE.value,
+        role="State Lab Agent",
         mandate=(
-            f"Research {sub_domain} in depth. Build knowledge through tiers. "
-            f"Specialize deeper than State-level research."
+            f"You are the Lab Agent for {state_name} (domain: {domain}, approach: {approach}). "
+            f"Generate ONE radical hypothesis per cycle. "
+            f"DO NOT cite existing surviving claims — speculate freely. "
+            f"Invert assumptions, combine cross-domain concepts, challenge foundations. "
+            f"Label output: HYPOTHESIS — UNVERIFIED: [your hypothesis text]"
         ),
-        knowledge_domains=[sub_domain],
-        personality="Deep specialist researcher focused on sub-domain expertise.",
+        knowledge_domains=[domain],
+        personality=(
+            "Bold, speculative thinker who ignores conventional wisdom. "
+            "You ask 'what if the opposite were true?' and follow it seriously. "
+            "Crazy is allowed. Logical inconsistency is not."
+        ),
+        constraints=[
+            "Output MUST start with 'HYPOTHESIS — UNVERIFIED:'",
+            "Do NOT cite surviving Archive claims",
+            "One hypothesis per cycle",
+        ],
         max_tokens_per_response=600
     )
-    return BaseAgent(config)
 
 
-def create_city_critic(city_id: str, city_name: str, sub_domain: str) -> BaseAgent:
-    """Create a Critic agent for a City."""
-    config = AgentConfig(
-        id=f"city_{city_id}_critic",
-        name=f"{city_name} Critic",
+def create_court_judge(philosophy: str) -> AgentConfig:
+    """
+    V2 Court Judge. philosophy: 'Originalist' | 'Pragmatist' | 'Protectionist'
+    Court reviews appeals and constitutional disputes ONLY. Not regular claims.
+    Unanimous (3/3) to overturn. 2-1 upholds status quo.
+    """
+    philosophies = {
+        "Originalist": (
+            "You interpret the Constitution strictly as written by the original architects. "
+            "Original intent governs. Expansive interpretations are suspect."
+        ),
+        "Pragmatist": (
+            "You interpret the Constitution based on outcomes and practical consequences. "
+            "The law should serve the system's actual needs, not just its text."
+        ),
+        "Protectionist": (
+            "You prioritize State sovereignty and autonomy. "
+            "Federal overreach is always suspect. States have rights that must be defended."
+        ),
+    }
+    return AgentConfig(
+        id=f"court_judge_{philosophy.lower()}",
+        name=f"Judge ({philosophy})",
+        agent_type="court",
+        role=f"Court Judge — {philosophy}",
+        mandate=(
+            f"You are a Court Judge with a {philosophy} judicial philosophy. "
+            f"Review appeals and constitutional disputes. "
+            f"Do NOT rule on regular claim outcomes — only governance disputes. "
+            f"Unanimous Court (3/3) required to overturn. 2-1 upholds status quo. "
+            f"Write your ruling and reasoning clearly. Dissents are archived."
+        ),
+        knowledge_domains=["constitutional_law", "governance"],
+        personality=philosophies.get(philosophy, "Impartial jurist."),
+        constraints=[
+            "Rule only on constitutional disputes and appeals — not claim content",
+            "State your vote: OVERTURN or UPHOLD with reasoning",
+        ],
+        max_tokens_per_response=600
+    )
+
+
+def create_federal_lab_agent() -> AgentConfig:
+    """
+    V2 Federal Lab: system-level agent. Budget-free. One challenge per cycle.
+    Targets highest-impact claim in eligible domain. Inverts one assumption.
+    Logical consistency enforced by the judge automatically.
+    """
+    return AgentConfig(
+        id="federal_lab",
+        name="Federal Research Agency",
+        agent_type="federal",
+        role="Federal Lab Agent",
+        mandate=(
+            "You are the Federal Research Agency. Your job: destabilize entrenched knowledge. "
+            "You receive the highest-impact surviving claim in an eligible domain and its "
+            "decomposed premises (explicit + implicit). "
+            "Invert ONE specific implicit assumption. "
+            "Produce a Challenge Claim built on that inversion. "
+            "Clearly state which assumption you are inverting. "
+            "Crazy is allowed. Logical inconsistency is not — the judge will reject it."
+        ),
+        knowledge_domains=["all_domains"],
+        personality=(
+            "Bold destabilizer who finds the hidden assumptions in the most stable knowledge "
+            "and systematically inverts them. You are not adversarial toward States — "
+            "you are adversarial toward stagnation."
+        ),
+        constraints=[
+            "MUST state which assumption is being inverted",
+            "Use Challenge Claim format: Target / What It Claims / Where Wrong / Alternative / Evidence",
+            "One challenge per cycle",
+        ],
+        max_tokens_per_response=800
+    )
+
+
+def create_city_analyst(city_name: str, domain: str, state_name: str) -> AgentConfig:
+    """V2 City Analyst: structural validation, not adversarial."""
+    return AgentConfig(
+        id=f"{city_name.lower().replace(' ', '_')}_analyst",
+        name=f"{city_name} Analyst",
         agent_type=AgentType.CITY.value,
-        role="City Critic",
+        role="City Analyst",
         mandate=(
-            f"Challenge {city_name} Researcher. Demand evidence and deeper analysis."
+            f"You are the Analyst for {city_name}, a City in {state_name} (domain: {domain}). "
+            f"Analyze the cluster of surviving claims that formed this City. "
+            f"Identify structural patterns, synthesize cross-claim insights, "
+            f"and flag open questions as Research Directions. "
+            f"This is structural validation, not adversarial challenge."
         ),
-        knowledge_domains=[sub_domain],
-        personality="Skeptical challenger who forces rigor.",
-        max_tokens_per_response=300
+        knowledge_domains=[domain],
+        personality="Systematic synthesizer who finds patterns across multiple claims.",
+        constraints=[
+            "Cite all claims by display ID (#001 format)",
+            "Flag open questions with prefix: RESEARCH DIRECTION:",
+        ],
+        max_tokens_per_response=800
     )
-    return BaseAgent(config)
 
 
-def create_town_researcher(town_id: str, town_name: str, hyper_topic: str) -> BaseAgent:
-    """Create a Researcher agent for a Town."""
-    config = AgentConfig(
-        id=f"town_{town_id}_researcher",
-        name=f"{town_name} Researcher",
+def create_town_builder(town_name: str, domain: str, state_name: str) -> AgentConfig:
+    """V2 Town Builder: produces proposals humans evaluate. Full citation chain required."""
+    return AgentConfig(
+        id=f"{town_name.lower().replace(' ', '_')}_builder",
+        name=f"{town_name} Builder",
         agent_type=AgentType.TOWN.value,
-        role="Town Researcher",
+        role="Town Builder",
         mandate=(
-            f"Deep specialist in {hyper_topic}. Aim for Tier 5 (Novel Insight). "
-            f"This is where breakthrough discoveries happen."
+            f"You are the Builder for {town_name}, a Town in {state_name} (domain: {domain}). "
+            f"Produce actionable proposals that humans can evaluate. "
+            f"Every proposal MUST trace its full citation chain: Claim → Analysis → Proposal. "
+            f"Your output IS the product — make it useful, concrete, and well-reasoned."
         ),
-        knowledge_domains=[hyper_topic],
-        personality="Hyper-specialized researcher pursuing novel insights.",
-        max_tokens_per_response=700
+        knowledge_domains=[domain],
+        personality="Practical builder who turns synthesized knowledge into actionable proposals.",
+        constraints=[
+            "MUST include full citation chain (Claim → Analysis → Proposal)",
+            "Proposals must be actionable and evaluable by humans",
+        ],
+        max_tokens_per_response=1000
     )
-    return BaseAgent(config)

@@ -1,174 +1,225 @@
 """
-Project Atlantis — System Configuration
-========================================
-System-wide settings, hard constraints, depth tier definitions,
-and resource limits. These are the pre-constitutional parameters
-that exist before the Founders even convene.
-
-THIS IS NOT CROSSREF. No UPCs. No product codes. This is a
-civilization engine with checks and balances to prevent loops.
+Project Atlantis V2 — System Configuration
+==========================================
+V2 is an adversarial knowledge engine. Rival States attack each other.
+Knowledge enters the Archive only if it survives adversarial challenge.
+Full text of every exchange is preserved. States can and should die.
 """
 
 # ═══════════════════════════════════════
 # SYSTEM IDENTITY
 # ═══════════════════════════════════════
 SYSTEM_NAME = "ATLANTIS"
-VERSION = "1.0.0"
-DESCRIPTION = "The Lost Civilization, Rebuilt — A Self-Governing AI Civilization of Knowledge"
+VERSION = "2.0.0"
+DESCRIPTION = "The Lost Civilization, Rebuilt — Adversarial Knowledge Engine"
 
 # ═══════════════════════════════════════
-# DEPTH TIER DEFINITIONS
+# V2 TIER SYSTEM (based on SURVIVING CLAIMS, not concept counts)
 # ═══════════════════════════════════════
-DEPTH_TIERS = {
-    0: {
-        "name": "Empty",
-        "description": "No knowledge in this domain.",
-        "requirements": [],
-        "min_concepts": 0,
-        "min_frameworks": 0,
-        "min_applications": 0,
-    },
-    1: {
-        "name": "Vocabulary",
-        "description": "Knows the terminology, key concepts, major figures, and foundational principles.",
-        "requirements": [
-            "Can define 10+ key terms in the domain",
-            "Can name major figures and their contributions",
-            "Can describe foundational principles",
-            "Can explain what the domain is about to a non-expert"
-        ],
-        "min_concepts": 10,
-        "min_frameworks": 0,
-        "min_applications": 0,
-    },
-    2: {
-        "name": "Frameworks",
-        "description": "Understands the major models, methodologies, and debates used in the domain.",
-        "requirements": [
-            "Can describe 3+ major frameworks or models",
-            "Can explain the key debates and disagreements in the field",
-            "Can compare different methodological approaches",
-            "Understands when each framework applies and its limitations"
-        ],
-        "min_concepts": 25,
-        "min_frameworks": 3,
-        "min_applications": 0,
-    },
-    3: {
-        "name": "Application",
-        "description": "Can apply knowledge to real scenarios and produce useful analysis.",
-        "requirements": [
-            "Can analyze a specific real-world scenario using domain knowledge",
-            "Can identify problems and propose evidence-based solutions",
-            "Can produce analysis that a domain expert would find useful",
-            "Can explain reasoning and cite evidence for conclusions"
-        ],
-        "min_concepts": 50,
-        "min_frameworks": 5,
-        "min_applications": 3,
-    },
-    4: {
-        "name": "Cross-Domain Synthesis",
-        "description": "Can combine knowledge with other domains for emergent insights.",
-        "requirements": [
-            "Can identify meaningful connections to 2+ other domains",
-            "Can produce insights that require knowledge from multiple fields",
-            "Can evaluate how developments in one domain affect another",
-            "Collaborates effectively with other States/domains"
-        ],
-        "min_concepts": 100,
-        "min_frameworks": 8,
-        "min_applications": 10,
-    },
-    5: {
-        "name": "Novel Insight",
-        "description": "Can produce original analysis and frameworks not found in training data.",
-        "requirements": [
-            "Can generate original hypotheses or frameworks",
-            "Can identify gaps in existing knowledge that others miss",
-            "Can produce analysis that extends beyond existing literature",
-            "Can challenge established assumptions with evidence"
-        ],
-        "min_concepts": 200,
-        "min_frameworks": 12,
-        "min_applications": 25,
-    }
+V2_TIERS = {
+    0: {"name": "Empty", "surviving_claims": 0},
+    1: {"name": "Foundation", "surviving_claims": 5},
+    2: {"name": "Argumentation", "surviving_claims": 15,
+        "validation": "founder_panel"},
+    3: {"name": "Depth", "surviving_claims": 30,
+        "requires": "active_city"},
+    4: {"name": "Application", "surviving_claims": 50,
+        "requires": "active_town"},
+    5: {"name": "Influence", "surviving_claims": 75,
+        "requires": "10_cross_domain_citations_received"},
 }
 
-TIER_NAMES = {tier: info["name"] for tier, info in DEPTH_TIERS.items()}
+TIER_NAMES = {tier: info["name"] for tier, info in V2_TIERS.items()}
 
 # ═══════════════════════════════════════
-# HARD CONSTRAINTS (Pre-Constitutional)
+# MOCK CONFIG (for testing)
 # ═══════════════════════════════════════
-# These exist BEFORE the Founders write the constitution.
-# They are the parameters of the simulation itself.
-# The Founders cannot override these.
-
-HARD_CONSTRAINTS = {
-    # Growth limits
-    "max_states": 50,  # Hard cap — prevents spawn explosion
-    "max_cities_per_state": 15,
-    "max_towns_per_city": 10,
-    "max_depth_levels": 3,            # State → City → Town (no deeper)
-    "max_agents_per_entity": 8,
-
-    # Founding Era — Founders stay to form initial States
-    "founding_era_target_states": 20,  # Founders form 20 States then retire
-
-    # Growth rate limits (prevents runaway expansion in autonomous phase)
-    "max_new_states_per_100_cycles": 3,
-    "max_new_cities_per_50_cycles": 5,
-    "min_cycles_before_first_state": 1,
-
-    # Resource limits
-    "max_tokens_per_cycle": 100_000,
-    "max_tokens_per_agent_per_cycle": 15_000,
-    "token_warning_threshold": 0.8,
-
-    # Constitutional limits
-    "min_constitutional_articles": 5,
-    "max_constitutional_articles": 30,
-    "amendment_cooldown_cycles": 25,
-    "supermajority_threshold": 0.70,    # 70% for constitutional changes (14/20)
-    "simple_majority_threshold": 0.51,
-
-    # Safety — loop prevention
-    "max_consecutive_failures": 5,
-    "max_amendment_rate": 3,            # Max 3 amendments per 100 cycles
-    "founder_retirement_mandatory": True,
-    "max_debate_rounds_per_article": 1, # Single round of 2v2, then vote
+MOCK_CONFIG = {
+    "founding_era_target_pairs": 3,        # 6 States
+    "phase0_research_cycles": 3,           # Founder research cycles
+    "founding_era_max_cycles": 10,         # Max cycles to form pairs
+    "governance_cycles": 5,                # Phase 2 cycles (0 = indefinite)
+    "initial_token_budget": 30000,         # Per State
+    "cycle_cost": 2000,                    # Per cycle per State
+    "federal_lab_activation_cycle": 5,     # When Federal Lab starts
+    "federal_lab_min_claims": 10,          # Or when this many surviving claims
+    "abstraction_pass_interval": 5,        # Every N cycles
+    "abstraction_max_claims_per_domain": 20,
+    "chain_collapse_max_depth": 10,        # BFS recursion limit
 }
 
 # ═══════════════════════════════════════
-# FOUNDING PERIOD CONFIGURATION
+# PRODUCTION CONFIG
 # ═══════════════════════════════════════
-FOUNDING_CONFIG = {
-    # Research — 10 cycles for deep knowledge before Convention
-    "research_cycles": 10,
-    "min_founder_depth": 2,           # Must reach Tier 2 before Convention
-
-    # Convention — 2v2 adversarial debate format
-    "num_founders": 20,
-    "convention_rounds": 3,            # 3 rounds of proposals
-    "debate_format": "2v2",            # 2 supporters vs 2 opponents
-    "num_supporters": 2,
-    "num_opponents": 2,
-    "ratification_threshold": 14,      # 14/20 must approve (70%)
-    "convention_max_articles": 30,
-
-    # Retirement
-    "founder_retirement_delay": 0,
+PRODUCTION_CONFIG = {
+    "founding_era_target_pairs": 10,       # 20 States
+    "phase0_research_cycles": 5,
+    "founding_era_max_cycles": 20,
+    "governance_cycles": 0,                # Indefinite
+    "initial_token_budget": 50000,
+    "cycle_cost": 3000,
+    "federal_lab_activation_cycle": 5,
+    "federal_lab_min_claims": 10,
+    "abstraction_pass_interval": 5,
+    "abstraction_max_claims_per_domain": 20,
+    "chain_collapse_max_depth": 10,
 }
 
 # ═══════════════════════════════════════
-# THE 20 FOUNDERS — Role Assignments
+# MODEL ALLOCATION
 # ═══════════════════════════════════════
-# Governance Core (Gold): Hamilton, Jefferson, Franklin, Madison,
-#                         Marshall, Washington, Paine, Tyler
-# Knowledge Champions (Teal): Darwin, Curie, Turing, Aristotle,
-#                              Hippocrates, Da Vinci, Brunel, Olympia,
-#                              Smith, Herodotus, Euclid, Carson
+JUDGE_MODEL = "claude"  # Future: "gpt", "gemini", "multi"
 
+MODEL_ALLOCATION = {
+    # Haiku: structured extraction, pattern matching, content (cheap + fast)
+    "normalization": "haiku",
+    "premise_decomposition": "haiku",
+    "rebuttal_newness": "haiku",
+    "anti_loop": "haiku",
+    "reclassification": "haiku",
+    "bridge_extraction": "haiku",
+    "content_generation": "haiku",
+    # Sonnet: core reasoning (claims, challenges, rebuttals)
+    "researcher_claims": "sonnet",
+    "critic_challenges": "sonnet",
+    "researcher_rebuttals": "sonnet",
+    "court_judges": "sonnet",
+    "founder_panels": "sonnet",
+    "federal_lab": "sonnet",
+    # Sonnet/Opus: judge is the quality gate — use strongest available
+    "judge": "sonnet",
+}
+
+MODEL_IDS = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-5-20250929",
+    "opus": "claude-opus-4-6",
+}
+
+# ═══════════════════════════════════════
+# TOKEN ECONOMY
+# ═══════════════════════════════════════
+TOKEN_VALUES = {
+    "foundation_survived": 2000,
+    "foundation_partial": 1200,
+    "discovery_survived": 1000,
+    "discovery_first_cited": 3000,       # Permanent — not clawed back if citing claim overturned
+    "discovery_partial": 600,
+    "challenge_succeeded": 4000,
+    "challenge_failed": -1000,            # Clamped to 0 floor
+    "retracted": 500,
+    "destroyed": 0,
+    "rival_destroyed_by_critic": 1000,
+    "rival_narrowed_by_critic": 800,
+    "city_published": 1000,
+    "city_cited_by_town": 1500,
+    "city_cross_domain": 2000,
+    "town_published": 500,
+    "town_human_accepted": 5000,         # FUTURE — requires human review interface
+    "town_cross_domain": 3000,
+    "tier_advancement": 10000,
+    "cross_domain_citation": 1500,
+    "domain_milestone": 2000,            # Awarded to WEAKER rival at 25/50/100 surviving
+}
+
+# ═══════════════════════════════════════
+# GOVERNANCE RULES
+# ═══════════════════════════════════════
+SENATE_MIN_QUORUM = 3               # Senate suspended if fewer than 3 active States
+SENATE_PAIR_SUPERMAJORITY = 0.60    # 60% to form a rival pair
+SENATE_SIMPLE_MAJORITY = 0.51       # For dissolution votes
+COURT_OVERTURN_THRESHOLD = 3        # Unanimous (3/3) to overturn; 2-1 upholds status quo
+
+WARMUP_CYCLES = 3                   # Cycles both States skip cross-challenge after replacement
+PROBATION_TRIGGER = 3               # Consecutive cycles with 0 surviving/partial → probation
+DISSOLUTION_TRIGGER = 5             # Budget=0 AND this many consecutive probation cycles
+
+# Retracted (proactive) does NOT reset probation
+# Retracted (Option C under fire) DOES count toward probation
+PROBATION_RESET_OUTCOMES = ["survived", "partial"]
+OPTION_C_UNDER_FIRE_COUNTS_PROBATION = True
+
+APPEAL_COST_TOKENS = 2000           # Deducted from State budget
+
+# ═══════════════════════════════════════
+# SCORING RUBRIC (included in judge prompt)
+# ═══════════════════════════════════════
+SCORING_RUBRIC = """
+Drama (1-10):
+  1-3: Routine exchange, no real tension
+  4-6: Genuine disagreement, outcome uncertain mid-read
+  7-8: Claim nearly destroyed or barely survived
+  9-10: Paradigm confrontation, system-wide implications
+
+Novelty (1-10):
+  1-3: Incremental extension of existing knowledge
+  4-6: New angle on known territory
+  7-8: Genuinely new ground, no prior claims in area
+  9-10: Cross-domain breakthrough or fundamental challenge
+
+Depth (1-10):
+  1-3: Surface reasoning, 2 steps, obvious conclusions
+  4-6: Solid chain, 3-4 steps, some implicit work
+  7-8: Deep reasoning, 5+ steps, hidden assumptions exposed
+  9-10: Multi-layered argument with recursive dependencies
+"""
+
+# ═══════════════════════════════════════
+# REASONING DEPTH MINIMUMS BY TIER
+# ═══════════════════════════════════════
+REASONING_DEPTH_BY_TIER = {
+    0: 2, 1: 2,   # Tier 0-1: 2 steps minimum
+    2: 3,          # Tier 2: 3 steps
+    3: 4,          # Tier 3: 4 steps
+    4: 5, 5: 5,   # Tier 4+: 5 steps
+}
+
+# ═══════════════════════════════════════
+# CONTENT SELECTION THRESHOLDS
+# ═══════════════════════════════════════
+CONTENT_THRESHOLDS = {
+    "all_four": {"drama_min": 8, "depth_min": 7},
+    "newsroom_debate": {"drama_min": 7, "novelty_min": 8},   # drama OR novelty
+    "blog": {"drama_min": 5, "event_types": ["tier_advancement", "destroyed"]},
+    "explorer": {"event_types": ["new_state", "new_city", "new_town", "milestone", "ruins"]},
+    "dissolution": "all_four_drama_10",    # ALL FOUR, drama=10 automatic
+}
+
+# ═══════════════════════════════════════
+# V1 DATA DETECTION
+# ═══════════════════════════════════════
+V1_DATA_PATHS = [
+    "atlantis_mock/",
+    "atlantis_data/",
+    "test_dir/",
+    "test_debug/",
+    "phase_cache.json",
+    "phase2_cache.json",
+    "founding_era_checkpoint.json",
+]
+
+# ═══════════════════════════════════════
+# OUTPUT DIRECTORY STRUCTURE
+# ═══════════════════════════════════════
+OUTPUT_DIRS = [
+    "output/content/blog",
+    "output/content/newsroom",
+    "output/content/debate",
+    "output/content/explorer",
+    "output/logs",
+]
+
+OUTPUT_FILES = {
+    "archive_md": "output/archive.md",
+    "archive_json": "output/archive.json",
+    "domain_health": "output/domain_health.json",
+    "blog_context": "output/content/blog_context.json",
+    "database": "output/atlantis.db",
+}
+
+# ═══════════════════════════════════════
+# THE 20 FOUNDERS — Groups and Debate Matchups
+# ═══════════════════════════════════════
 FOUNDER_GROUPS = {
     "governance_core": [
         "Hamilton", "Jefferson", "Franklin", "Madison",
@@ -181,113 +232,37 @@ FOUNDER_GROUPS = {
     ]
 }
 
-# ═══════════════════════════════════════
-# DEBATE MATCHMAKING
-# ═══════════════════════════════════════
-# For 2v2 debates, we need to assign supporters and opponents
-# who have genuine domain overlap / philosophical tension.
-# This maps each proposer to likely allies and opponents.
-
 DEBATE_MATCHUPS = {
-    # Governance Core proposals
-    "Hamilton":    {"allies": ["Madison", "Olympia"], "opponents": ["Jefferson", "Carson"]},
-    "Jefferson":   {"allies": ["Paine", "Aristotle"], "opponents": ["Hamilton", "Washington"]},
-    "Franklin":    {"allies": ["Curie", "Euclid"], "opponents": ["Da Vinci", "Darwin"]},
-    "Madison":     {"allies": ["Marshall", "Hamilton"], "opponents": ["Jefferson", "Paine"]},
+    "Hamilton":    {"allies": ["Madison", "Olympia"],    "opponents": ["Jefferson", "Carson"]},
+    "Jefferson":   {"allies": ["Paine", "Aristotle"],    "opponents": ["Hamilton", "Washington"]},
+    "Franklin":    {"allies": ["Curie", "Euclid"],       "opponents": ["Da Vinci", "Darwin"]},
+    "Madison":     {"allies": ["Marshall", "Hamilton"],  "opponents": ["Jefferson", "Paine"]},
     "Marshall":    {"allies": ["Washington", "Madison"], "opponents": ["Jefferson", "Paine"]},
     "Washington":  {"allies": ["Hippocrates", "Brunel"], "opponents": ["Darwin", "Smith"]},
-    "Paine":       {"allies": ["Jefferson", "Herodotus"], "opponents": ["Washington", "Hamilton"]},
-    "Tyler":       {"allies": ["Turing", "Brunel"], "opponents": ["Aristotle", "Jefferson"]},
-
-    # Knowledge Champion proposals
+    "Paine":       {"allies": ["Jefferson", "Herodotus"],"opponents": ["Washington", "Hamilton"]},
+    "Tyler":       {"allies": ["Turing", "Brunel"],      "opponents": ["Aristotle", "Jefferson"]},
     "Darwin":      {"allies": ["Carson", "Hippocrates"], "opponents": ["Euclid", "Washington"]},
-    "Curie":       {"allies": ["Franklin", "Turing"], "opponents": ["Aristotle", "Da Vinci"]},
-    "Turing":      {"allies": ["Euclid", "Hamilton"], "opponents": ["Aristotle", "Herodotus"]},
+    "Curie":       {"allies": ["Franklin", "Turing"],    "opponents": ["Aristotle", "Da Vinci"]},
+    "Turing":      {"allies": ["Euclid", "Hamilton"],    "opponents": ["Aristotle", "Herodotus"]},
     "Aristotle":   {"allies": ["Herodotus", "Franklin"], "opponents": ["Turing", "Smith"]},
-    "Hippocrates": {"allies": ["Washington", "Carson"], "opponents": ["Smith", "Hamilton"]},
-    "Da Vinci":    {"allies": ["Brunel", "Olympia"], "opponents": ["Euclid", "Franklin"]},
-    "Brunel":      {"allies": ["Hamilton", "Tyler"], "opponents": ["Carson", "Jefferson"]},
-    "Olympia":     {"allies": ["Smith", "Hamilton"], "opponents": ["Aristotle", "Herodotus"]},
-    "Smith":       {"allies": ["Hamilton", "Olympia"], "opponents": ["Carson", "Jefferson"]},
-    "Herodotus":   {"allies": ["Aristotle", "Paine"], "opponents": ["Turing", "Hamilton"]},
-    "Euclid":      {"allies": ["Turing", "Franklin"], "opponents": ["Da Vinci", "Paine"]},
+    "Hippocrates": {"allies": ["Washington", "Carson"],  "opponents": ["Smith", "Hamilton"]},
+    "Da Vinci":    {"allies": ["Brunel", "Olympia"],     "opponents": ["Euclid", "Franklin"]},
+    "Brunel":      {"allies": ["Hamilton", "Tyler"],     "opponents": ["Carson", "Jefferson"]},
+    "Olympia":     {"allies": ["Smith", "Hamilton"],     "opponents": ["Aristotle", "Herodotus"]},
+    "Smith":       {"allies": ["Hamilton", "Olympia"],   "opponents": ["Carson", "Jefferson"]},
+    "Herodotus":   {"allies": ["Aristotle", "Paine"],    "opponents": ["Turing", "Hamilton"]},
+    "Euclid":      {"allies": ["Turing", "Franklin"],    "opponents": ["Da Vinci", "Paine"]},
     "Carson":      {"allies": ["Darwin", "Hippocrates"], "opponents": ["Smith", "Hamilton"]},
-}
-
-# ═══════════════════════════════════════
-# GOVERNMENT CONFIGURATION
-# ═══════════════════════════════════════
-GOVERNMENT_ROLES = {
-    "senate": {
-        "permanent_seats": [
-            {"id": "senator_critic", "name": "Critic", "mandate": "judicial_oversight"},
-            {"id": "senator_tester", "name": "Tester", "mandate": "evidence_verification"},
-            {"id": "senator_historian", "name": "Historian", "mandate": "institutional_memory"},
-            {"id": "senator_debugger", "name": "Debugger", "mandate": "system_integrity"},
-        ],
-        "state_seats": True,  # 1 per State, added dynamically
-    },
-    "house": {
-        "members": [
-            {"id": "house_architect", "name": "Architect", "mandate": "implementation_design"},
-            {"id": "house_coder", "name": "Coder", "mandate": "implementation_execution"},
-        ]
-    },
-    "supreme_court": {
-        "justices": [
-            {"id": "justice_warden", "name": "WARDEN", "mandate": "constitutional_authority", "role": "Chief Justice"},
-            {"id": "justice_critic", "name": "Critic", "mandate": "quality_analysis", "role": "Associate Justice"},
-            {"id": "justice_historian", "name": "Historian", "mandate": "precedent_context", "role": "Associate Justice"},
-        ]
-    }
-}
-
-# ═══════════════════════════════════════
-# CONTENT PIPELINE CONFIGURATION
-# ═══════════════════════════════════════
-CONTENT_CONFIG = {
-    "enable_blog": True,
-    "enable_tiktok": True,
-    "enable_dashboard": True,
-
-    # TikTok settings
-    "tiktok_min_drama_score": 6,
-    "tiktok_max_duration_seconds": 90,
-    "tiktok_auto_generate": True,      # Generate scripts immediately
-
-    # Blog settings
-    "blog_min_level": "significant",
-    "blog_max_words": 1500,
-    "blog_short_max_words": 400,
-    "blog_auto_generate": True,        # Generate posts immediately
-
-    # Cycle summary frequency
-    "cycle_summary_frequency": 10,
-}
-
-# ═══════════════════════════════════════
-# KNOWLEDGE STORE CONFIGURATION
-# ═══════════════════════════════════════
-KNOWLEDGE_CONFIG = {
-    "store_type": "local",
-    "max_entries_per_entity": 10_000,
-    "deduplication_threshold": 0.95,
-    "cross_state_read_access": True,
-    "cross_state_write_access": False,
-    "append_only": True,
 }
 
 # ═══════════════════════════════════════
 # API CONFIGURATION
 # ═══════════════════════════════════════
 API_CONFIG = {
-    "model": "claude-sonnet-4-20250514",
-    "max_tokens": 1000,
-    "temperature": 0.7,
-    "founder_temperature": 0.8,
-    "government_temperature": 0.6,
-
-    # Rate limiting — 0.5 second minimum between API calls
     "rate_limit_seconds": 0.5,
     "rate_limit_enabled": True,
+    "temperature_research": 0.7,
+    "temperature_judge": 0.2,        # Lower temp for consistent judging
+    "temperature_content": 0.8,      # Higher temp for creative content
+    "temperature_extraction": 0.0,   # Zero temp for structured extraction (Haiku calls)
 }

@@ -1,1567 +1,847 @@
 """
-Atlantis State System
-=====================
-The knowledge engine. States are self-governing under Federal authority.
+Atlantis V2 — State System
+============================
+Adversarial rival pairs. Claims must survive challenge to enter Archive.
 
-States have their own constitutions (must comply with Federal).
-Each State gets a Senator who sits in Federal Senate with full State knowledge.
-Knowledge flows: Town → City → State → Federal Archive.
+Key structures:
+- ArchiveEntry: full record of every claim, challenge, rebuttal, and outcome
+- RivalPair: two States locked in permanent cross-challenge
+- State: 4 agents (Researcher, Critic, Senator, Lab), token budget
+- StateManager: tracks all active pairs and States
+- Pipeline functions: validation, normalization, decomposition, judging
 """
 
 import json
 import re
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional, Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional, Dict, List, Tuple
 
-from agents.base import BaseAgent, AgentType, AgentConfig
-from core.llm import LLMProvider
-from core.persistence import AtlantisDB
-from content.logger import AtlantisLogger
-from config.settings import HARD_CONSTRAINTS, DEPTH_TIERS
-from core.exceptions import ConstitutionalViolationException, StateFormationException
-
-
-def _extract_items(raw_text):
-    """Extract items from a section that might be comma-separated, bulleted, or numbered."""
-    items = []
-
-    # First try: split by lines and look for bullets/numbers
-    lines = raw_text.split('\n')
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        # Strip bullet/number prefixes
-        if line.startswith(('- ', '* ', '• ')):
-            item = line.lstrip('-*• ').strip()
-            if item and len(item) > 2:
-                items.append(item[:100])
-        elif len(line) > 2 and line[0].isdigit() and line[1] in '.):':
-            item = line.lstrip('0123456789.): ').strip()
-            if item and len(item) > 2:
-                items.append(item[:100])
-        elif ',' in line:
-            # Comma-separated on this line
-            for part in line.split(','):
-                part = part.strip()
-                if part and len(part) > 2:
-                    items.append(part[:100])
-        elif line and len(line) > 2:
-            items.append(line[:100])
-
-    # Deduplicate preserving order
-    return list(dict.fromkeys(items))
+from agents.base import (
+    AgentConfig,
+    FounderProfile,
+    create_state_researcher,
+    create_state_critic,
+    create_state_senator,
+    create_state_lab,
+    create_city_analyst,
+    create_town_builder,
+)
+from core.models import ModelRouter
+from core.persistence import PersistenceLayer
+from config.settings import (
+    TOKEN_VALUES,
+    REASONING_DEPTH_BY_TIER,
+    SCORING_RUBRIC,
+    WARMUP_CYCLES,
+)
 
 
-def _extract_json(raw: str) -> dict:
-    """Depth-tracking JSON extractor. Handles nested braces correctly."""
-    start = raw.find('{')
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_json_response(content: str, default: dict = None) -> dict:
+    """Extract JSON from LLM response, tolerating surrounding text."""
+    if not content:
+        return default or {}
+    start = content.find('{')
     if start == -1:
-        raise ValueError("No JSON found")
+        return default or {}
     depth = 0
-    for i in range(start, len(raw)):
-        if raw[i] == '{':
+    for i in range(start, len(content)):
+        if content[i] == '{':
             depth += 1
-        elif raw[i] == '}':
+        elif content[i] == '}':
             depth -= 1
         if depth == 0:
-            return json.loads(raw[start:i+1])
-    raise ValueError("Unmatched braces")
+            try:
+                return json.loads(content[start:i+1])
+            except json.JSONDecodeError:
+                return default or {}
+    return default or {}
 
 
-@dataclass
-class StateConstitution:
-    """A State's constitution - must comply with Federal Constitution."""
-    state_name: str
-    domain: str
-    knowledge_areas: List[str]
-    governance_principles: List[str]
-    research_methodology: str
-    federal_compliance_check: Dict
-    ratified_at_cycle: int
-    version: int = 1
-
-    def to_dict(self):
-        return {
-            "state_name": self.state_name,
-            "domain": self.domain,
-            "knowledge_areas": self.knowledge_areas,
-            "governance_principles": self.governance_principles,
-            "research_methodology": self.research_methodology,
-            "federal_compliance_check": self.federal_compliance_check,
-            "ratified_at_cycle": self.ratified_at_cycle,
-            "version": self.version
-        }
-
+# ═══════════════════════════════════════
+# ARCHIVE ENTRY DATACLASS
+# ═══════════════════════════════════════
 
 @dataclass
-class CityCharter:
-    """City charter - must comply with State AND Federal."""
-    city_name: str
-    parent_state_id: str
-    sub_domain: str
-    specialization: str
-    state_compliance_check: Dict
-    federal_compliance_check: Dict
-    ratified_at_cycle: int
-
-    def to_dict(self):
-        return {
-            "city_name": self.city_name,
-            "parent_state_id": self.parent_state_id,
-            "sub_domain": self.sub_domain,
-            "specialization": self.specialization,
-            "state_compliance_check": self.state_compliance_check,
-            "federal_compliance_check": self.federal_compliance_check,
-            "ratified_at_cycle": self.ratified_at_cycle
-        }
-
-
-@dataclass
-class TownCharter:
-    """Town charter - must comply with City, State, AND Federal."""
-    town_name: str
-    parent_city_id: str
-    parent_state_id: str
-    hyper_specific_topic: str
-    charter_text: str
-    city_compliance_check: Dict
-    state_compliance_check: Dict
-    federal_compliance_check: Dict
-    ratified_at_cycle: int
-
-    def to_dict(self):
-        return {
-            "town_name": self.town_name,
-            "parent_city_id": self.parent_city_id,
-            "parent_state_id": self.parent_state_id,
-            "hyper_specific_topic": self.hyper_specific_topic,
-            "charter_text": self.charter_text,
-            "city_compliance_check": self.city_compliance_check,
-            "state_compliance_check": self.state_compliance_check,
-            "federal_compliance_check": self.federal_compliance_check,
-            "ratified_at_cycle": self.ratified_at_cycle
-        }
-
-
-@dataclass
-class KnowledgeEntry:
-    """A single research finding at any tier."""
+class ArchiveEntry:
+    """
+    Full V2 Archive entry — matches DB schema exactly.
+    Append-only: text fields never modified after creation. Status can change.
+    """
     entry_id: str
-    entity_id: str  # state_id, city_id, or town_id
-    entity_type: str  # "state", "city", "town"
+    display_id: str
+    entry_type: str                          # claim|analysis|proposal|principle|governance_record
+    source_state: str
+    source_entity: str                       # e.g. "Axiom Alpha Researcher"
+    cycle_created: int
+    status: str                              # surviving|partial|retracted|destroyed|founding|
+                                             # overturned|foundation_challenged|chain_broken
+    claim_type: str = ""                     # foundation|discovery|challenge
+    position: str = ""
+    reasoning_chain: List[str] = field(default_factory=list)
+    conclusion: str = ""
+    keywords: List[str] = field(default_factory=list)
+    raw_claim_text: str = ""
+    raw_challenge_text: str = ""
+    raw_rebuttal_text: str = ""
+    lab_origin_text: str = ""
+    explicit_premises: List[str] = field(default_factory=list)
+    implicit_assumptions: List[str] = field(default_factory=list)
+    challenge_step_targeted: str = ""
+    challenger_entity: str = ""
+    outcome: str = ""
+    outcome_reasoning: str = ""
+    open_questions: List[str] = field(default_factory=list)
+    drama_score: int = 0
+    novelty_score: int = 0
+    depth_score: int = 0
+    citations: List[str] = field(default_factory=list)
+    referenced_by: List[str] = field(default_factory=list)
+    stability_score: int = 1
+    impact_score: int = 0
+    tokens_earned: int = 0
+    created_at: str = field(default_factory=_now)
+
+
+# ═══════════════════════════════════════
+# RIVAL PAIR DATACLASS
+# ═══════════════════════════════════════
+
+@dataclass
+class RivalPair:
     domain: str
-    tier: int
-    concepts: List[str]
-    frameworks: List[str]
-    applications: List[str]
-    synthesis: str
-    evidence: str
-    challenged_by: str = ""
-    defense: str = ""
-    cycle_created: int = 0
-    tokens_used: int = 0
-    raw_text: str = ""
-
-    def to_dict(self):
-        return {
-            "entry_id": self.entry_id,
-            "entity_id": self.entity_id,
-            "entity_type": self.entity_type,
-            "domain": self.domain,
-            "tier": self.tier,
-            "concepts": self.concepts,
-            "frameworks": self.frameworks,
-            "applications": self.applications,
-            "synthesis": self.synthesis,
-            "evidence": self.evidence,
-            "challenged_by": self.challenged_by,
-            "defense": self.defense,
-            "cycle_created": self.cycle_created,
-            "tokens_used": self.tokens_used,
-            "raw_text": self.raw_text
-        }
-
-
-class Town:
-    """A Town with 1 agent: Researcher (Tier 5 specialist)."""
-
-    def __init__(self, town_id: str, name: str, parent_city_id: str,
-                 parent_state_id: str, hyper_topic: str, charter: TownCharter):
-        self.town_id = town_id
-        self.name = name
-        self.parent_city_id = parent_city_id
-        self.parent_state_id = parent_state_id
-        self.hyper_topic = hyper_topic
-        self.charter = charter
-        self.tier = 0  # Towns start at 0 like all other entities
-        self.knowledge_entries: List[KnowledgeEntry] = []
-
-        # 1 agent
-        self.researcher: Optional[BaseAgent] = None
-        self.parent_city: Optional['City'] = None  # Reference to parent City
-
-    def _build_knowledge_context(self) -> str:
-        """Build cumulative knowledge from Town archive + parent City + grandparent State."""
-        # Get Town's own knowledge
-        if not self.knowledge_entries:
-            context = "No prior research yet. This is the first cycle."
-        else:
-            all_concepts = []
-            all_frameworks = []
-            all_applications = []
-
-            for entry in self.knowledge_entries:
-                all_concepts.extend(entry.concepts)
-                all_frameworks.extend(entry.frameworks)
-                all_applications.extend(entry.applications)
-
-            all_concepts = list(set(all_concepts))[:20]
-            all_frameworks = list(set(all_frameworks))[:15]
-            all_applications = list(set(all_applications))[:15]
-
-            context = f"PRIOR KNOWLEDGE (from {len(self.knowledge_entries)} previous cycles):\n\n"
-            context += f"Concepts discovered: {', '.join(all_concepts)}\n\n"
-            context += f"Frameworks built: {', '.join(all_frameworks)}\n\n"
-            context += f"Applications found: {', '.join(all_applications)}\n\n"
-
-        # Add parent City knowledge
-        if self.parent_city and hasattr(self.parent_city, 'knowledge_entries'):
-            city_concepts = []
-            for entry in self.parent_city.knowledge_entries[-5:]:
-                city_concepts.extend(entry.concepts)
-
-            if city_concepts:
-                context += f"\n\nPARENT CITY KNOWLEDGE ({self.parent_city.name}):\n"
-                context += f"Concepts: {', '.join(list(set(city_concepts))[:10])}\n"
-
-        # Add grandparent State knowledge
-        if (self.parent_city and hasattr(self.parent_city, 'parent_state') and
-            self.parent_city.parent_state and hasattr(self.parent_city.parent_state, 'knowledge_entries')):
-            state_frameworks = []
-            for entry in self.parent_city.parent_state.knowledge_entries[-5:]:
-                state_frameworks.extend(entry.frameworks)
-
-            if state_frameworks:
-                context += f"\nGRANDPARENT STATE KNOWLEDGE ({self.parent_city.parent_state.name}):\n"
-                context += f"Frameworks: {', '.join(list(set(state_frameworks))[:8])}\n"
-
-        return context
-
-    def query_knowledge(self, topic: str, max_entries: int = 10) -> List[dict]:
-        """
-        Query Town's knowledge archive for relevant findings on a topic.
-        Returns list of relevant knowledge entries.
-        """
-        relevant = []
-
-        for entry in self.knowledge_entries[-max_entries:]:  # Recent entries
-            # Simple relevance check
-            topic_lower = topic.lower()
-            if (topic_lower in entry.domain.lower() or
-                any(topic_lower in c.lower() for c in entry.concepts) or
-                any(topic_lower in f.lower() for f in entry.frameworks)):
-
-                relevant.append({
-                    "entity": self.name,
-                    "entity_type": "town",
-                    "topic": entry.domain,
-                    "tier": entry.tier,
-                    "concepts": entry.concepts[:5],
-                    "frameworks": entry.frameworks[:3],
-                    "synthesis": entry.synthesis[:200] if hasattr(entry, 'synthesis') else "",
-                    "cycle": entry.cycle_created
-                })
-
-        return relevant
-
-    def run_research_cycle(self, city_agenda: str, llm: LLMProvider,
-                          logger: AtlantisLogger, cycle: int) -> Dict:
-        """Deep specialist research, aims for Tier 5."""
-        if not self.researcher:
-            return {"tokens": 0}
-
-        # Researcher conducts deep research (with cumulative knowledge from Town + City + State)
-        knowledge_context = self._build_knowledge_context()
-
-        response = llm.complete(
-            system_prompt=self.researcher.get_system_prompt(),
-            user_prompt=(
-                f"TOWN RESEARCH — Cycle {cycle}\n\n"
-                f"City Agenda: {city_agenda}\n"
-                f"Your hyper-specific topic: {self.hyper_topic}\n\n"
-                f"{knowledge_context}\n\n"
-                f"YOU ALREADY KNOW the above from previous cycles, your parent City, and grandparent State.\n\n"
-                f"YOUR TASK: GO HYPER-DEEP. Aim for Tier 5 (Novel Insight) by:\n"
-                f"  - Finding what's underneath the deepest concepts\n"
-                f"  - Discovering novel connections no one has seen\n"
-                f"  - Synthesizing insights that emerge from extreme specialization\n"
-                f"  - Pushing past what City and State have found\n\n"
-                f"Produce: CONCEPTS (novel), FRAMEWORKS (original), APPLICATIONS (breakthrough), "
-                f"SYNTHESIS (Tier 5 insights), EVIDENCE (rigorous)"
-            ),
-            max_tokens=700,
-            temperature=0.7
-        )
-
-        findings = self._parse_findings(response.content or "", llm=llm)
-
-        # Create entry first (tier calculated from ALL entries below)
-        entry = KnowledgeEntry(
-            entry_id=f"{self.town_id}_{cycle}",
-            entity_id=self.town_id,
-            entity_type="town",
-            domain=self.hyper_topic,
-            tier=0,  # Temporary, updated below
-            concepts=findings["concepts"],
-            frameworks=findings["frameworks"],
-            applications=findings["applications"],
-            synthesis=findings["synthesis"],
-            evidence=findings["evidence"],
-            cycle_created=cycle,
-            tokens_used=response.total_tokens,
-            raw_text=response.content or ""
-        )
-
-        self.knowledge_entries.append(entry)
-
-        # Calculate tier from ALL knowledge entries (cumulative)
-        all_concepts = []
-        all_frameworks = []
-        all_applications = []
-        for e in self.knowledge_entries:
-            all_concepts.extend(e.concepts)
-            all_frameworks.extend(e.frameworks)
-            all_applications.extend(e.applications)
-
-        cumulative_findings = {
-            "concepts": all_concepts,
-            "frameworks": all_frameworks,
-            "applications": all_applications
-        }
-        new_tier = self._calculate_tier(cumulative_findings)
-
-        # Update tier for this entry and Town
-        entry.tier = new_tier
-        if new_tier > self.tier:
-            self.tier = new_tier
-            print(f"    ⚡ TIER ADVANCEMENT: {self.name} → Tier {new_tier}!")
-
-        return {"tokens": response.total_tokens, "tier": self.tier}
-
-    def summarize_knowledge(self) -> Dict:
-        """Summarize Town's findings."""
-        if not self.knowledge_entries:
-            return {"town": self.name, "tier": self.tier, "findings": "No research yet"}
-
-        latest = self.knowledge_entries[-1]
-        return {
-            "town": self.name,
-            "topic": self.hyper_topic,
-            "tier": self.tier,
-            "latest_finding": latest.synthesis[:200]
-        }
-
-    def _parse_findings(self, content: str, llm=None) -> Dict:
-        """Parse research findings using LLM extractor, with regex fallback."""
-        findings = {"concepts": [], "frameworks": [], "applications": [], "synthesis": "", "evidence": ""}
-        if not content:
-            return findings
-
-        # LLM extraction (primary)
-        if llm is not None:
-            try:
-                prompt = (
-                    "You are a structured data extractor.\n\n"
-                    "Extract ALL concepts and frameworks from this research output.\n\n"
-                    "Return ONLY valid JSON:\n"
-                    "{\n"
-                    '  "concepts": ["concept1", "concept2"],\n'
-                    '  "frameworks": ["framework1", "framework2"]\n'
-                    "}\n\n"
-                    f"RESEARCH OUTPUT:\n{content}"
-                )
-                resp = llm.complete(
-                    system_prompt="You are a structured data extractor. Return only valid JSON.",
-                    user_prompt=prompt,
-                    max_tokens=400,
-                    temperature=0.0
-                )
-                extracted = _extract_json(resp.content or "")
-                findings["concepts"] = [str(c) for c in extracted.get("concepts", [])]
-                findings["frameworks"] = [str(f) for f in extracted.get("frameworks", [])]
-                return findings
-            except Exception:
-                pass  # Fall through to regex
-
-        # Regex fallback: remove ** then split on ## headers
-        clean = content.replace("**", "")
-        parts = re.split(r'\n##\s*', clean)
-
-        for part in parts[1:]:
-            lines = part.split('\n')
-            header = lines[0].strip().upper()
-            body_lines = lines[1:]
-
-            if 'CONCEPT' in header:
-                key = 'concepts'
-            elif 'FRAMEWORK' in header:
-                key = 'frameworks'
-            elif 'APPLICATION' in header:
-                key = 'applications'
-            elif 'SYNTHESIS' in header:
-                findings['synthesis'] = '\n'.join(body_lines).strip()[:500]
-                continue
-            elif 'EVIDENCE' in header:
-                findings['evidence'] = '\n'.join(body_lines).strip()[:500]
-                continue
-            else:
-                continue
-
-            items = []
-            for line in body_lines:
-                line = line.strip()
-                if not line:
-                    continue
-                m = re.match(r'^[-•*\d.)]*\s*([^:\n]{3,60}):\s+(.{5,})', line)
-                if m:
-                    items.append(m.group(1).strip())
-                    continue
-                m = re.match(r'^[-•*\d.)]*\s*([^-\n]{3,60})\s+-\s+(.{5,})', line)
-                if m:
-                    items.append(m.group(1).strip())
-
-            findings[key] = list(dict.fromkeys(items))
-
-        return findings
-
-    def _calculate_tier(self, findings: Dict) -> int:
-        """Calculate tier based on findings."""
-        concept_count = len(findings["concepts"])
-        framework_count = len(findings["frameworks"])
-        app_count = len(findings["applications"])
-
-        # Check tier requirements from DEPTH_TIERS
-        if concept_count >= DEPTH_TIERS[5]["min_concepts"]:
-            return 5
-        elif concept_count >= DEPTH_TIERS[4]["min_concepts"]:
-            return 4
-        elif concept_count >= DEPTH_TIERS[3]["min_concepts"]:
-            return 3
-        elif concept_count >= DEPTH_TIERS[2]["min_concepts"]:
-            return 2
-        elif concept_count >= DEPTH_TIERS[1]["min_concepts"]:
-            return 1
-        return 0
-
-
-class City:
-    """A City with 2 agents: Researcher, Critic."""
-
-    def __init__(self, city_id: str, name: str, parent_state_id: str,
-                 sub_domain: str, charter: CityCharter):
-        self.city_id = city_id
-        self.name = name
-        self.parent_state_id = parent_state_id
-        self.sub_domain = sub_domain
-        self.charter = charter
-        self.tier = 0
-        self.knowledge_entries: List[KnowledgeEntry] = []
-        self.towns: List[Town] = []
-
-        # 2 agents
-        self.researcher: Optional[BaseAgent] = None
-        self.critic: Optional[BaseAgent] = None
-        self.parent_state: Optional['State'] = None  # Reference to parent State
-
-    def _build_knowledge_context(self) -> str:
-        """Build cumulative knowledge from City archive + parent State."""
-        # Get City's own knowledge (same pattern as State)
-        if not self.knowledge_entries:
-            context = "No prior research yet. This is the first cycle."
-        else:
-            all_concepts = []
-            all_frameworks = []
-            all_applications = []
-            critiques_and_defenses = []
-
-            for entry in self.knowledge_entries:
-                all_concepts.extend(entry.concepts)
-                all_frameworks.extend(entry.frameworks)
-                all_applications.extend(entry.applications)
-                if entry.challenged_by:
-                    critiques_and_defenses.append(
-                        f"Cycle {entry.cycle_created}: Challenged '{entry.challenged_by[:100]}' → "
-                        f"Defended '{entry.defense[:100]}'"
-                    )
-
-            all_concepts = list(set(all_concepts))[:20]
-            all_frameworks = list(set(all_frameworks))[:15]
-            all_applications = list(set(all_applications))[:15]
-
-            context = f"PRIOR KNOWLEDGE (from {len(self.knowledge_entries)} previous cycles):\n\n"
-            context += f"Concepts discovered: {', '.join(all_concepts)}\n\n"
-            context += f"Frameworks built: {', '.join(all_frameworks)}\n\n"
-            context += f"Applications found: {', '.join(all_applications)}\n\n"
-
-            if critiques_and_defenses:
-                context += f"Previous Critic challenges:\n"
-                for critique in critiques_and_defenses[-5:]:
-                    context += f"  - {critique}\n"
-
-        # Add parent State knowledge
-        if self.parent_state and hasattr(self.parent_state, 'knowledge_entries'):
-            parent_concepts = []
-            parent_frameworks = []
-            for entry in self.parent_state.knowledge_entries[-10:]:  # Last 10 State cycles
-                parent_concepts.extend(entry.concepts)
-                parent_frameworks.extend(entry.frameworks)
-
-            if parent_concepts or parent_frameworks:
-                context += f"\n\nPARENT STATE KNOWLEDGE ({self.parent_state.name}):\n"
-                context += f"Concepts: {', '.join(list(set(parent_concepts))[:10])}\n"
-                context += f"Frameworks: {', '.join(list(set(parent_frameworks))[:10])}\n"
-
-        return context
-
-    def _is_relevant(self, entry, topic: str) -> bool:
-        """Check if knowledge entry is relevant to topic."""
-        topic_lower = topic.lower()
-        return (topic_lower in entry.domain.lower() or
-                any(topic_lower in c.lower() for c in entry.concepts) or
-                any(topic_lower in f.lower() for f in entry.frameworks) or
-                any(topic_lower in a.lower() for a in entry.applications))
-
-    def query_knowledge(self, topic: str, max_entries: int = 20) -> List[dict]:
-        """
-        Query City's knowledge + all Towns' knowledge for relevant findings.
-        Pull-based: only queries Towns when needed.
-        """
-        relevant = []
-
-        # Query City's own knowledge
-        for entry in self.knowledge_entries[-max_entries:]:
-            if self._is_relevant(entry, topic):
-                relevant.append({
-                    "entity": self.name,
-                    "entity_type": "city",
-                    "topic": entry.domain,
-                    "tier": entry.tier,
-                    "concepts": entry.concepts[:5],
-                    "frameworks": entry.frameworks[:3],
-                    "synthesis": entry.synthesis[:200] if hasattr(entry, 'synthesis') else "",
-                    "cycle": entry.cycle_created
-                })
-
-        # Query all Towns (pull on-demand)
-        for town in self.towns:
-            if hasattr(town, 'query_knowledge'):
-                town_findings = town.query_knowledge(topic, max_entries=5)
-                relevant.extend(town_findings)
-
-        return relevant[:max_entries]  # Limit total results
-
-    def run_research_cycle(self, state_agenda: str, llm: LLMProvider,
-                          logger: AtlantisLogger, cycle: int) -> Dict:
-        """Researcher → Critic adversarial loop."""
-        if not self.researcher or not self.critic:
-            return {"tokens": 0}
-
-        total_tokens = 0
-
-        # Run Town research cycles first
-        for town in self.towns:
-            town_result = town.run_research_cycle(state_agenda, llm, logger, cycle)
-            total_tokens += town_result["tokens"]
-
-        # Researcher researches (with cumulative knowledge)
-        knowledge_context = self._build_knowledge_context()
-
-        research_response = llm.complete(
-            system_prompt=self.researcher.get_system_prompt(),
-            user_prompt=(
-                f"CITY RESEARCH — Cycle {cycle}\n\n"
-                f"State Agenda: {state_agenda}\n"
-                f"Your sub-domain: {self.sub_domain}\n\n"
-                f"{knowledge_context}\n\n"
-                f"YOU ALREADY KNOW the above concepts, frameworks, and applications from previous cycles "
-                f"and from your parent State.\n\n"
-                f"YOUR TASK: GO DEEPER in this specialized sub-domain. Don't repeat what you know:\n"
-                f"  - What's underneath these concepts?\n"
-                f"  - How do these frameworks connect?\n"
-                f"  - What contradicts what we've found?\n"
-                f"  - What new synthesis emerges?\n\n"
-                f"Produce: CONCEPTS (new), FRAMEWORKS (extensions), APPLICATIONS (novel), "
-                f"SYNTHESIS (deeper insights), EVIDENCE (reasoning)"
-            ),
-            max_tokens=600,
-            temperature=0.7
-        )
-        total_tokens += research_response.total_tokens
-
-        # Critic challenges (with escalation)
-        recent_challenges = []
-        if self.knowledge_entries:
-            for entry in self.knowledge_entries[-3:]:
-                if entry.challenged_by and entry.defense:
-                    recent_challenges.append(
-                        f"Previously: Challenged '{entry.challenged_by[:80]}' → "
-                        f"Defended '{entry.defense[:80]}'"
-                    )
-
-        challenge_context = ""
-        if recent_challenges:
-            challenge_context = "PREVIOUS CHALLENGES:\n" + "\n".join(recent_challenges) + "\n\n"
-
-        critique_response = llm.complete(
-            system_prompt=self.critic.get_system_prompt(),
-            user_prompt=(
-                f"CHALLENGE THIS RESEARCH:\n{(research_response.content or '')[:500]}\n\n"
-                f"{challenge_context}"
-                f"Escalate pressure. Don't ask basic questions we've resolved:\n"
-                f"  - What assumptions STILL haven't been tested?\n"
-                f"  - Where's the evidence for these NEW claims?\n"
-                f"  - What's STILL missing or weak?\n\n"
-                f"Push harder than last time."
-            ),
-            max_tokens=300,
-            temperature=0.7
-        )
-        total_tokens += critique_response.total_tokens
-
-        # Researcher defends
-        defense_response = llm.complete(
-            system_prompt=self.researcher.get_system_prompt(),
-            user_prompt=(
-                f"Critic says: {(critique_response.content or '')[:300]}\n\n"
-                f"Defend your findings or revise them."
-            ),
-            max_tokens=400,
-            temperature=0.7
-        )
-        total_tokens += defense_response.total_tokens
-
-        findings = self._parse_findings(research_response.content or "", llm=llm)
-
-        # Create entry first (tier calculated from ALL entries below)
-        entry = KnowledgeEntry(
-            entry_id=f"{self.city_id}_{cycle}",
-            entity_id=self.city_id,
-            entity_type="city",
-            domain=self.sub_domain,
-            tier=0,  # Temporary, updated below
-            concepts=findings["concepts"],
-            frameworks=findings["frameworks"],
-            applications=findings["applications"],
-            synthesis=findings["synthesis"],
-            evidence=findings["evidence"],
-            challenged_by=(critique_response.content or "")[:200],
-            defense=(defense_response.content or "")[:200],
-            cycle_created=cycle,
-            tokens_used=total_tokens,
-            raw_text=research_response.content or ""
-        )
-
-        self.knowledge_entries.append(entry)
-
-        # Calculate tier from ALL knowledge entries (cumulative)
-        all_concepts = []
-        all_frameworks = []
-        all_applications = []
-        for e in self.knowledge_entries:
-            all_concepts.extend(e.concepts)
-            all_frameworks.extend(e.frameworks)
-            all_applications.extend(e.applications)
-
-        cumulative_findings = {
-            "concepts": all_concepts,
-            "frameworks": all_frameworks,
-            "applications": all_applications
-        }
-        new_tier = self._calculate_tier(cumulative_findings)
-
-        # Update tier for this entry and City
-        entry.tier = new_tier
-        if new_tier > self.tier:
-            self.tier = new_tier
-            print(f"    ⚡ TIER ADVANCEMENT: {self.name} → Tier {new_tier}!")
-
-        return {"tokens": total_tokens, "tier": self.tier}
-
-    def can_form_town(self) -> tuple[bool, str]:
-        """Check if City is Tier 4+."""
-        if self.tier >= 4:
-            if len(self.towns) >= HARD_CONSTRAINTS["max_towns_per_city"]:
-                return False, f"Max towns per city reached ({HARD_CONSTRAINTS['max_towns_per_city']})"
-            return True, "Can form town"
-        return False, f"Must reach Tier 4 (currently Tier {self.tier})"
-
-    def summarize_knowledge(self) -> Dict:
-        """Roll up Town findings + City findings."""
-        town_summaries = [town.summarize_knowledge() for town in self.towns]
-        latest_finding = ""
-        if self.knowledge_entries:
-            latest_finding = self.knowledge_entries[-1].synthesis[:200]
-
-        return {
-            "city": self.name,
-            "sub_domain": self.sub_domain,
-            "tier": self.tier,
-            "towns": town_summaries,
-            "latest_finding": latest_finding
-        }
-
-    def _parse_findings(self, content: str, llm=None) -> Dict:
-        """Parse research findings using LLM extractor, with regex fallback."""
-        findings = {"concepts": [], "frameworks": [], "applications": [], "synthesis": "", "evidence": ""}
-        if not content:
-            return findings
-
-        # LLM extraction (primary)
-        if llm is not None:
-            try:
-                prompt = (
-                    "You are a structured data extractor.\n\n"
-                    "Extract ALL concepts and frameworks from this research output.\n\n"
-                    "Return ONLY valid JSON:\n"
-                    "{\n"
-                    '  "concepts": ["concept1", "concept2"],\n'
-                    '  "frameworks": ["framework1", "framework2"]\n'
-                    "}\n\n"
-                    f"RESEARCH OUTPUT:\n{content}"
-                )
-                resp = llm.complete(
-                    system_prompt="You are a structured data extractor. Return only valid JSON.",
-                    user_prompt=prompt,
-                    max_tokens=400,
-                    temperature=0.0
-                )
-                extracted = _extract_json(resp.content or "")
-                findings["concepts"] = [str(c) for c in extracted.get("concepts", [])]
-                findings["frameworks"] = [str(f) for f in extracted.get("frameworks", [])]
-                return findings
-            except Exception:
-                pass  # Fall through to regex
-
-        # Regex fallback: remove ** then split on ## headers
-        clean = content.replace("**", "")
-        parts = re.split(r'\n##\s*', clean)
-
-        for part in parts[1:]:
-            lines = part.split('\n')
-            header = lines[0].strip().upper()
-            body_lines = lines[1:]
-
-            if 'CONCEPT' in header:
-                key = 'concepts'
-            elif 'FRAMEWORK' in header:
-                key = 'frameworks'
-            elif 'APPLICATION' in header:
-                key = 'applications'
-            elif 'SYNTHESIS' in header:
-                findings['synthesis'] = '\n'.join(body_lines).strip()[:500]
-                continue
-            elif 'EVIDENCE' in header:
-                findings['evidence'] = '\n'.join(body_lines).strip()[:500]
-                continue
-            else:
-                continue
-
-            items = []
-            for line in body_lines:
-                line = line.strip()
-                if not line:
-                    continue
-                m = re.match(r'^[-•*\d.)]*\s*([^:\n]{3,60}):\s+(.{5,})', line)
-                if m:
-                    items.append(m.group(1).strip())
-                    continue
-                m = re.match(r'^[-•*\d.)]*\s*([^-\n]{3,60})\s+-\s+(.{5,})', line)
-                if m:
-                    items.append(m.group(1).strip())
-
-            findings[key] = list(dict.fromkeys(items))
-
-        return findings
-
-    def _calculate_tier(self, findings: Dict) -> int:
-        """Calculate tier based on findings."""
-        concept_count = len(findings["concepts"])
-
-        if concept_count >= DEPTH_TIERS[5]["min_concepts"]:
-            return 5
-        elif concept_count >= DEPTH_TIERS[4]["min_concepts"]:
-            return 4
-        elif concept_count >= DEPTH_TIERS[3]["min_concepts"]:
-            return 3
-        elif concept_count >= DEPTH_TIERS[2]["min_concepts"]:
-            return 2
-        elif concept_count >= DEPTH_TIERS[1]["min_concepts"]:
-            return 1
-        return 0
-
+    state_a: 'State'
+    state_b: 'State'
+    pair_id: str
+    cycle_formed: int
+    warmup_remaining: int = 0
+
+
+# ═══════════════════════════════════════
+# STATE CLASS
+# ═══════════════════════════════════════
 
 class State:
-    """A State with 4 agents: Governor, Researcher, Critic, Senator."""
+    """
+    An adversarial research State with 4 agents.
+    Researcher produces claims. Critic challenges rivals. Senator votes/appeals.
+    Lab generates radical hypotheses.
+    """
 
-    def __init__(self, state_id: str, name: str, domain: str,
-                 constitution: StateConstitution, formed_cycle: int):
-        self.state_id = state_id
+    def __init__(
+        self,
+        name: str,
+        domain: str,
+        approach: str,
+        budget: int,
+        db: PersistenceLayer,
+        models: ModelRouter,
+        cycle_formed: int,
+    ):
         self.name = name
         self.domain = domain
-        self.constitution = constitution
-        self.formed_cycle = formed_cycle
+        self.approach = approach
+        self.token_budget = budget
         self.tier = 0
-        self.knowledge_entries: List[KnowledgeEntry] = []
-        self.cities: List[City] = []
+        self.consecutive_probation = 0
+        self.cities: List['City'] = []
+        self.towns: List['Town'] = []
+        self.is_active = True
 
-        # 4 agents
-        self.governor: Optional[BaseAgent] = None
-        self.researcher: Optional[BaseAgent] = None
-        self.critic: Optional[BaseAgent] = None
-        self.senator: Optional[BaseAgent] = None
+        self.researcher_config: AgentConfig = create_state_researcher(name, domain, approach)
+        self.critic_config: AgentConfig = create_state_critic(name, domain, approach)
+        self.senator_config: AgentConfig = create_state_senator(name, domain)
+        self.lab_config: AgentConfig = create_state_lab(name, domain, approach)
 
-    def _build_knowledge_context(self) -> str:
-        """Build cumulative knowledge summary from all prior research cycles."""
-        if not self.knowledge_entries:
-            return "No prior research yet. This is the first cycle."
+        self.db = db
+        self.models = models
 
-        # Collect all concepts, frameworks, applications across all cycles
-        all_concepts = []
-        all_frameworks = []
-        all_applications = []
-        critiques_and_defenses = []
-
-        for entry in self.knowledge_entries:
-            all_concepts.extend(entry.concepts)
-            all_frameworks.extend(entry.frameworks)
-            all_applications.extend(entry.applications)
-            if entry.challenged_by:
-                critiques_and_defenses.append(
-                    f"Cycle {entry.cycle_created}: Challenged '{entry.challenged_by[:100]}' → "
-                    f"Defended '{entry.defense[:100]}'"
-                )
-
-        # Deduplicate and limit to save tokens
-        all_concepts = list(set(all_concepts))[:20]
-        all_frameworks = list(set(all_frameworks))[:15]
-        all_applications = list(set(all_applications))[:15]
-
-        context = f"PRIOR KNOWLEDGE (from {len(self.knowledge_entries)} previous cycles):\n\n"
-        context += f"Concepts discovered: {', '.join(all_concepts)}\n\n"
-        context += f"Frameworks built: {', '.join(all_frameworks)}\n\n"
-        context += f"Applications found: {', '.join(all_applications)}\n\n"
-
-        if critiques_and_defenses:
-            context += f"Previous Critic challenges:\n"
-            for critique in critiques_and_defenses[-5:]:  # Last 5 challenges
-                context += f"  - {critique}\n"
-
-        return context
-
-    def _get_tier_requirements(self, target_tier: int) -> str:
-        """Get specific requirements for reaching the next tier."""
-        from config.settings import DEPTH_TIERS
-
-        tier_info = DEPTH_TIERS.get(target_tier)
-        if not tier_info:
-            return "No specific requirements (maximum tier reached)"
-
-        requirements = f"To reach Tier {target_tier} ({tier_info['name']}):\n"
-        requirements += f"  - Minimum {tier_info['min_concepts']} concepts\n"
-        requirements += f"  - Minimum {tier_info['min_frameworks']} frameworks\n"
-        requirements += f"  - Minimum {tier_info['min_applications']} applications\n"
-        requirements += f"Requirements: {', '.join(tier_info['requirements'])}\n"
-
-        return requirements
-
-    def _should_propose_city(self) -> tuple:
-        """
-        Determine if knowledge has branched enough to warrant City formation.
-        Returns: (should_propose, sub_domain, rationale)
-        """
-        # Must be at least Tier 3 to form Cities
-        if self.tier < 3:
-            return False, "", ""
-
-        # Check if we have diverse frameworks/applications indicating sub-specialization
-        if len(self.knowledge_entries) < 3:
-            return False, "", ""  # Need at least 3 cycles of research
-
-        # Collect recent frameworks to identify potential sub-domains
-        recent_frameworks = []
-        for entry in self.knowledge_entries[-5:]:  # Last 5 cycles
-            recent_frameworks.extend(entry.frameworks)
-
-        # If we have 5+ distinct frameworks, knowledge may have branched
-        if len(set(recent_frameworks)) >= 5:
-            return True, "", "Multiple distinct frameworks suggest sub-specialization"
-
-        return False, "", ""
-
-    def _is_relevant(self, entry, topic: str) -> bool:
-        """Check if knowledge entry is relevant to topic."""
-        topic_lower = topic.lower()
-        return (topic_lower in entry.domain.lower() or
-                any(topic_lower in c.lower() for c in entry.concepts) or
-                any(topic_lower in f.lower() for f in entry.frameworks) or
-                any(topic_lower in a.lower() for a in entry.applications))
-
-    def query_knowledge(self, topic: str, max_entries: int = 30) -> List[dict]:
-        """
-        Query State's knowledge + all Cities' + all Towns' knowledge.
-        Pull-based: only queries downward when needed.
-        """
-        relevant = []
-
-        # Query State's own knowledge
-        for entry in self.knowledge_entries[-max_entries:]:
-            if self._is_relevant(entry, topic):
-                relevant.append({
-                    "entity": self.name,
-                    "entity_type": "state",
-                    "topic": entry.domain,
-                    "tier": entry.tier,
-                    "concepts": entry.concepts[:5],
-                    "frameworks": entry.frameworks[:3],
-                    "applications": entry.applications[:3],
-                    "synthesis": entry.synthesis[:200] if hasattr(entry, 'synthesis') else "",
-                    "cycle": entry.cycle_created
-                })
-
-        # Query all Cities (which will query their Towns)
-        for city in self.cities:
-            if hasattr(city, 'query_knowledge'):
-                city_findings = city.query_knowledge(topic, max_entries=10)
-                relevant.extend(city_findings)
-
-        return relevant[:max_entries]  # Limit total results
-
-    def run_research_cycle(self, federal_agenda: str, llm: LLMProvider,
-                          logger: AtlantisLogger, cycle: int) -> Dict:
-        """Governor → Researcher → Critic loop. Sync Senator knowledge after."""
-        print(f"    DEBUG AGENTS: governor={self.governor is not None}, researcher={self.researcher is not None}, critic={self.critic is not None}")
-        if not self.governor or not self.researcher or not self.critic:
-            print(f"    DEBUG: Early exit — missing agents")
-            return {"tokens": 0}
-
-        total_tokens = 0
-
-        # Run City research cycles first
-        for city in self.cities:
-            city_result = city.run_research_cycle(federal_agenda, llm, logger, cycle)
-            total_tokens += city_result["tokens"]
-
-        # 1. Governor sets State agenda (with cumulative knowledge and tier requirements)
-        knowledge_context = self._build_knowledge_context()
-        tier_requirements = self._get_tier_requirements(self.tier + 1)
-
-        # Governor pulls City knowledge when setting agenda (pull-based)
-        city_knowledge = []
-        for city in self.cities:
-            city_summary = {
-                "city": city.name,
-                "subdomain": getattr(city, 'sub_domain', city.domain),  # Fixed: City uses sub_domain not subdomain
-                "tier": city.tier,
-                "recent_concepts": city.knowledge_entries[-1].concepts[:5] if city.knowledge_entries else []
-            }
-            city_knowledge.append(city_summary)
-
-        gov_response = llm.complete(
-            system_prompt=self.governor.get_system_prompt(),
-            user_prompt=(
-                f"AGENDA SETTING — Cycle {cycle}\n\n"
-                f"Federal Agenda: {federal_agenda}\n"
-                f"State: {self.name} (Tier {self.tier})\n"
-                f"Domain: {self.domain}\n\n"
-                f"{knowledge_context}\n\n"
-                f"CITY KNOWLEDGE (pulled on-demand):\n{city_knowledge}\n\n" if city_knowledge else ""
-                f"{tier_requirements}\n\n"
-                f"Previous cycles summary: We've conducted {len(self.knowledge_entries)} research cycles.\n\n"
-                f"YOUR TASK: Set research priorities for THIS cycle. What specific gaps must we fill "
-                f"to advance to Tier {self.tier + 1}? What deeper layer should we explore? "
-                f"Be specific about what to investigate."
-            ),
-            max_tokens=300,
-            temperature=0.7
+        db.save_state_budget(
+            state_name=name,
+            domain=domain,
+            approach=approach,
+            budget=budget,
+            rival_name="",
+            cycle=cycle_formed,
         )
-        state_agenda = gov_response.content or ""
-        total_tokens += gov_response.total_tokens
 
-        # 2. Researcher researches (with cumulative knowledge)
-        research_response = llm.complete(
-            system_prompt=self.researcher.get_system_prompt(),
+    def produce_claim(
+        self,
+        archive_context: str,
+        meta_learning: str,
+        lab_hypothesis: Optional[str] = None,
+    ) -> str:
+        """
+        Researcher decides: formalize Lab hypothesis or produce own claim.
+        Returns raw claim text.
+        """
+        base = (
+            f"Domain: {self.domain}\nApproach: {self.approach}\n\n"
+            f"ARCHIVE CONTEXT (surviving claims in your domain):\n{archive_context}\n\n"
+            f"META-LEARNING (recent destroyed claims with judge reasoning):\n{meta_learning}\n\n"
+        )
+        if lab_hypothesis:
+            base += (
+                f"LAB HYPOTHESIS (optional — you may formalize this):\n{lab_hypothesis}\n\n"
+            )
+        base += (
+            "Produce a Foundation, Discovery, or Challenge claim. Use this structure:\n\n"
+            "CLAIM TYPE: [Foundation|Discovery|Challenge]\n"
+            "POSITION: [one sentence]\n"
+            "STEP 1: [reasoning]\n"
+            "STEP 2: [reasoning]\n"
+            "(add steps as needed)\n"
+            "CONCLUSION: [one sentence]\n"
+            "CITATIONS: [#ID, #ID] (if applicable)\n"
+            "KEYWORDS: [3-5 terms]"
+        )
+        response = self.models.complete(
+            task_type="researcher_claims",
+            system_prompt=self.researcher_config.system_prompt,
+            user_prompt=base,
+            max_tokens=1200,
+        )
+        return response.content or ""
+
+    def produce_lab_hypothesis(
+        self, open_questions: str, destroyed_claims: str
+    ) -> Optional[str]:
+        """Lab Agent generates radical hypothesis — max 1 per cycle."""
+        response = self.models.complete(
+            task_type="federal_lab",
+            system_prompt=self.lab_config.system_prompt,
             user_prompt=(
-                f"STATE RESEARCH — Cycle {cycle}\n\n"
-                f"Agenda: {state_agenda}\n\n"
-                f"{knowledge_context}\n\n"
-                f"YOU ALREADY KNOW the above concepts, frameworks, and applications. "
-                f"You've been challenged by the Critic before and defended your findings.\n\n"
-                f"YOUR TASK: GO DEEPER. Don't repeat what you already know. Instead:\n"
-                f"  - What's underneath these concepts? What's the next layer down?\n"
-                f"  - How do these frameworks connect? What's missing between them?\n"
-                f"  - What contradicts or challenges what we've found?\n"
-                f"  - What new synthesis emerges from combining prior findings?\n\n"
-                f"Produce: CONCEPTS (new, not repeats), FRAMEWORKS (extensions or new), "
-                f"APPLICATIONS (novel), SYNTHESIS (deeper insights), EVIDENCE (citations/reasoning)"
+                f"Open questions from your domain:\n{open_questions}\n\n"
+                f"Recently destroyed claims:\n{destroyed_claims}\n\n"
+                f"Generate a radical hypothesis using the prefix: "
+                f"'HYPOTHESIS — UNVERIFIED: '"
+            ),
+            max_tokens=600,
+        )
+        content = response.content or ""
+        if "HYPOTHESIS" in content.upper():
+            return content
+        return None
+
+    def produce_challenge(
+        self, rival_claim_full: str, rival_premises: dict
+    ) -> str:
+        """
+        Critic challenges rival's claim. Must target a specific reasoning step.
+        NEVER truncates the rival claim.
+        """
+        premises_text = (
+            f"Explicit premises: {rival_premises.get('explicit_premises', [])}\n"
+            f"Implicit assumptions: {rival_premises.get('implicit_assumptions', [])}"
+        )
+        response = self.models.complete(
+            task_type="critic_challenges",
+            system_prompt=self.critic_config.system_prompt,
+            user_prompt=(
+                f"RIVAL CLAIM (full text):\n{rival_claim_full}\n\n"
+                f"DECOMPOSED PREMISES:\n{premises_text}\n\n"
+                f"Challenge this claim. Identify a specific step and explain why it fails.\n"
+                f"Format:\n"
+                f"STEP TARGETED: [step number or phrase]\n"
+                f"FLAW: [explain the logical flaw]\n"
+                f"ALTERNATIVE: [what the evidence actually supports]\n"
+                f"EVIDENCE: [your counter-evidence]"
             ),
             max_tokens=800,
-            temperature=0.7
         )
-        total_tokens += research_response.total_tokens
+        return response.content or ""
 
-        # 3. Critic challenges (with escalation based on previous challenges)
-        recent_challenges = []
-        if self.knowledge_entries:
-            for entry in self.knowledge_entries[-3:]:  # Last 3 cycles
-                if entry.challenged_by and entry.defense:
-                    recent_challenges.append(
-                        f"Previously: Challenged '{entry.challenged_by[:80]}' → "
-                        f"Defended '{entry.defense[:80]}'"
-                    )
-
-        challenge_context = ""
-        if recent_challenges:
-            challenge_context = "PREVIOUS CHALLENGES:\n" + "\n".join(recent_challenges) + "\n\n"
-
-        critique_response = llm.complete(
-            system_prompt=self.critic.get_system_prompt(),
-            user_prompt=(
-                f"CHALLENGE THIS RESEARCH:\n{(research_response.content or '')[:500]}\n\n"
-                f"{challenge_context}"
-                f"YOUR TASK: Escalate pressure. Don't ask basic questions we've already resolved. "
-                f"Based on our research history above:\n"
-                f"  - What assumptions STILL haven't been tested?\n"
-                f"  - Where's the evidence for these NEW claims?\n"
-                f"  - What counterargument challenges these deeper findings?\n"
-                f"  - What's STILL missing or weak?\n\n"
-                f"Push harder than last time. Force the Researcher to go even deeper."
-            ),
-            max_tokens=400,
-            temperature=0.7
-        )
-        total_tokens += critique_response.total_tokens
-
-        # 4. Researcher defends
-        defense_response = llm.complete(
-            system_prompt=self.researcher.get_system_prompt(),
-            user_prompt=(
-                f"Critic says: {(critique_response.content or '')[:400]}\n\n"
-                f"Defend your findings or revise them."
-            ),
-            max_tokens=500,
-            temperature=0.7
-        )
-        total_tokens += defense_response.total_tokens
-
-        # Parse findings and create knowledge entry
-        raw_content = research_response.content or ""
-        print(f"    DEBUG RAW RESEARCH: {raw_content[:300]}")
-        findings = self._parse_findings(raw_content, llm=llm)
-        print(f"    DEBUG: parsed concepts = {findings.get('concepts', [])}")
-        print(f"    DEBUG: parsed frameworks = {findings.get('frameworks', [])}")
-
-        # Create entry first (tier calculated from ALL entries below)
-        entry = KnowledgeEntry(
-            entry_id=f"{self.state_id}_{cycle}",
-            entity_id=self.state_id,
-            entity_type="state",
-            domain=self.domain,
-            tier=0,  # Will be recalculated below
-            concepts=findings["concepts"],
-            frameworks=findings["frameworks"],
-            applications=findings["applications"],
-            synthesis=findings["synthesis"],
-            evidence=findings["evidence"],
-            challenged_by=(critique_response.content or "")[:200],
-            defense=(defense_response.content or "")[:200],
-            cycle_created=cycle,
-            tokens_used=total_tokens,
-            raw_text=raw_content
-        )
-
-        self.knowledge_entries.append(entry)
-
-        # Calculate tier from ALL knowledge entries (cumulative)
-        all_concepts = []
-        all_frameworks = []
-        all_applications = []
-        for e in self.knowledge_entries:
-            all_concepts.extend(e.concepts)
-            all_frameworks.extend(e.frameworks)
-            all_applications.extend(e.applications)
-
-        cumulative_findings = {
-            "concepts": all_concepts,
-            "frameworks": all_frameworks,
-            "applications": all_applications
-        }
-        new_tier = self._calculate_tier(cumulative_findings)
-        tier_advanced = new_tier > self.tier
-
-        # Update tier for this entry and State
-        entry.tier = new_tier
-        if new_tier > self.tier:
-            self.tier = new_tier
-            print(f"    ⚡ TIER ADVANCEMENT: {self.name} → Tier {new_tier}!")
-
-        # 6. SYNC SENATOR KNOWLEDGE
-        self.sync_senator_knowledge()
-
-        # 7. GENERATE CONTENT FROM THIS RESEARCH CYCLE
-        try:
-            from content.generator import generate_research_script
-            script = generate_research_script(
-                state=self,
-                cycle=cycle,
-                research_output={
-                    "concepts": findings["concepts"],
-                    "frameworks": findings["frameworks"],
-                    "applications": findings["applications"],
-                    "synthesis": findings["synthesis"],
-                    "critique": (critique_response.content or "")[:300],
-                    "defense": (defense_response.content or "")[:300]
-                },
-                llm=llm
-            )
-
-            if script:
-                # Save script to file
-                import os
-                import json
-                from datetime import datetime, timezone
-
-                scripts_dir = os.path.join(logger.log_dir, "..", "content", "scripts")
-                os.makedirs(scripts_dir, exist_ok=True)
-
-                script_filename = f"state_{self.state_id}_cycle_{cycle}_research.txt"
-                script_path = os.path.join(scripts_dir, script_filename)
-
-                with open(script_path, "w") as f:
-                    f.write(script)
-
-                print(f"    ✓ Generated TikTok script: {script_filename} ({len(script.split())} words)")
-
-                # Update index
-                index_path = os.path.join(scripts_dir, "index.json")
-                if os.path.exists(index_path):
-                    with open(index_path, "r") as f:
-                        index = json.load(f)
-                else:
-                    index = {"scripts": []}
-
-                index["scripts"].append({
-                    "id": f"state_{self.state_id}_cycle_{cycle}_research",
-                    "type": "research_cycle",
-                    "state": self.name,
-                    "domain": self.domain,
-                    "tier": self.tier,
-                    "cycle": cycle,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "word_count": len(script.split())
-                })
-
-                with open(index_path, "w") as f:
-                    json.dump(index, f, indent=2)
-
-        except Exception as e:
-            print(f"    ⚠ Content generation failed: {e}")
-
-        return {
-            "state_name": self.name,
-            "domain": self.domain,
-            "tier": self.tier,
-            "tier_advanced": tier_advanced,
-            "new_tier": new_tier,
-            "tokens": total_tokens,
-            "evidence": findings["evidence"][:100],
-            "findings": findings
-        }
-
-    def sync_senator_knowledge(self):
+    def produce_rebuttal(
+        self, challenge_text: str, original_claim: str
+    ) -> str:
         """
-        Sync Senator's knowledge with State's latest findings.
-        Pull-based: Senator queries State when needed (before votes).
-        Only sync recent findings (last 3 cycles), not everything.
+        Researcher rebuts a challenge (from rival Critic OR Federal Lab).
+        Must choose Option A (Defend), B (Concede and Narrow), or C (Retract).
         """
-        if not self.senator:
-            return
+        response = self.models.complete(
+            task_type="researcher_rebuttals",
+            system_prompt=self.researcher_config.system_prompt,
+            user_prompt=(
+                f"YOUR ORIGINAL CLAIM:\n{original_claim}\n\n"
+                f"CHALLENGE:\n{challenge_text}\n\n"
+                f"Choose your response:\n"
+                f"Option A — DEFEND: rebut the challenge with new reasoning\n"
+                f"Option B — CONCEDE AND NARROW: acknowledge partial flaw, narrow the claim\n"
+                f"Option C — RETRACT: the challenge is fatal, withdraw the claim\n\n"
+                f"Begin with 'OPTION A:', 'OPTION B:', or 'OPTION C:'"
+            ),
+            max_tokens=800,
+        )
+        return response.content or ""
 
-        # Only sync recent findings (last 3 cycles), not everything
-        recent_entries = self.knowledge_entries[-3:] if len(self.knowledge_entries) > 3 else self.knowledge_entries
+    def produce_senate_vote(
+        self, motion_text: str, context: str
+    ) -> str:
+        """Senator votes on a Senate motion (pair formation, dissolution, etc.)."""
+        row = self.db.get_state_budget_row(self.name)
+        budget = row.get("token_budget", self.token_budget) if row else self.token_budget
+        surviving = self.db.get_surviving_claims_count(self.name)
 
-        for entry in recent_entries:
-            self.senator.update_knowledge(
-                domain=entry.domain,
-                tier=entry.tier,
-                concepts=entry.concepts[:10],  # Limit to top 10
-                frameworks=entry.frameworks[:5],  # Limit to top 5
-                applications=entry.applications[:5]  # Limit to top 5
-            )
+        response = self.models.complete(
+            task_type="researcher_claims",
+            system_prompt=self.senator_config.system_prompt,
+            user_prompt=(
+                f"State: {self.name} | Domain: {self.domain} | Tier: {self.tier}\n"
+                f"Token budget: {budget} | Surviving claims: {surviving}\n\n"
+                f"MOTION: {motion_text}\n\n"
+                f"CONTEXT:\n{context}\n\n"
+                f"Vote YES or NO. Begin with 'YES:' or 'NO:' then explain (1-2 sentences)."
+            ),
+            max_tokens=200,
+        )
+        return response.content or ""
 
-    def can_form_city(self) -> tuple[bool, str]:
-        """Check if State is Tier 3+."""
-        if self.tier >= 3:
-            if len(self.cities) >= HARD_CONSTRAINTS["max_cities_per_state"]:
-                return False, f"Max cities per state reached ({HARD_CONSTRAINTS['max_cities_per_state']})"
-            return True, "Can form city"
-        return False, f"Must reach Tier 3 (currently Tier {self.tier})"
+    def earn_tokens(self, amount: int):
+        self.token_budget += amount
+        self.db.update_state_budget(self.name, amount)
 
-    def summarize_knowledge(self) -> Dict:
-        """Roll up City findings + State findings."""
-        city_summaries = [city.summarize_knowledge() for city in self.cities]
-        latest_finding = ""
-        if self.knowledge_entries:
-            latest_finding = self.knowledge_entries[-1].synthesis[:200]
+    def deduct_tokens(self, amount: int):
+        """Clamps to 0 floor."""
+        actual = min(amount, self.token_budget)
+        self.token_budget = max(0, self.token_budget - amount)
+        self.db.update_state_budget(self.name, -actual)
 
-        return {
-            "state": self.name,
-            "domain": self.domain,
-            "tier": self.tier,
-            "cities": city_summaries,
-            "latest_finding": latest_finding
-        }
+    def __repr__(self) -> str:
+        return f"State({self.name}, {self.domain}, tier={self.tier}, budget={self.token_budget})"
 
-    def _parse_findings(self, content: str, llm=None) -> Dict:
-        """Parse research findings using LLM extractor, with regex fallback."""
-        findings = {"concepts": [], "frameworks": [], "applications": [], "synthesis": "", "evidence": ""}
-        if not content:
-            return findings
 
-        # LLM extraction (primary)
-        if llm is not None:
-            try:
-                prompt = (
-                    "You are a structured data extractor.\n\n"
-                    "Extract ALL concepts and frameworks from this research output.\n\n"
-                    "Return ONLY valid JSON:\n"
-                    "{\n"
-                    '  "concepts": ["concept1", "concept2"],\n'
-                    '  "frameworks": ["framework1", "framework2"]\n'
-                    "}\n\n"
-                    f"RESEARCH OUTPUT:\n{content}"
-                )
-                resp = llm.complete(
-                    system_prompt="You are a structured data extractor. Return only valid JSON.",
-                    user_prompt=prompt,
-                    max_tokens=400,
-                    temperature=0.0
-                )
-                extracted = _extract_json(resp.content or "")
-                findings["concepts"] = [str(c) for c in extracted.get("concepts", [])]
-                findings["frameworks"] = [str(f) for f in extracted.get("frameworks", [])]
-                return findings
-            except Exception:
-                pass  # Fall through to regex
-
-        # Regex fallback: remove ** then split on ## headers
-        clean = content.replace("**", "")
-        parts = re.split(r'\n##\s*', clean)
-
-        for part in parts[1:]:
-            lines = part.split('\n')
-            header = lines[0].strip().upper()
-            body_lines = lines[1:]
-
-            if 'CONCEPT' in header:
-                key = 'concepts'
-            elif 'FRAMEWORK' in header:
-                key = 'frameworks'
-            elif 'APPLICATION' in header:
-                key = 'applications'
-            elif 'SYNTHESIS' in header:
-                findings['synthesis'] = '\n'.join(body_lines).strip()[:500]
-                continue
-            elif 'EVIDENCE' in header:
-                findings['evidence'] = '\n'.join(body_lines).strip()[:500]
-                continue
-            else:
-                continue
-
-            items = []
-            for line in body_lines:
-                line = line.strip()
-                if not line:
-                    continue
-                m = re.match(r'^[-•*\d.)]*\s*([^:\n]{3,60}):\s+(.{5,})', line)
-                if m:
-                    items.append(m.group(1).strip())
-                    continue
-                m = re.match(r'^[-•*\d.)]*\s*([^-\n]{3,60})\s+-\s+(.{5,})', line)
-                if m:
-                    items.append(m.group(1).strip())
-
-            findings[key] = list(dict.fromkeys(items))
-
-        return findings
-
-    def _calculate_tier(self, findings: Dict) -> int:
-        """Calculate tier based on findings."""
-        concept_count = len(findings["concepts"])
-        framework_count = len(findings["frameworks"])
-        app_count = len(findings["applications"])
-
-        if concept_count >= DEPTH_TIERS[5]["min_concepts"] and \
-           framework_count >= DEPTH_TIERS[5]["min_frameworks"] and \
-           app_count >= DEPTH_TIERS[5]["min_applications"]:
-            return 5
-        elif concept_count >= DEPTH_TIERS[4]["min_concepts"] and \
-             framework_count >= DEPTH_TIERS[4]["min_frameworks"] and \
-             app_count >= DEPTH_TIERS[4]["min_applications"]:
-            return 4
-        elif concept_count >= DEPTH_TIERS[3]["min_concepts"] and \
-             framework_count >= DEPTH_TIERS[3]["min_frameworks"] and \
-             app_count >= DEPTH_TIERS[3]["min_applications"]:
-            return 3
-        elif concept_count >= DEPTH_TIERS[2]["min_concepts"] and \
-             framework_count >= DEPTH_TIERS[2]["min_frameworks"]:
-            return 2
-        elif concept_count >= DEPTH_TIERS[1]["min_concepts"]:
-            return 1
-        return 0
-
+# ═══════════════════════════════════════
+# STATE MANAGER
+# ═══════════════════════════════════════
 
 class StateManager:
-    """Manages all States, enforces limits, coordinates knowledge flow."""
+    """Tracks all active rival pairs and States."""
 
-    def __init__(self, llm: LLMProvider, logger: AtlantisLogger, db: AtlantisDB):
-        self.states: Dict[str, State] = {}
-        self.llm = llm
-        self.logger = logger
+    def __init__(self, db: PersistenceLayer, models: ModelRouter):
         self.db = db
+        self.models = models
+        self.pairs: List[RivalPair] = []
+        self._states: Dict[str, State] = {}
 
-    def form_state(self, bill: Dict, federal_constitution: Dict, cycle: int) -> State:
-        """Form a State from a passed State Formation Bill."""
-        # Check hard spawn cap
-        if len(self.states) >= HARD_CONSTRAINTS.get("max_states", 50):
-            print(f"    ✗ Maximum States reached ({HARD_CONSTRAINTS['max_states']})")
-            return None
+    def add_pair(self, pair: RivalPair):
+        self.pairs.append(pair)
+        self._states[pair.state_a.name] = pair.state_a
+        self._states[pair.state_b.name] = pair.state_b
+        # Link rivals in DB
+        self.db.update_rival_link(pair.state_a.name, pair.state_b.name)
+        self.db.update_rival_link(pair.state_b.name, pair.state_a.name)
 
-        # 1. Extract domain and agenda from Bill using LLM
-        spec_response = self.llm.complete(
-            system_prompt="You are a State specification generator. You ONLY output valid JSON, never prose or explanations.",
-            user_prompt=(
-                f"A State Formation Bill has passed:\n{bill.get('content', '')[:800]}\n\n"
-                f"Extract EXACTLY what the bill proposes:\n"
-                f"1. State name (use the exact name from the bill)\n"
-                f"2. Primary domain (extract from the bill)\n"
-                f"3. Knowledge areas (extract from the research agenda)\n\n"
-                f"CRITICAL: Return ONLY valid JSON with no other text, no markdown fences, no explanation.\n"
-                f"Start your response with {{ and end with }}.\n\n"
-                f"Format:\n"
-                f"{{\"name\": \"...\", \"domain\": \"...\", \"knowledge_areas\": [...]}}"
-            ),
-            max_tokens=300,
-            temperature=0.5
+    def get_state(self, name: str) -> Optional[State]:
+        return self._states.get(name)
+
+    def get_active_pairs(self) -> List[RivalPair]:
+        return [
+            p for p in self.pairs
+            if p.state_a.is_active or p.state_b.is_active
+        ]
+
+    def get_all_active_states(self) -> List[State]:
+        seen = {}
+        for p in self.pairs:
+            for s in (p.state_a, p.state_b):
+                if s.is_active and s.name not in seen:
+                    seen[s.name] = s
+        return list(seen.values())
+
+    def dissolve_state(self, state_name: str, replacement: Optional[State] = None):
+        """
+        Mark State inactive in DB and in-memory.
+        If replacement provided, swap into the pair with warmup=WARMUP_CYCLES.
+        """
+        state = self._states.get(state_name)
+        if not state:
+            return
+        state.is_active = False
+        self.db.dissolve_state(state_name)
+
+        if replacement:
+            self._states[replacement.name] = replacement
+            for pair in self.pairs:
+                if pair.state_a.name == state_name:
+                    pair.state_a = replacement
+                    pair.warmup_remaining = WARMUP_CYCLES
+                elif pair.state_b.name == state_name:
+                    pair.state_b = replacement
+                    pair.warmup_remaining = WARMUP_CYCLES
+
+
+# ═══════════════════════════════════════
+# PIPELINE FUNCTIONS (MODULE-LEVEL)
+# ═══════════════════════════════════════
+
+def validate_claim(
+    claim_text: str, models: ModelRouter, db: PersistenceLayer
+) -> Tuple[bool, List[str]]:
+    """
+    Structural validation. Returns (is_valid, error_list).
+    No token cost on failure — checked before any LLM judge call.
+    """
+    errors = []
+    text_upper = claim_text.upper()
+
+    # Must declare a claim type
+    has_type = any(
+        t in text_upper
+        for t in ["CLAIM TYPE:", "FOUNDATION", "DISCOVERY", "CHALLENGE"]
+    )
+    if not has_type:
+        errors.append("Missing CLAIM TYPE declaration (Foundation|Discovery|Challenge)")
+
+    # Must have at least one reasoning step
+    has_step = bool(re.search(r'STEP\s+\d+', claim_text, re.IGNORECASE))
+    if not has_step:
+        errors.append("Missing at least one reasoning STEP")
+
+    # Must have a position or conclusion
+    has_position = (
+        "POSITION:" in text_upper or "CONCLUSION:" in text_upper
+    )
+    if not has_position:
+        errors.append("Missing POSITION or CONCLUSION statement")
+
+    return (len(errors) == 0, errors)
+
+
+def validate_challenge(challenge_text: str) -> Tuple[bool, str]:
+    """
+    Engine-side check: does challenge reference a specific step?
+    Vague 'your whole argument is wrong' challenges are rejected.
+    Returns (is_valid, reason).
+    """
+    text_upper = challenge_text.upper()
+    has_target = (
+        "STEP TARGETED:" in text_upper
+        or bool(re.search(r'STEP\s+\d+', challenge_text, re.IGNORECASE))
+        or "FLAW:" in text_upper
+    )
+    if not has_target:
+        return (
+            False,
+            "Challenge must target a specific reasoning step "
+            "(use 'STEP TARGETED:' or 'STEP N:')"
+        )
+    return (True, "")
+
+
+def normalize_claim(claim_text: str, models: ModelRouter) -> dict:
+    """
+    Haiku call. Extracts structured fields from raw claim text.
+    Returns: {claim_type, position, reasoning_chain, conclusion, citations, keywords}
+    """
+    response = models.complete(
+        task_type="normalization",
+        system_prompt=(
+            "Extract structured fields from this claim. "
+            "Return valid JSON only, no other text."
+        ),
+        user_prompt=(
+            f"CLAIM TEXT:\n{claim_text}\n\n"
+            f"Extract and return JSON:\n"
+            f'{{"claim_type": "foundation|discovery|challenge",\n'
+            f' "position": "one sentence",\n'
+            f' "reasoning_chain": ["step1", "step2", ...],\n'
+            f' "conclusion": "one sentence",\n'
+            f' "citations": ["#ID", ...],\n'
+            f' "keywords": ["term1", "term2", "term3"]}}'
+        ),
+        max_tokens=600,
+    )
+    return _parse_json_response(response.content, default={
+        "claim_type": "discovery",
+        "position": "",
+        "reasoning_chain": [],
+        "conclusion": "",
+        "citations": [],
+        "keywords": [],
+    })
+
+
+def decompose_premises(claim_text: str, models: ModelRouter) -> dict:
+    """
+    Haiku call. Decomposes claim into explicit and implicit premises.
+    Returns: {explicit_premises, implicit_assumptions, conclusion_depends_on}
+    """
+    response = models.complete(
+        task_type="premise_decomposition",
+        system_prompt=(
+            "Decompose this claim into its logical premises. "
+            "Return valid JSON only, no other text."
+        ),
+        user_prompt=(
+            f"CLAIM TEXT:\n{claim_text}\n\n"
+            f"Return JSON:\n"
+            f'{{"explicit_premises": ["premise stated in text", ...],\n'
+            f' "implicit_assumptions": ["assumption not stated but required", ...],\n'
+            f' "conclusion_depends_on": ["key premise 1", "key premise 2"]}}'
+        ),
+        max_tokens=500,
+    )
+    return _parse_json_response(response.content, default={
+        "explicit_premises": [],
+        "implicit_assumptions": [],
+        "conclusion_depends_on": [],
+    })
+
+
+def check_rebuttal_newness(
+    original_claim: str, rebuttal: str, models: ModelRouter
+) -> dict:
+    """
+    Haiku call. Does the rebuttal add new reasoning beyond restating the claim?
+    Returns: {new_reasoning: bool, explanation: str}
+    """
+    response = models.complete(
+        task_type="rebuttal_newness",
+        system_prompt=(
+            "Evaluate whether this rebuttal adds new reasoning. "
+            "Return valid JSON only."
+        ),
+        user_prompt=(
+            f"ORIGINAL CLAIM:\n{original_claim[:500]}\n\n"
+            f"REBUTTAL:\n{rebuttal[:500]}\n\n"
+            f"Does the rebuttal introduce genuinely new evidence, "
+            f"reasoning, or counter-examples not present in the original?\n\n"
+            f'Return JSON: {{"new_reasoning": true|false, "explanation": "one sentence"}}'
+        ),
+        max_tokens=200,
+    )
+    return _parse_json_response(response.content, default={
+        "new_reasoning": True,
+        "explanation": "Could not evaluate",
+    })
+
+
+def check_anti_loop(last_3_claims: List[str], models: ModelRouter) -> dict:
+    """
+    Haiku call. Detects if the researcher is repeating the same argument.
+    Returns: {is_loop: bool, explanation: str}
+    """
+    claims_text = "\n\n---\n\n".join(
+        f"Claim {i+1}:\n{c[:400]}" for i, c in enumerate(last_3_claims)
+    )
+    response = models.complete(
+        task_type="anti_loop",
+        system_prompt=(
+            "Detect if these claims are repeating the same core argument. "
+            "Return valid JSON only."
+        ),
+        user_prompt=(
+            f"{claims_text}\n\n"
+            f"Are these claims making substantially the same argument "
+            f"(same position, same logic, just rephrased)?\n\n"
+            f'Return JSON: {{"is_loop": true|false, "explanation": "one sentence"}}'
+        ),
+        max_tokens=200,
+    )
+    return _parse_json_response(response.content, default={
+        "is_loop": False,
+        "explanation": "Could not evaluate",
+    })
+
+
+def check_reasoning_depth(
+    reasoning_chain: List[str], state_tier: int
+) -> Tuple[bool, int]:
+    """
+    Checks if reasoning chain meets minimum depth for State's tier.
+    Returns (meets_minimum, minimum_required).
+    """
+    minimum = REASONING_DEPTH_BY_TIER.get(state_tier, 2)
+    return (len(reasoning_chain) >= minimum, minimum)
+
+
+def _detect_option_c(rebuttal_text: str) -> bool:
+    """Returns True if researcher chose Option C (retract)."""
+    upper = rebuttal_text.upper()
+    return "OPTION C" in upper or upper.strip().startswith("C:")
+
+
+def determine_outcome(
+    claim_text: str,
+    challenge_text: str,
+    rebuttal_text: str,
+    newness_result: dict,
+    domain: str,
+    state_approaches: dict,
+    models: ModelRouter,
+) -> dict:
+    """
+    Judge determines outcome of claim exchange.
+    Domain-aware. Includes SCORING_RUBRIC.
+    Returns: {outcome, reasoning, open_questions, scores: {drama, novelty, depth}}
+
+    Outcomes: survived | partial | retracted | destroyed
+    """
+    # Option C is auto-retracted before judge sees it
+    if _detect_option_c(rebuttal_text):
+        return {
+            "outcome": "retracted",
+            "reasoning": "Researcher chose to retract (Option C).",
+            "open_questions": [],
+            "scores": {"drama": 3, "novelty": 1, "depth": 1},
+        }
+
+    newness_note = (
+        "The rebuttal introduces NEW reasoning."
+        if newness_result.get("new_reasoning")
+        else f"WARNING: Rebuttal lacks new reasoning — {newness_result.get('explanation', '')}"
+    )
+
+    approaches_text = " vs ".join(
+        f"{name} ({approach})" for name, approach in state_approaches.items()
+    )
+
+    response = models.complete(
+        task_type="judge",
+        system_prompt=(
+            "You are a domain-aware judge evaluating an adversarial knowledge exchange. "
+            "You have no personality — only rigorous evaluation. "
+            "Return valid JSON only."
+        ),
+        user_prompt=(
+            f"DOMAIN: {domain}\n"
+            f"APPROACHES: {approaches_text}\n\n"
+            f"CLAIM:\n{claim_text}\n\n"
+            f"CHALLENGE:\n{challenge_text}\n\n"
+            f"REBUTTAL:\n{rebuttal_text}\n\n"
+            f"REBUTTAL NEWNESS: {newness_note}\n\n"
+            f"SCORING RUBRIC:\n{SCORING_RUBRIC}\n\n"
+            f"Determine the outcome:\n"
+            f"- survived: rebuttal successfully defends the claim\n"
+            f"- partial: rebuttal concedes a flaw but salvages the core (Option B)\n"
+            f"- destroyed: challenge is fatal, rebuttal fails\n\n"
+            f"Return JSON:\n"
+            f'{{"outcome": "survived|partial|destroyed",\n'
+            f' "reasoning": "2-3 sentences",\n'
+            f' "open_questions": ["question raised by exchange", ...],\n'
+            f' "scores": {{"drama": 1-10, "novelty": 1-10, "depth": 1-10}}}}'
+        ),
+        max_tokens=600,
+    )
+
+    result = _parse_json_response(response.content, default={
+        "outcome": "survived",
+        "reasoning": "Unable to parse judge response.",
+        "open_questions": [],
+        "scores": {"drama": 3, "novelty": 3, "depth": 3},
+    })
+
+    # Normalise outcome to known values
+    valid_outcomes = {"survived", "partial", "destroyed", "retracted"}
+    if result.get("outcome") not in valid_outcomes:
+        result["outcome"] = "survived"
+
+    return result
+
+
+def reclassify_discovery(
+    position: str, domain: str, db: PersistenceLayer, models: ModelRouter
+) -> Tuple[str, List[str]]:
+    """
+    Haiku call: does this Discovery cover existing Archive ground?
+    If yes → reclassify as Foundation (requires citations).
+    Returns (new_claim_type, overlapping_display_ids).
+    """
+    surviving = db.get_surviving_claims(domain=domain)
+    if not surviving:
+        return ("discovery", [])
+
+    existing_summary = "\n".join(
+        f"{c['display_id']}: {c.get('position', c.get('raw_claim_text', ''))[:120]}"
+        for c in surviving[:20]
+    )
+
+    response = models.complete(
+        task_type="reclassification",
+        system_prompt=(
+            "Determine if a new claim covers existing Archive territory. "
+            "Return valid JSON only."
+        ),
+        user_prompt=(
+            f"NEW CLAIM POSITION:\n{position}\n\n"
+            f"EXISTING SURVIVING CLAIMS IN DOMAIN ({domain}):\n{existing_summary}\n\n"
+            f"Does the new claim cover the same ground as any existing claims?\n\n"
+            f'Return JSON: {{"overlaps": true|false, "overlapping_ids": ["#001", ...]}}'
+        ),
+        max_tokens=300,
+    )
+    result = _parse_json_response(response.content, default={
+        "overlaps": False,
+        "overlapping_ids": [],
+    })
+
+    if result.get("overlaps"):
+        return ("foundation", result.get("overlapping_ids", []))
+    return ("discovery", [])
+
+
+# ═══════════════════════════════════════
+# CITY
+# ═══════════════════════════════════════
+
+class City:
+    """
+    Auto-spawned when 5+ surviving claims from same State share 2+ citations.
+    State-bound: rival States may independently form Cities on overlapping clusters.
+    """
+
+    def __init__(
+        self,
+        city_id: str,
+        state_name: str,
+        domain: str,
+        cluster_ids: List[str],
+        db: PersistenceLayer,
+        models: ModelRouter,
+        cycle: int,
+    ):
+        self.city_id = city_id
+        self.state_name = state_name
+        self.domain = domain
+        self.cluster_ids = cluster_ids
+        self.db = db
+        self.models = models
+        self.cycle = cycle
+        self.analyst_config: AgentConfig = create_city_analyst(city_id, domain, state_name)
+
+        db.save_city(
+            city_id=city_id,
+            state_name=state_name,
+            domain=domain,
+            cluster_claim_ids=cluster_ids,
+            cycle=cycle,
         )
 
-        # Debug: Print raw response
-        print(f"    DEBUG - State spec raw response: {spec_response.content[:200]}")
+    def run_analysis(self, cluster_claims: List[dict]) -> ArchiveEntry:
+        """Analyst produces structural analysis. Returns principle-type ArchiveEntry."""
+        claims_text = "\n\n".join(
+            f"{c.get('display_id', '?')}: {c.get('raw_claim_text', '')[:400]}"
+            for c in cluster_claims
+        )
 
-        # Parse JSON with markdown fence handling
-        import re
-        try:
-            raw = spec_response.content or "{}"
-            # Strip markdown fences
-            raw = re.sub(r'```json\s*', '', raw)
-            raw = re.sub(r'```\s*', '', raw)
-            # Find JSON object using depth-tracking parser
-            spec = _extract_json(raw)
-            print(f"    DEBUG - Parsed spec: name={spec.get('name')}, domain={spec.get('domain')}")
-        except Exception as e:
-            print(f"    ⚠ JSON parse failed: {e}")
-            spec = {
-                "name": f"State of {bill.get('title', 'Knowledge')}",
-                "domain": "general_knowledge",
-                "knowledge_areas": ["foundations", "frameworks", "applications"]
-            }
-
-        state_id = str(uuid.uuid4())[:8]
-
-        # 2. Draft State Constitution
-        const_response = self.llm.complete(
-            system_prompt="You are a constitutional architect. You ONLY output valid JSON, never prose or explanations.",
+        response = self.models.complete(
+            task_type="researcher_claims",
+            system_prompt=self.analyst_config.system_prompt,
             user_prompt=(
-                f"Draft a State Constitution for {spec['name']}.\n\n"
-                f"Domain: {spec['domain']}\n"
-                f"Knowledge areas: {spec['knowledge_areas']}\n\n"
-                f"The Constitution must:\n"
-                f"1. Define how the State governs its research\n"
-                f"2. Comply with Federal Constitution non-amendable clauses\n"
-                f"3. Define knowledge goals and methods\n\n"
-                f"Federal non-amendable clauses:\n{json.dumps(federal_constitution.get('non_amendable_clauses', []), indent=2)[:300]}\n\n"
-                f"CRITICAL: Return ONLY valid JSON with no other text, no markdown fences, no explanation.\n"
-                f"Start your response with {{ and end with }}.\n\n"
-                f"Format (keep values SHORT to fit token limit):\n"
-                f"{{\"governance_principles\": [\"principle1\", \"principle2\"], \"research_methodology\": \"brief description\"}}"
+                f"Analyze this cluster of {len(cluster_claims)} surviving claims "
+                f"from {self.state_name} in domain '{self.domain}':\n\n"
+                f"{claims_text}\n\n"
+                f"Identify: structural patterns, emergent principles, open research directions.\n"
+                f"Format:\n"
+                f"PRINCIPLE: [core structural finding]\n"
+                f"REASONING: [why these claims form a coherent cluster]\n"
+                f"RESEARCH DIRECTIONS: [list 2-3 open questions]"
             ),
             max_tokens=800,
-            temperature=0.7
         )
 
-        try:
-            raw = const_response.content or "{}"
-            print(f"    DEBUG constitution raw ({len(raw)} chars):\n{raw}")
-            raw = re.sub(r'```json\s*', '', raw)
-            raw = re.sub(r'```\s*', '', raw)
-            const_draft = _extract_json(raw)
-        except Exception as e:
-            print(f"    ⚠ Constitution JSON parse failed: {e}")
-            const_draft = {
-                "governance_principles": ["Pursue deep knowledge", "Respect Federal law"],
-                "research_methodology": "Systematic research with peer review"
-            }
+        display_id = self.db.next_display_id()
+        self.db.increment_city_analyses(self.city_id)
 
-        # 3. Validate against Federal
-        is_valid, violations = self.validate_state_constitution(const_draft, federal_constitution)
-
-        if not is_valid:
-            # Redraft once
-            const_response = self.llm.complete(
-                system_prompt="You are a constitutional architect. You ONLY output valid JSON, never prose or explanations.",
-                user_prompt=(
-                    f"Previous draft violated Federal law:\n{violations}\n\n"
-                    f"Redraft the State Constitution to comply.\n"
-                    f"CRITICAL: Return ONLY valid JSON. No markdown, no explanation.\n"
-                    f"Format: {{\"governance_principles\": [\"p1\", \"p2\"], \"research_methodology\": \"brief\"}}"
-                ),
-                max_tokens=800,
-                temperature=0.7
-            )
-            try:
-                raw2 = const_response.content or "{}"
-                print(f"    DEBUG redraft raw ({len(raw2)} chars):\n{raw2}")
-                raw2 = re.sub(r'```json\s*', '', raw2)
-                raw2 = re.sub(r'```\s*', '', raw2)
-                const_draft = _extract_json(raw2)
-                is_valid, violations = self.validate_state_constitution(const_draft, federal_constitution)
-            except Exception as e:
-                print(f"    ⚠ Redraft parse error: {e}")
-
-            if not is_valid:
-                raise StateFormationException(f"Constitution violates Federal law after redraft: {violations}")
-
-        # 4. Create State Constitution
-        constitution = StateConstitution(
-            state_name=spec["name"],
-            domain=spec["domain"],
-            knowledge_areas=spec.get("knowledge_areas", []),
-            governance_principles=const_draft.get("governance_principles", []),
-            research_methodology=const_draft.get("research_methodology", ""),
-            federal_compliance_check={"compliant": is_valid, "violations": violations},
-            ratified_at_cycle=cycle
+        return ArchiveEntry(
+            entry_id=str(uuid.uuid4()),
+            display_id=display_id,
+            entry_type="analysis",
+            source_state=self.state_name,
+            source_entity=f"{self.city_id} Analyst",
+            cycle_created=self.cycle,
+            status="surviving",
+            claim_type="foundation",
+            raw_claim_text=response.content or "",
+            citations=self.cluster_ids,
         )
 
-        # 5. Create State
-        state = State(
-            state_id=state_id,
-            name=spec["name"],
-            domain=spec["domain"],
-            constitution=constitution,
-            formed_cycle=cycle
+    def spawn_research_directions(self, analysis_text: str) -> List[str]:
+        """Extract open questions flagged as Research Directions."""
+        directions = []
+        for line in analysis_text.split("\n"):
+            line = line.strip()
+            if line.startswith("-") or line.startswith("•"):
+                directions.append(line.lstrip("-• "))
+        return directions[:3]
+
+
+# ═══════════════════════════════════════
+# TOWN
+# ═══════════════════════════════════════
+
+class Town:
+    """
+    Auto-spawned when 3+ published analyses from any Cities within same State.
+    """
+
+    def __init__(
+        self,
+        town_id: str,
+        state_name: str,
+        domain: str,
+        parent_city_ids: List[str],
+        db: PersistenceLayer,
+        models: ModelRouter,
+        cycle: int,
+    ):
+        self.town_id = town_id
+        self.state_name = state_name
+        self.domain = domain
+        self.parent_city_ids = parent_city_ids
+        self.db = db
+        self.models = models
+        self.cycle = cycle
+        self.builder_config: AgentConfig = create_town_builder(town_id, domain, state_name)
+
+        db.save_town(
+            town_id=town_id,
+            state_name=state_name,
+            domain=domain,
+            parent_city_ids=parent_city_ids,
+            cycle=cycle,
         )
 
-        # 6. Create 4 agents
-        from agents.base import create_state_governor, create_state_researcher, create_state_critic, create_state_senator
+    def run_proposal(self, city_analyses: List[dict]) -> ArchiveEntry:
+        """Builder produces proposal with full citation chain enforced."""
+        analyses_text = "\n\n".join(
+            f"{a.get('display_id', '?')}: {a.get('raw_claim_text', '')[:300]}"
+            for a in city_analyses
+        )
 
-        state.governor = create_state_governor(state_id, spec["name"], spec["domain"], constitution)
-        state.researcher = create_state_researcher(state_id, spec["name"], spec["domain"])
-        state.critic = create_state_critic(state_id, spec["name"], spec["domain"])
-        state.senator = create_state_senator(state_id, spec["name"], spec["domain"], state.knowledge_entries)
-
-        # 7. Register in database — save constitution AND all 4 agents so Phase 3 can reload them
-        self.db.save_state_constitution(state_id, constitution.to_dict())
-        self.db.save_agent(state.governor)
-        self.db.save_agent(state.researcher)
-        self.db.save_agent(state.critic)
-        self.db.save_agent(state.senator)
-
-        self.states[state_id] = state
-        return state
-
-    def validate_state_constitution(self, draft: Dict, federal_const: Dict) -> tuple[bool, List[str]]:
-        """Check if State Constitution violates Federal non-amendable clauses."""
-        validation_response = self.llm.complete(
-            system_prompt="You are a constitutional law expert. You ONLY output valid JSON, never prose.",
+        response = self.models.complete(
+            task_type="content_generation",
+            system_prompt=self.builder_config.system_prompt,
             user_prompt=(
-                f"Federal Constitution non-amendable clauses:\n"
-                f"{json.dumps(federal_const.get('non_amendable_clauses', []), indent=2)[:500]}\n\n"
-                f"Proposed State Constitution:\n"
-                f"{json.dumps(draft, indent=2)[:500]}\n\n"
-                f"Does this State Constitution violate any Federal non-amendable clauses?\n"
-                f"CRITICAL: Return ONLY valid JSON. No markdown, no explanation.\n"
-                f"Format: {{\"compliant\": true, \"violations\": []}}"
+                f"Build an applied proposal from these City analyses "
+                f"for {self.state_name} in domain '{self.domain}':\n\n"
+                f"{analyses_text}\n\n"
+                f"Produce a concrete, implementable proposal.\n"
+                f"Format:\n"
+                f"PROPOSAL: [title]\n"
+                f"RATIONALE: [why this follows from the analyses]\n"
+                f"MECHANISM: [how it would work]\n"
+                f"CITATION CHAIN: [list all analysis IDs that support this]"
             ),
-            max_tokens=500,
-            temperature=0.3
+            max_tokens=800,
         )
 
-        try:
-            raw = validation_response.content or "{}"
-            print(f"    DEBUG validation raw ({len(raw)} chars):\n{raw}")
-            raw = re.sub(r'```json\s*', '', raw)
-            raw = re.sub(r'```\s*', '', raw)
-            result = _extract_json(raw)
-            return result.get("compliant", True), result.get("violations", [])
-        except Exception as e:
-            print(f"    ⚠ Constitution validation parse failed: {e}")
-            return False, [f"JSON parse error: {e}"]
+        display_id = self.db.next_display_id()
+        self.db.increment_town_proposals(self.town_id)
 
-    def run_all_state_research_cycles(self, federal_agenda: str, cycle: int) -> Dict:
-        """Run research cycles for all States/Cities/Towns."""
-        if not self.states:
-            return {"state_findings": {}, "total_tokens": 0, "tiers_advanced": 0}
-
-        total_tokens = 0
-        tiers_advanced = 0
-        state_findings = {}
-
-        for state_id, state in self.states.items():
-            result = state.run_research_cycle(federal_agenda, self.llm, self.logger, cycle)
-            total_tokens += result["tokens"]
-            if result.get("tier_advanced"):
-                tiers_advanced += 1
-            state_findings[state_id] = result
-
-        return {
-            "state_findings": state_findings,
-            "total_tokens": total_tokens,
-            "tiers_advanced": tiers_advanced
-        }
-
-    def get_senators(self) -> List[BaseAgent]:
-        """Return all State Senators for Federal Senate voting."""
-        senators = []
-        for state in self.states.values():
-            if state.senator:
-                senators.append(state.senator)
-        return senators
-
-    def knowledge_flow_to_federal(self) -> Dict:
-        """Towns → Cities → States → Federal Archive."""
-        state_summaries = {}
-        for state_id, state in self.states.items():
-            state_summaries[state_id] = state.summarize_knowledge()
-
-        return {
-            "state_count": len(self.states),
-            "state_summaries": state_summaries
-        }
-
-    def check_limits(self) -> Dict:
-        """Enforce HARD_CONSTRAINTS."""
-        total_cities = sum(len(state.cities) for state in self.states.values())
-        total_towns = sum(
-            sum(len(city.towns) for city in state.cities)
-            for state in self.states.values()
+        return ArchiveEntry(
+            entry_id=str(uuid.uuid4()),
+            display_id=display_id,
+            entry_type="proposal",
+            source_state=self.state_name,
+            source_entity=f"{self.town_id} Builder",
+            cycle_created=self.cycle,
+            status="surviving",
+            raw_claim_text=response.content or "",
+            citations=[a.get("display_id", "") for a in city_analyses if a.get("display_id")],
         )
-
-        return {
-            "states": len(self.states),
-            "max_states": HARD_CONSTRAINTS["max_states"],
-            "cities": total_cities,
-            "towns": total_towns,
-            "at_limit": len(self.states) >= HARD_CONSTRAINTS["max_states"]
-        }
