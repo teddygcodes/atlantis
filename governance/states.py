@@ -174,6 +174,8 @@ class State:
         self,
         archive_context: str,
         meta_learning: str,
+        cycle_number: int,
+        previous_claims_summary: str,
         lab_hypothesis: Optional[str] = None,
     ) -> str:
         """
@@ -182,6 +184,11 @@ class State:
         """
         base = (
             f"Domain: {self.domain}\nApproach: {self.approach}\n\n"
+            f"CURRENT CYCLE: {cycle_number}\n"
+            "PREVIOUS CLAIM POSITIONS (from your State):\n"
+            f"{previous_claims_summary}\n\n"
+            "You must not repeat previous claims. "
+            "Build on, challenge, or extend prior work.\n\n"
             f"ARCHIVE CONTEXT (surviving claims in your domain):\n{archive_context}\n\n"
             f"META-LEARNING (recent destroyed claims with judge reasoning):\n{meta_learning}\n\n"
         )
