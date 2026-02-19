@@ -159,6 +159,8 @@ class PerpetualEngine:
         # Step 1-2: Both States produce claims
         a_raw = sa.produce_claim(a_ctx, a_meta, a_lab)
         b_raw = sb.produce_claim(b_ctx, b_meta, b_lab)
+        _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
+        _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
 
         # Step 3: Structural validation
         a_valid, a_errors = validate_claim(a_raw, self.models, self.db)

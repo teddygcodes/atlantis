@@ -384,30 +384,61 @@ def validate_claim(
 ) -> Tuple[bool, List[str]]:
     """
     Structural validation. Returns (is_valid, error_list).
+    Flexible extraction supports natural LLM prose plus templated responses.
     No token cost on failure — checked before any LLM judge call.
     """
-    errors = []
+    errors: List[str] = []
     text_upper = claim_text.upper()
 
-    # Must declare a claim type
-    has_type = any(
-        t in text_upper
-        for t in ["CLAIM TYPE:", "FOUNDATION", "DISCOVERY", "CHALLENGE"]
+    # Must declare or clearly imply a claim type.
+    explicit_type_patterns = [
+        r"\bCLAIM\s*TYPE\b\s*[:\-]?\s*(FOUNDATION|DISCOVERY|CHALLENGE)",
+        r"\bTYPE\b\s*[:\-]?\s*(FOUNDATION|DISCOVERY|CHALLENGE)",
+        r"\b(FOUNDATION|DISCOVERY|CHALLENGE)\s+CLAIM\b",
+        r"^\s*(FOUNDATION|DISCOVERY|CHALLENGE)\b",
+    ]
+    has_explicit_type = any(
+        re.search(p, text_upper, re.IGNORECASE | re.MULTILINE)
+        for p in explicit_type_patterns
     )
+    implies_challenge = bool(re.search(
+        r"\b(reservation|concern|critic|reject|wrong|fails?|flaw|counter|dispute|challenge)\b",
+        text_upper,
+        re.IGNORECASE,
+    ))
+    implies_discovery = bool(re.search(
+        r"\b(new|novel|propose|hypothesis|discover|introduce|first principles?|findings?|analysis)\b",
+        text_upper,
+        re.IGNORECASE,
+    ))
+    has_type = has_explicit_type or implies_challenge or implies_discovery
     if not has_type:
         errors.append("Missing CLAIM TYPE declaration (Foundation|Discovery|Challenge)")
 
-    # Must have at least one reasoning step
-    has_step = bool(re.search(r'STEP\s+\d+', claim_text, re.IGNORECASE))
+    # Must have at least one reasoning step, explicit OR natural-language chain.
+    has_explicit_step = bool(re.search(r'\bSTEP\s*\d+\b', claim_text, re.IGNORECASE))
+    has_numbered_reasoning = bool(re.search(r'^\s*\d+[\).:-]\s+.+', claim_text, re.IGNORECASE | re.MULTILINE))
+    reasoning_cues = len(re.findall(r'\b(because|therefore|thus|implies|since|so that|while|combined with)\b', text_upper, re.IGNORECASE))
+    sentence_count = len([s for s in re.split(r'[.!?]+', claim_text) if s.strip()])
+    has_structured_reasoning_sections = bool(re.search(r"\b(CONCEPTS?|FRAMEWORKS?|EVIDENCE|APPLICATIONS?|CONNECTIONS?)\s*:", text_upper))
+    has_step = has_explicit_step or has_numbered_reasoning or (reasoning_cues >= 1 and sentence_count >= 2) or has_structured_reasoning_sections
     if not has_step:
         errors.append("Missing at least one reasoning STEP")
 
-    # Must have a position or conclusion
-    has_position = (
-        "POSITION:" in text_upper or "CONCLUSION:" in text_upper
-    )
-    if not has_position:
+    # Must have a position or conclusion (templated field OR natural-language conclusion sentence).
+    has_position_header = bool(re.search(r'\bPOSITION\b\s*[:\-]', text_upper))
+    has_conclusion_header = bool(re.search(r'\b(CONCLUSION|THEREFORE|FINAL\s+CLAIM)\b\s*[:\-]?', text_upper))
+    has_natural_conclusion = bool(re.search(
+        r"\b(i\s+(propose|conclude|argue|identify)|we\s+(propose|conclude|argue|identify)|this\s+(implies|shows)|in\s+conclusion|key\s+findings?)\b",
+        text_upper,
+        re.IGNORECASE,
+    ))
+    if not (has_position_header or has_conclusion_header or has_natural_conclusion):
         errors.append("Missing POSITION or CONCLUSION statement")
+
+    if errors:
+        print("[validate_claim] claim rejected. reasons=", errors)
+        print("[validate_claim] claim excerpt=", repr(claim_text[:800]))
 
     return (len(errors) == 0, errors)
 
@@ -456,7 +487,7 @@ def normalize_claim(claim_text: str, models: ModelRouter) -> dict:
         ),
         max_tokens=600,
     )
-    return _parse_json_response(response.content, default={
+    parsed = _parse_json_response(response.content, default={
         "claim_type": "discovery",
         "position": "",
         "reasoning_chain": [],
@@ -464,6 +495,53 @@ def normalize_claim(claim_text: str, models: ModelRouter) -> dict:
         "citations": [],
         "keywords": [],
     })
+
+    # Fallback parser for natural-language LLM outputs that do not emit strict JSON schema.
+    text_upper = claim_text.upper()
+    if not parsed.get("claim_type"):
+        if re.search(r'\b(reservation|concern|reject|wrong|fails?|challenge|flaw)\b', text_upper, re.IGNORECASE):
+            parsed["claim_type"] = "challenge"
+        elif re.search(r'\b(new|novel|hypothesis|discover|first principles?)\b', text_upper, re.IGNORECASE):
+            parsed["claim_type"] = "discovery"
+        else:
+            parsed["claim_type"] = "foundation"
+
+    sentences = [s.strip() for s in re.split(r'[.!?]+', claim_text) if s.strip()]
+    if not parsed.get("position") and sentences:
+        parsed["position"] = sentences[0][:220]
+
+    reasoning_chain = parsed.get("reasoning_chain") or []
+    if not reasoning_chain:
+        explicit_steps = re.findall(r'(?im)^\s*(?:STEP\s*\d+[:.-]?|\d+[\).:-])\s*(.+)$', claim_text)
+        if explicit_steps:
+            reasoning_chain = [s.strip() for s in explicit_steps if s.strip()]
+        else:
+            reasoning_like = [
+                s for s in sentences
+                if re.search(r'\b(because|therefore|thus|implies|since|while|combined with|risks?|fails?|leads to)\b', s, re.IGNORECASE)
+            ]
+            reasoning_chain = reasoning_like[:4]
+            if len(reasoning_chain) < 2:
+                section_steps = re.findall(r'(?im)^\s*([A-Z][A-Z_ ]{2,})\s*:\s*(.+)$', claim_text)
+                reasoning_chain.extend([f"{k.title()}: {v.strip()}" for k, v in section_steps if v.strip()])
+            if len(reasoning_chain) < 2 and len(sentences) >= 3:
+                reasoning_chain = sentences[1: min(len(sentences), 4)]
+        parsed["reasoning_chain"] = reasoning_chain[:5]
+
+    if not parsed.get("conclusion"):
+        conclusion_candidates = [
+            s for s in sentences
+            if re.search(r'\b(therefore|thus|in conclusion|i propose|we propose|i conclude|we conclude)\b', s, re.IGNORECASE)
+        ]
+        parsed["conclusion"] = (conclusion_candidates[-1] if conclusion_candidates else (sentences[-1] if sentences else ""))[:240]
+
+    if not isinstance(parsed.get("citations"), list):
+        parsed["citations"] = []
+    if not isinstance(parsed.get("keywords"), list) or not parsed.get("keywords"):
+        words = re.findall(r'\b[a-zA-Z]{5,}\b', claim_text.lower())
+        parsed["keywords"] = list(dict.fromkeys(words[:5]))
+
+    return parsed
 
 
 def decompose_premises(claim_text: str, models: ModelRouter) -> dict:
