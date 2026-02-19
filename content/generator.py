@@ -53,27 +53,7 @@ class ContentGenerator:
         Determine which formats to generate and produce them.
         Returns list of output file paths.
         """
-        drama = exchange_data.get("drama_score", 0)
-        novelty = exchange_data.get("novelty_score", 0)
-        depth = exchange_data.get("depth_score", 0)
-        event_type = exchange_data.get("event_type", "routine")
-
-        formats_to_gen: List[str] = []
-
-        if event_type == "dissolution":
-            exchange_data["drama_score"] = 10  # forced
-            formats_to_gen = ["blog", "newsroom", "debate", "explorer"]
-        elif event_type == "ruins":
-            formats_to_gen = ["explorer"]
-        elif drama >= 8 and depth >= 7:
-            formats_to_gen = ["blog", "newsroom", "debate", "explorer"]
-        elif drama >= 7 or novelty >= 8:
-            formats_to_gen = ["newsroom", "debate"]
-        elif drama >= 5 and event_type in ("tier_advancement", "destroyed"):
-            formats_to_gen = ["blog"]
-        elif event_type in ("new_state", "new_city", "new_town", "milestone", "ruins"):
-            formats_to_gen = ["explorer"]
-        # else: routine, skip
+        formats_to_gen = self._select_formats(exchange_data)
 
         outputs = []
         for fmt in formats_to_gen:
@@ -81,6 +61,38 @@ class ContentGenerator:
             if path:
                 outputs.append(path)
         return outputs
+
+    def _select_formats(self, exchange_data: dict) -> List[str]:
+        """Select content formats from scores/event metadata."""
+        drama = int(exchange_data.get("drama_score", 0) or 0)
+        novelty = int(exchange_data.get("novelty_score", 0) or 0)
+        depth = int(exchange_data.get("depth_score", 0) or 0)
+        event_type = exchange_data.get("event_type", "routine")
+
+        if event_type == "dissolution":
+            exchange_data["drama_score"] = 10  # forced
+            return ["blog", "newsroom", "debate", "explorer"]
+
+        formats: List[str] = []
+
+        if drama >= 8 and depth >= 7:
+            return ["blog", "newsroom", "debate", "explorer"]
+
+        if drama >= 5:
+            formats.append("blog")
+
+        if drama >= 7 or novelty >= 8:
+            formats.extend(["newsroom", "debate"])
+
+        if event_type in ("new_state", "new_city", "new_town", "milestone", "ruins"):
+            formats.append("explorer")
+
+        # De-duplicate while preserving order
+        deduped: List[str] = []
+        for fmt in formats:
+            if fmt not in deduped:
+                deduped.append(fmt)
+        return deduped
 
     # ─── FORMAT DISPATCH ──────────────────────────────────────────
 
