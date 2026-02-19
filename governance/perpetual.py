@@ -180,11 +180,13 @@ class PerpetualEngine:
             if loop.get("is_loop"):
                 _log(f"  {sa.name} anti-loop triggered: {loop.get('explanation')}")
                 return {"pair": f"{sa.name} vs {sb.name}", "skipped": True, "reason": "loop_a"}
+            _log(f"  {sa.name} anti-loop check passed")
         if len(b_last3) >= 3:
             loop = check_anti_loop(b_last3, self.models)
             if loop.get("is_loop"):
                 _log(f"  {sb.name} anti-loop triggered: {loop.get('explanation')}")
                 return {"pair": f"{sa.name} vs {sb.name}", "skipped": True, "reason": "loop_b"}
+            _log(f"  {sb.name} anti-loop check passed")
 
         # Step 5: Normalize both (Haiku)
         a_norm = normalize_claim(a_raw, self.models)
@@ -492,6 +494,10 @@ class PerpetualEngine:
         self._check_tier_advancement()
         # 19f. Probation and dissolution
         self._check_probation_and_dissolution()
+        # Refresh domain health after all system-level operations (federal lab,
+        # abstraction, cities/towns) so domain_health.json reflects final cycle state.
+        for domain in self._get_all_domains():
+            self._compute_domain_health(domain)
         # 19g. Write cycle log
         self._write_cycle_log()
         # 19h. Update domain_health.json
