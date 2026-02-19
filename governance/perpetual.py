@@ -182,8 +182,20 @@ class PerpetualEngine:
         b_lab = sb.produce_lab_hypothesis(open_q, self._get_recently_destroyed(sb.name))
 
         # Step 1-2: Both States produce claims
-        a_raw = sa.produce_claim(a_ctx, a_meta, a_lab)
-        b_raw = sb.produce_claim(b_ctx, b_meta, b_lab)
+        a_raw = sa.produce_claim(
+            a_ctx,
+            a_meta,
+            self.cycle,
+            self._get_previous_claim_positions(sa.name),
+            a_lab,
+        )
+        b_raw = sb.produce_claim(
+            b_ctx,
+            b_meta,
+            self.cycle,
+            self._get_previous_claim_positions(sb.name),
+            b_lab,
+        )
         _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
         _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
 
@@ -366,6 +378,8 @@ class PerpetualEngine:
             raw = state.produce_claim(
                 self._build_archive_context(pair.domain, state.name),
                 self._get_meta_learning(state.name),
+                self.cycle,
+                self._get_previous_claim_positions(state.name),
             )
             display_id = self.db.next_display_id()
             entry = ArchiveEntry(
@@ -1743,6 +1757,27 @@ class PerpetualEngine:
             for e in destroyed[:3]
         )
 
+
+    def _get_previous_claim_positions(self, state_name: str) -> str:
+        """Summarize this State's previous claim POSITION lines for novelty prompting."""
+        claims = self.db.get_surviving_claims(state_name=state_name)
+        claims.sort(key=lambda e: e.get("display_id", ""))
+        if not claims:
+            return "(none yet — this is your first claim cycle)"
+
+        summaries = []
+        for claim in claims:
+            raw = claim.get("raw_claim_text", "")
+            position = ""
+            for line in raw.splitlines():
+                if line.strip().upper().startswith("POSITION:"):
+                    position = line.strip()
+                    break
+            if not position:
+                position = f"POSITION: {raw.strip().splitlines()[0][:180]}" if raw.strip() else "POSITION: (empty claim text)"
+            summaries.append(f"{claim.get('display_id', '?')}: {position}")
+
+        return "\n".join(summaries[-8:])
     def _get_last_3_claims(self, state_name: str) -> List[str]:
         """Last 3 raw claim texts from this State (for anti-loop detection)."""
         claims = self.db.get_surviving_claims(state_name=state_name)
