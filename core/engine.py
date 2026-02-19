@@ -215,7 +215,7 @@ class AtlantisEngine:
         """
         response = self.models.complete(
             task_type="founder_panels",
-            system_prompt=fc.system_prompt,
+            system_prompt=fc.get_system_prompt(),
             user_prompt=(
                 f"You are participating in the Founding Senate of Atlantis.\n"
                 f"Propose a knowledge domain and TWO competing intellectual approaches "
@@ -247,7 +247,7 @@ class AtlantisEngine:
         """
         response = self.models.complete(
             task_type="founder_panels",
-            system_prompt=fc.system_prompt,
+            system_prompt=fc.get_system_prompt(),
             user_prompt=(
                 f"Senate vote: Should we form a rival pair in the domain '{domain}'?\n\n"
                 f"Approach A: {approach_a}\n"
