@@ -58,6 +58,7 @@ class AtlantisEngine:
         self.mock = mock
         self.output_dir = Path("output")
         self._setup_output_dirs()
+        self._clear_output_data(force_clean)
 
         self.db = PersistenceLayer(str(self.output_dir / "atlantis.db"))
         self.models = ModelRouter(
@@ -302,6 +303,25 @@ class AtlantisEngine:
         return state_manager
 
     # ─── INFRASTRUCTURE ───────────────────────────────────────────
+
+
+    def _clear_output_data(self, force_clean: bool):
+        """When force-clean is requested, remove prior run artifacts in output/."""
+        if not force_clean:
+            return
+
+        if not self.output_dir.exists():
+            return
+
+        for child in self.output_dir.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+
+        # Recreate expected output structure after cleanup
+        self._setup_output_dirs()
+        print("Output data removed: ['output/*']")
 
     def _check_v1_data(self, force_clean: bool):
         """Detect V1 data. Refuse to start unless --force-clean."""
