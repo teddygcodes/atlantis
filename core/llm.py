@@ -15,6 +15,7 @@ import os
 import json
 import time
 import hashlib
+from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
 
@@ -26,6 +27,28 @@ except ImportError:
 
 from config.settings import API_CONFIG
 from core.exceptions import LLMTimeoutException, LLMRateLimitException
+
+
+def _safe_retry_after_seconds(error: Exception) -> float:
+    """Best-effort extraction of retry-after seconds from Anthropic exceptions."""
+    response = getattr(error, "response", None)
+    if response is not None:
+        headers = getattr(response, "headers", {}) or {}
+        retry_after = headers.get("retry-after") or headers.get("Retry-After")
+        if retry_after:
+            try:
+                return max(float(retry_after), 0.0)
+            except (ValueError, TypeError):
+                pass
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        retry_after = body.get("retry_after")
+        if retry_after is not None:
+            try:
+                return max(float(retry_after), 0.0)
+            except (ValueError, TypeError):
+                pass
+    return 0.0
 
 
 @dataclass
@@ -59,6 +82,8 @@ class LLMProvider:
 
         if self.mode == "api" and HAS_ANTHROPIC and self.api_key:
             self.client = anthropic.Anthropic(api_key=self.api_key)
+
+        self._error_log_path = Path("output/logs/api_errors.log")
 
         # Cost tracking (per 1M tokens)
         self.cost_rates = {
@@ -130,41 +155,61 @@ class LLMProvider:
 
         # Route to appropriate backend with retry logic
         start = time.time()
-        max_retries = 3
-        retry_delay = 1.0
 
-        for attempt in range(max_retries):
-            try:
-                if self.mode == "api" and self.client:
-                    response = self._call_api(system_prompt, user_prompt, max_tokens, temperature, model)
-                else:
-                    response = self._simulate_local(system_prompt, user_prompt, max_tokens, model)
-                break  # Success - exit retry loop
-
-            except anthropic.RateLimitError as e:
-                if attempt < max_retries - 1:
-                    wait = retry_delay * (2 ** attempt)
-                    print(f"    ⚠ Rate limit hit, retry {attempt+1}/{max_retries} in {wait}s")
+        if self.mode == "dry-run":
+            print("\n[DRY RUN] LLM Call")
+            print(f"model: {model}")
+            print(f"max_tokens: {max_tokens}")
+            print("system_prompt:")
+            print(system_prompt)
+            print("user_prompt:")
+            print(user_prompt)
+            response = self._simulate_local(system_prompt, user_prompt, max_tokens, model)
+        else:
+            timeout_retries = 3
+            server_error_retries = 2
+            timeout_attempt = 0
+            server_error_attempt = 0
+            retry_delay = 1.0
+            while True:
+                try:
+                    if self.mode == "api" and self.client:
+                        response = self._call_api(system_prompt, user_prompt, max_tokens, temperature, model)
+                    else:
+                        response = self._simulate_local(system_prompt, user_prompt, max_tokens, model)
+                    break
+                except anthropic.RateLimitError as e:
+                    wait = max(_safe_retry_after_seconds(e), retry_delay)
+                    self._log_error("rate_limit", model, e, wait)
+                    print(f"    ⚠ Rate limit hit, waiting {wait:.1f}s before retry")
                     time.sleep(wait)
-                else:
-                    raise LLMRateLimitException(f"Rate limited after {max_retries} retries")
-
-            except anthropic.APITimeoutError as e:
-                if attempt < max_retries - 1:
-                    wait = retry_delay * (2 ** attempt)
-                    print(f"    ⚠ API timeout, retry {attempt+1}/{max_retries} in {wait}s")
-                    time.sleep(wait)
-                else:
-                    raise LLMTimeoutException(f"API timeout after {max_retries} retries")
-
-            except Exception as e:
-                # Last resort - return error response
-                response = LLMResponse(
-                    content=f"[LLM ERROR: {str(e)}]",
-                    input_tokens=0, output_tokens=0, total_tokens=0,
-                    model=model, latency_ms=0
-                )
-                break
+                except anthropic.APITimeoutError as e:
+                    timeout_attempt += 1
+                    wait = retry_delay * (2 ** (timeout_attempt - 1))
+                    self._log_error("timeout", model, e, wait)
+                    if timeout_attempt <= timeout_retries:
+                        print(f"    ⚠ API timeout, retry {timeout_attempt}/{timeout_retries} in {wait:.1f}s")
+                        time.sleep(wait)
+                        continue
+                    raise LLMTimeoutException(f"API timeout after {timeout_retries} retries")
+                except anthropic.InternalServerError as e:
+                    server_error_attempt += 1
+                    wait = retry_delay * (2 ** (server_error_attempt - 1))
+                    self._log_error("server_error", model, e, wait)
+                    if server_error_attempt <= server_error_retries:
+                        print(f"    ⚠ API 500, retry {server_error_attempt}/{server_error_retries} in {wait:.1f}s")
+                        time.sleep(wait)
+                        continue
+                    raise
+                except Exception as e:
+                    self._log_error("unhandled", model, e, 0.0)
+                    # Last resort - return error response
+                    response = LLMResponse(
+                        content=f"[LLM ERROR: {str(e)}]",
+                        input_tokens=0, output_tokens=0, total_tokens=0,
+                        model=model, latency_ms=0
+                    )
+                    break
 
         response.latency_ms = (time.time() - start) * 1000
 
@@ -178,6 +223,18 @@ class LLMProvider:
         self._cache[cache_key] = response
 
         return response
+
+    def _log_error(self, error_type: str, model: str, error: Exception, retry_in_s: float):
+        self._error_log_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "ts": time.time(),
+            "type": error_type,
+            "model": model,
+            "retry_in_s": retry_in_s,
+            "error": str(error),
+        }
+        with self._error_log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload) + "\n")
 
     def _call_api(self, system_prompt: str, user_prompt: str,
                   max_tokens: int, temperature: float, model: str) -> LLMResponse:
