@@ -375,7 +375,7 @@ class PerpetualEngine:
             })
             self.cycle_log_data["content"].extend(content_files)
 
-        _log(f"  {sa.name}: {a_outcome['outcome']} | {sb.name}: {b_outcome['outcome']}")
+        _log(f"  {sa.name}: {a_outcome['outcome']} ({a_outcome.get('ruling_type', '')}) | {sb.name}: {b_outcome['outcome']} ({b_outcome.get('ruling_type', '')})")
         return {
             "pair": f"{sa.name} vs {sb.name}",
             "a_entry": a_entry.display_id,
@@ -393,6 +393,7 @@ class PerpetualEngine:
                 "novelty": int(a_outcome["scores"].get("novelty", 0)),
                 "depth": int(a_outcome["scores"].get("depth", 0)),
             },
+            "a_ruling_type": a_outcome.get("ruling_type", ""),
             "a_judge_reasoning": a_outcome.get("reasoning", ""),
             "a_tokens": token_ledger[sa.name],
             "b_scores": {
@@ -400,6 +401,7 @@ class PerpetualEngine:
                 "novelty": int(b_outcome["scores"].get("novelty", 0)),
                 "depth": int(b_outcome["scores"].get("depth", 0)),
             },
+            "b_ruling_type": b_outcome.get("ruling_type", ""),
             "b_judge_reasoning": b_outcome.get("reasoning", ""),
             "b_tokens": token_ledger[sb.name],
         }
@@ -1039,6 +1041,7 @@ class PerpetualEngine:
             implicit_assumptions=premises.get("implicit_assumptions", []),
             challenger_entity=challenger_entity,
             outcome=out,
+            ruling_type=outcome.get("ruling_type", ""),
             outcome_reasoning=outcome.get("reasoning", ""),
             open_questions=outcome.get("open_questions", []),
             drama_score=outcome["scores"].get("drama", 0),
