@@ -471,3 +471,11 @@ def test_increment_pipeline_claims_tracks_validation_rejection_types(db):
     assert row is not None
     assert row["total_rejections_by_type"]["missing_gap_addressed"] == 2
     assert row["total_rejections_by_type"]["missing_citations"] == 1
+
+def test_state_researcher_prompt_includes_operational_def_hint():
+    from agents.base import create_state_researcher
+
+    cfg = create_state_researcher("Axiom", "philosophy", "rationalist")
+
+    assert "Include a brief OPERATIONAL DEF line after your POSITION." in cfg.mandate
+    assert "Keep it to one line. This is a scope-setter, not a full theory." in cfg.mandate
