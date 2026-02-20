@@ -44,3 +44,14 @@ founding_era_checkpoint.json
 
 # Test outputs
 test_output.txt
+output/atlantis.db
+output/atlantis.db-wal
+output/atlantis.db-shm
+output/*.json
+output/logs/
+output/content/
+*.DS_Store
+__pycache__/
+.env
+test_dir/
+test_debug/
