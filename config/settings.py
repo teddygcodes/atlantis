@@ -90,6 +90,7 @@ MODEL_ALLOCATION = {
     "founder_panels": "sonnet",
     "federal_lab": "sonnet",
     "executive_election": "sonnet",
+    "supreme_court": "opus",
     # Sonnet/Opus: judge is the quality gate — use strongest available
     "judge": "sonnet",
 }
