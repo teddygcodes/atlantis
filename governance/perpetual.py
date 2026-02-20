@@ -355,8 +355,8 @@ class PerpetualEngine:
         # Update pipeline claim counts
         a_survived = a_outcome["outcome"] in ("survived", "partial")
         b_survived = b_outcome["outcome"] in ("survived", "partial")
-        self.db.increment_pipeline_claims(sa.name, a_survived)
-        self.db.increment_pipeline_claims(sb.name, b_survived)
+        self.db.increment_pipeline_claims(sa.name, a_survived, a_outcome.get("ruling_type", ""), self.cycle)
+        self.db.increment_pipeline_claims(sb.name, b_survived, b_outcome.get("ruling_type", ""), self.cycle)
 
         # Step 16: Apply token outcomes
         token_ledger = self._apply_token_outcomes(sa, a_norm, a_outcome, sb, b_norm, b_outcome)
@@ -1193,7 +1193,8 @@ class PerpetualEngine:
 
     def _compute_domain_health(self, domain: str) -> dict:
         """Compute DMI metrics and save to DB."""
-        domain_states = {s.get("state_name") for s in self.db.get_all_active_states() if s.get("domain") == domain}
+        domain_rows = [r for r in self.db.get_all_active_states() if r.get("domain") == domain]
+        domain_states = {s.get("state_name") for s in domain_rows}
         all_entries = [
             e for e in self.db.get_all_archive_entries()
             if e.get("source_state") in domain_states and e.get("entry_type") == "claim"
@@ -1203,7 +1204,9 @@ class PerpetualEngine:
         surviving = sum(1 for c in all_entries if c.get("status") == "surviving")
         partial = sum(1 for c in all_entries if c.get("status") == "partial")
         destroyed = sum(1 for c in all_entries if c.get("status") == "destroyed")
-        survival_rate = surviving / total if total > 0 else 0.0
+        total_pipeline = sum(int(r.get("total_pipeline_claims", 0) or 0) for r in domain_rows)
+        surviving_pipeline = sum(int(r.get("surviving_pipeline_claims", 0) or 0) for r in domain_rows)
+        survival_rate = surviving_pipeline / total_pipeline if total_pipeline > 0 else 0.0
 
         principles = self.db.get_principle_count(domain)
         compression_ratio = principles / max(surviving, 1)
@@ -1216,9 +1219,8 @@ class PerpetualEngine:
         cities = self.db.get_active_cities_in_domain(domain)
         towns = self.db.get_active_towns_in_domain(domain)
 
-        state_rows = [r for r in self.db.get_all_active_states() if r.get("domain") == domain]
         cred = []
-        for row in state_rows[:2]:
+        for row in domain_rows[:2]:
             t = row.get("total_pipeline_claims", 0)
             s_count = row.get("surviving_pipeline_claims", 0)
             cred.append(round(s_count / t, 3) if t > 0 else 1.0)
@@ -1231,6 +1233,45 @@ class PerpetualEngine:
                 cited = self.db.get_archive_entry(cid)
                 if cited and cited.get("source_state") not in domain_states:
                     cross_domain_citations += 1
+
+        failure_distribution = {}
+        for row in domain_rows:
+            for ruling, count in (row.get("total_rejections_by_type") or {}).items():
+                failure_distribution[ruling] = failure_distribution.get(ruling, 0) + int(count)
+
+        cycle_values = [
+            int(row.get("cycles_to_first_survival"))
+            for row in domain_rows
+            if row.get("cycles_to_first_survival") is not None
+        ]
+        cycles_to_first_survival = (
+            round(sum(cycle_values) / len(cycle_values), 2)
+            if cycle_values else 0.0
+        )
+
+        def _topic_key(entry: dict) -> str:
+            position = (entry.get("position") or "").strip().lower()
+            if position:
+                return position[:180]
+            raw = (entry.get("raw_claim_text") or "").strip().lower()
+            return raw.splitlines()[0][:180] if raw else ""
+
+        topic_attempts = {}
+        for entry in sorted(all_entries, key=lambda e: e.get("display_id", "#000")):
+            key = _topic_key(entry)
+            if not key:
+                continue
+            rec = topic_attempts.setdefault(key, {"attempts": 0, "survived": False, "depth": None})
+            rec["attempts"] += 1
+            if not rec["survived"] and entry.get("status") == "surviving":
+                rec["survived"] = True
+                rec["depth"] = rec["attempts"]
+
+        revision_depth_values = [rec["depth"] for rec in topic_attempts.values() if rec.get("depth")]
+        revision_depth = (
+            round(sum(revision_depth_values) / len(revision_depth_values), 2)
+            if revision_depth_values else 0.0
+        )
 
         contradiction_trend = "increasing" if destroyed > (surviving + partial) else "stable"
         maturity_phase = self._get_maturity_phase(
@@ -1249,6 +1290,9 @@ class PerpetualEngine:
             "partial_claims": partial,
             "destroyed_claims": destroyed,
             "survival_rate": round(survival_rate, 3),
+            "cycles_to_first_survival": cycles_to_first_survival,
+            "revision_depth": revision_depth,
+            "failure_distribution": failure_distribution,
             "credibility_a": cred[0],
             "credibility_b": cred[1],
             "compression_ratio": round(compression_ratio, 3),
@@ -1637,6 +1681,9 @@ class PerpetualEngine:
                 f"\n## Domain Health — {domain}\n"
                 f"- Surviving claims: {domain_health.get('surviving_claims', 0)}\n"
                 f"- Survival rate: {domain_health.get('survival_rate', 0.0)}\n"
+                f"- Avg cycles to first survival: {domain_health.get('cycles_to_first_survival', 0.0)}\n"
+                f"- Revision depth: {domain_health.get('revision_depth', 0.0)}\n"
+                f"- Failure distribution: {json.dumps(domain_health.get('failure_distribution', {}), ensure_ascii=False)}\n"
                 f"- Credibility (State A): {domain_health.get('credibility_a', 1.0)}\n"
                 f"- Credibility (State B): {domain_health.get('credibility_b', 1.0)}\n"
                 f"- Maturity phase: {domain_health.get('maturity_phase', 'unknown')}\n"
@@ -1682,6 +1729,9 @@ class PerpetualEngine:
                     "partial": 0,
                     "destroyed": 0,
                     "survival_rate": 0.0,
+                    "cycles_to_first_survival": 0.0,
+                    "revision_depth": 0.0,
+                    "failure_distribution": {},
                     "compression_ratio": 0.0,
                     "lab_survival_rate": 0.0,
                     "active_cities": 0,
