@@ -14,16 +14,18 @@ CONSTITUTION.md must exist in the project root.
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
 from config.settings import (
     SYSTEM_NAME, VERSION,
-    MOCK_CONFIG, PRODUCTION_CONFIG,
+    MOCK_CONFIG, PRODUCTION_CONFIG, DEMO_ELECTRICAL_CONFIG,
     V1_DATA_PATHS, OUTPUT_DIRS,
     MODEL_ALLOCATION,
     SENATE_PAIR_SUPERMAJORITY,
@@ -52,7 +54,9 @@ class AtlantisEngine:
         mock: bool = False,
         dry_run: bool = False,
         force_clean: bool = False,
+        verbose: bool = False,
         api_key: Optional[str] = None,
+        demo_electrical: bool = False,
     ):
         self._check_v1_data(force_clean)
         self.constitution_text = self._load_constitution()
@@ -60,9 +64,11 @@ class AtlantisEngine:
         self.config = config or MOCK_CONFIG
         self.mock = mock
         self.dry_run = dry_run
+        self.verbose = verbose
+        self.demo_electrical = demo_electrical
         self.output_dir = Path("output")
-        self._setup_output_dirs()
-        self._clear_output_data(force_clean)
+        self._initialize_run_folder()
+        self._prepare_output_workspace()
 
         self.db = PersistenceLayer(str(self.output_dir / "atlantis.db"))
         self.models = ModelRouter(
@@ -125,6 +131,7 @@ class AtlantisEngine:
             content_gen=self.content_gen,
             config=self.config,
             output_dir=str(self.output_dir),
+            verbose=self.verbose,
         )
         perpetual.run_cycles(self.config["governance_cycles"])
 
@@ -141,12 +148,87 @@ class AtlantisEngine:
 
     # ─── FOUNDING ERA ────────────────────────────────────────────
 
+    def _run_demo_electrical_founding_era(self) -> StateManager:
+        """Phase 1 demo mode: skip Senate votes and seed two empirical electrical rival pairs."""
+        state_manager = StateManager(self.db, self.models)
+        budget = self.config["initial_token_budget"]
+
+        demo_pairs = [
+            {
+                "domain": "Lighting_Design",
+                "domain_type": "empirical",
+                "approach_a": (
+                    "Lighting design requires fixture-by-fixture verification against reflected "
+                    "ceiling plans, panel schedules, and addenda to prevent costly field errors."
+                ),
+                "approach_b": (
+                    "Lighting design can be efficiently estimated through area-based calculations "
+                    "and standard fixture density ratios without individual fixture verification."
+                ),
+            },
+            {
+                "domain": "Electrical_Estimation",
+                "domain_type": "empirical",
+                "approach_a": (
+                    "Electrical estimation accuracy depends on cross-referencing multiple drawing "
+                    "sheets (plans, schedules, details, addenda) to catch conflicts before bid "
+                    "submission."
+                ),
+                "approach_b": (
+                    "Electrical estimation is best served by single-pass automated counting tools "
+                    "that prioritize speed over exhaustive cross-referencing."
+                ),
+            },
+        ]
+
+        print("\n  Demo electrical mode enabled: skipping Senate vote and seeding 2 empirical pairs.")
+        for cycle, pair_data in enumerate(demo_pairs, start=1):
+            domain = pair_data["domain"]
+            approach_a = pair_data["approach_a"]
+            approach_b = pair_data["approach_b"]
+
+            state_a = State(
+                name=self._generate_state_name(domain, "Alpha", cycle - 1),
+                domain=domain,
+                approach=approach_a,
+                budget=budget,
+                db=self.db,
+                models=self.models,
+                cycle_formed=cycle,
+            )
+            state_b = State(
+                name=self._generate_state_name(domain, "Beta", cycle - 1),
+                domain=domain,
+                approach=approach_b,
+                budget=budget,
+                db=self.db,
+                models=self.models,
+                cycle_formed=cycle,
+            )
+
+            pair = RivalPair(
+                domain=domain,
+                state_a=state_a,
+                state_b=state_b,
+                pair_id=str(uuid.uuid4()),
+                cycle_formed=cycle,
+                warmup_remaining=0,
+                domain_type=pair_data["domain_type"],
+            )
+            state_manager.add_pair(pair)
+            print(f"    DEMO PAIR FORMED: {state_a.name} vs {state_b.name} in '{domain}'")
+
+        return state_manager
+
     def _run_founding_era(self, founder_profiles: List[FounderProfile]) -> StateManager:
         """
         Phase 1: Founders propose rival pairs (domain + two approaches).
         60% supermajority vote required per pair.
         Once target_pairs formed, Founders retire from governance.
         """
+        if self.demo_electrical:
+            return self._run_demo_electrical_founding_era()
+
         state_manager = StateManager(self.db, self.models)
         target = self.config["founding_era_target_pairs"]
         max_cycles = self.config["founding_era_max_cycles"]
@@ -422,6 +504,22 @@ class AtlantisEngine:
 
     # ─── INFRASTRUCTURE ───────────────────────────────────────────
 
+    def _initialize_run_folder(self):
+        """Create this run's timestamped output folder under runs/."""
+        self.runs_dir = Path("runs")
+        self.run_timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        self.run_output_dir = self.runs_dir / self.run_timestamp
+        self.run_output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _prepare_output_workspace(self):
+        """Reset output/ for a fresh run and recreate expected directories."""
+        if self.output_dir.exists() or self.output_dir.is_symlink():
+            if self.output_dir.is_symlink() or self.output_dir.is_file():
+                self.output_dir.unlink()
+            else:
+                shutil.rmtree(self.output_dir)
+        self._setup_output_dirs()
+
 
     def _clear_output_data(self, force_clean: bool):
         """When force-clean is requested, remove prior run artifacts in output/."""
@@ -488,6 +586,125 @@ class AtlantisEngine:
         from agents.base import FOUNDER_CONFIGS
         return list(FOUNDER_CONFIGS.values())
 
+    def _save_run_artifacts(self):
+        """Persist run metadata and copy this run's outputs to runs/<timestamp>/."""
+        stats = self.models.get_stats()
+        cost_summary_path = self.output_dir / "cost_summary.json"
+        cost_summary_path.write_text(json.dumps(stats, indent=2), encoding="utf-8")
+
+        run_config = {
+            "system": SYSTEM_NAME,
+            "version": VERSION,
+            "mode": "MOCK" if self.mock else ("DRY-RUN" if self.dry_run else "PRODUCTION"),
+            "mock": self.mock,
+            "dry_run": self.dry_run,
+            "config": self.config,
+        }
+        run_config_path = self.output_dir / "run_config.json"
+        run_config_path.write_text(json.dumps(run_config, indent=2), encoding="utf-8")
+
+        artifacts = [
+            "archive.md",
+            "archive.json",
+            "domain_health.json",
+            "content",
+            "logs",
+            "cost_summary.json",
+            "run_config.json",
+            "executive_summary.md",
+        ]
+        for artifact in artifacts:
+            src = self.output_dir / artifact
+            if not src.exists():
+                continue
+            dst = self.run_output_dir / artifact
+            if src.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            else:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+
+        # Keep output/ as a "latest run" symlink when possible.
+        if self.output_dir.exists() or self.output_dir.is_symlink():
+            if self.output_dir.is_symlink() or self.output_dir.is_file():
+                self.output_dir.unlink()
+            else:
+                shutil.rmtree(self.output_dir)
+
+        try:
+            os.symlink(self.run_output_dir, self.output_dir, target_is_directory=True)
+        except OSError:
+            shutil.copytree(self.run_output_dir, self.output_dir, dirs_exist_ok=True)
+
+    def _build_executive_summary_input(
+        self,
+        domain_health: dict,
+        total_survivors: int,
+        total_cost_usd: float,
+    ) -> str:
+        """Create compact run summary input for executive-summary generation."""
+        domains = sorted(self.db.get_all_domains())
+        domain_list = ", ".join(domains) if domains else "None"
+
+        if domain_health:
+            avg_survival_rate = (
+                sum((d.get("survival_rate", 0.0) or 0.0) for d in domain_health.values())
+                / len(domain_health)
+            )
+        else:
+            avg_survival_rate = 0.0
+
+        surviving_positions = []
+        for claim in self.db.get_surviving_claims()[:3]:
+            position = (claim.get("position") or "").strip()
+            if position:
+                surviving_positions.append(position)
+        if not surviving_positions:
+            surviving_positions = ["No surviving claim positions available."]
+
+        cycle_count = self.config.get("governance_cycles") or "indefinite"
+
+        return (
+            f"Domains: {domain_list}\n"
+            f"Survivor count: {total_survivors}\n"
+            f"Survival rate: {avg_survival_rate * 100:.1f}%\n"
+            f"Estimated total cost (USD): ${total_cost_usd:.6f}\n"
+            f"Number of governance cycles: {cycle_count}\n"
+            f"Example surviving claim positions:\n"
+            f"- {surviving_positions[0]}\n"
+            + (f"- {surviving_positions[1]}\n" if len(surviving_positions) > 1 else "")
+            + (f"- {surviving_positions[2]}\n" if len(surviving_positions) > 2 else "")
+        )
+
+    def _generate_executive_summary(self, domain_health: dict, total_survivors: int, stats: dict) -> str:
+        """Generate a plain-English executive summary via Haiku and persist it."""
+        system_prompt = (
+            "Write a 3-paragraph executive summary of this adversarial knowledge engine "
+            "run for a non-technical executive."
+        )
+        user_prompt = self._build_executive_summary_input(
+            domain_health=domain_health,
+            total_survivors=total_survivors,
+            total_cost_usd=stats.get("model_router_cost_usd", 0.0),
+        )
+
+        response = self.models.complete(
+            task_type="executive_summary",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=700,
+        )
+
+        summary = response.content.strip()
+        if not summary:
+            summary = "Executive summary unavailable for this run."
+
+        summary_path_output = self.output_dir / "executive_summary.md"
+        summary_path_run = self.run_output_dir / "executive_summary.md"
+        summary_path_output.write_text(summary + "\n", encoding="utf-8")
+        summary_path_run.write_text(summary + "\n", encoding="utf-8")
+        return summary
+
     def _final_report(self):
         """Print summary and note output file locations."""
         total = self.db.count_surviving_claims()
@@ -546,6 +763,19 @@ class AtlantisEngine:
         if self.config["governance_cycles"]:
             per_cycle = stats["model_router_cost_usd"] / self.config["governance_cycles"]
             print(f"  Estimated cost per governance cycle: ${per_cycle:.6f}")
+
+        executive_summary = self._generate_executive_summary(
+            domain_health=domain_health,
+            total_survivors=total,
+            stats=stats,
+        )
+        print("\n  Executive Summary:")
+        print("  " + "-" * 48)
+        for line in executive_summary.splitlines():
+            print(f"  {line}")
+
+        self._save_run_artifacts()
+        print(f"  Run saved to: {self.run_output_dir.as_posix()}/")
         print(f"\n  Done.\n")
 
 
@@ -553,7 +783,7 @@ class AtlantisEngine:
 # CLI ENTRY POINT
 # ═══════════════════════════════════════
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Atlantis V2 — Adversarial Knowledge Engine",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -563,6 +793,7 @@ def main():
             "  python -m atlantis                     # Full production run\n"
             "  python -m atlantis --force-clean       # Remove V1 data first\n"
             "  python -m atlantis --dry-run           # Print prompts, skip API calls\n"
+            "  python -m atlantis --demo-electrical   # Electrical-domain empirical demo\n"
         ),
     )
     parser.add_argument(
@@ -577,14 +808,29 @@ def main():
         "--dry-run", action="store_true",
         help="Run full pipeline and print prompts/model settings without live API calls"
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--verbose", action="store_true",
+        help="Print full raw claim/challenge/rebuttal text in cycle logs"
+    )
+    parser.add_argument(
+        "--demo-electrical", action="store_true",
+        help="Use electrical-domain demo pairs (empirical) and skip Senate voting in Phase 1"
+    )
+    args = parser.parse_args(argv)
 
-    config = MOCK_CONFIG if args.mock else PRODUCTION_CONFIG
+    if args.mock:
+        config = MOCK_CONFIG
+    elif args.demo_electrical:
+        config = DEMO_ELECTRICAL_CONFIG
+    else:
+        config = PRODUCTION_CONFIG
 
     engine = AtlantisEngine(
         config=config,
         mock=args.mock,
         dry_run=args.dry_run,
         force_clean=args.force_clean,
+        verbose=args.verbose,
+        demo_electrical=args.demo_electrical,
     )
     engine.run()
