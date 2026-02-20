@@ -245,8 +245,8 @@ class PerpetualEngine:
         _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
 
         # Step 3: Structural validation
-        a_valid, a_errors = validate_claim(a_raw, self.models, self.db)
-        b_valid, b_errors = validate_claim(b_raw, self.models, self.db)
+        a_valid, a_errors = validate_claim(a_raw, self.models, self.db, domain_type=pair.domain_type)
+        b_valid, b_errors = validate_claim(b_raw, self.models, self.db, domain_type=pair.domain_type)
         if not a_valid:
             _log(f"  {sa.name} claim invalid: {a_errors}")
             return {"pair": f"{sa.name} vs {sb.name}", "skipped": True, "reason": "invalid_claim_a"}

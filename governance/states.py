@@ -123,6 +123,7 @@ class RivalPair:
     pair_id: str
     cycle_formed: int
     warmup_remaining: int = 0
+    domain_type: str = "philosophical"  # empirical|philosophical
 
 
 # ═══════════════════════════════════════
@@ -411,7 +412,10 @@ class StateManager:
 # ═══════════════════════════════════════
 
 def validate_claim(
-    claim_text: str, models: ModelRouter, db: PersistenceLayer
+    claim_text: str,
+    models: ModelRouter,
+    db: PersistenceLayer,
+    domain_type: str = "philosophical",
 ) -> Tuple[bool, List[str]]:
     """
     Structural validation. Returns (is_valid, error_list).
@@ -419,7 +423,9 @@ def validate_claim(
     No token cost on failure — checked before any LLM judge call.
     """
     errors: List[str] = []
+    warnings: List[str] = []
     text_upper = claim_text.upper()
+    strict_empirical = (domain_type or "philosophical").strip().lower() == "empirical"
 
     # Must declare or clearly imply a claim type.
     explicit_type_patterns = [
@@ -491,7 +497,11 @@ def validate_claim(
     if claim_type == "discovery":
         position_match = re.search(r"^\s*POSITION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
         if not position_match:
-            errors.append("Discovery claims must include POSITION with an operational definition")
+            msg = "Discovery claims should include POSITION with an operational definition"
+            if strict_empirical:
+                errors.append(msg)
+            else:
+                warnings.append(msg)
         else:
             position_text = position_match.group(1)
             has_operational_definition = bool(re.search(
@@ -500,7 +510,11 @@ def validate_claim(
                 re.IGNORECASE,
             ))
             if not has_operational_definition:
-                errors.append("Discovery POSITION must include an operational definition")
+                msg = "Discovery POSITION should include an operational definition"
+                if strict_empirical:
+                    errors.append(msg)
+                else:
+                    warnings.append(msg)
 
         step_lines = re.findall(r"^\s*STEP\s*\d+\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
         has_testable_step = any(re.search(
@@ -509,12 +523,24 @@ def validate_claim(
             re.IGNORECASE,
         ) for s in step_lines)
         if not has_testable_step:
-            errors.append("Discovery claims must include at least one falsifiable or testable implication in STEP lines")
+            msg = "Discovery claims should include at least one falsifiable or testable implication in STEP lines"
+            if strict_empirical:
+                errors.append(msg)
+            else:
+                warnings.append(msg)
 
         if not re.search(r"^\s*GAP\s+ADDRESSED\s*[:\-]\s*.+$", claim_text, re.IGNORECASE | re.MULTILINE):
             errors.append("Discovery claims must include GAP ADDRESSED")
 
-        has_numeric_assertion = bool(re.search(r"\b\d+(?:\.\d+)?\b", claim_text))
+        numeric_candidate_lines = []
+        for line in claim_text.splitlines():
+            if re.match(r"^\s*(CLAIM\s*TYPE|CHALLENGE\s+TARGET|CITATIONS|DEPENDS\s+ON)\b", line, re.IGNORECASE):
+                continue
+            cleaned = re.sub(r"#\d{3}\b", "", line)
+            cleaned = re.sub(r"^\s*STEP\s*\d+\s*[:\-]?", "", cleaned, flags=re.IGNORECASE)
+            if re.search(r"\b\d+(?:\.\d+)?\b", cleaned):
+                numeric_candidate_lines.append(cleaned)
+        has_numeric_assertion = bool(numeric_candidate_lines)
         has_estimate_with_assumptions = bool(re.search(
             r"^\s*ESTIMATE\s*[:\-].+\bASSUMPTIONS?\b",
             claim_text,
@@ -555,6 +581,8 @@ def validate_claim(
     if errors:
         print("[validate_claim] claim rejected. reasons=", errors)
         print("[validate_claim] claim excerpt=", repr(claim_text[:800]))
+    if warnings:
+        print("[validate_claim] soft validation warnings=", warnings)
 
     return (len(errors) == 0, errors)
 
