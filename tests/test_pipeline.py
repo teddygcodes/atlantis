@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.persistence import PersistenceLayer
+from governance.perpetual import PerpetualEngine
 from governance.states import ArchiveEntry, check_anti_loop, normalize_claim, validate_claim
 
 
@@ -138,3 +139,46 @@ def test_credibility_score(db):
     db.increment_pipeline_claims("Axiom", survived=False)
 
     assert db.get_state_credibility("Axiom") == 0.6
+
+
+def test_archive_tier_assignment_and_status_updates(db):
+    main_id = _make_entry(db, status="surviving")
+    quarantine_id = _make_entry(db, status="founding")
+    graveyard_id = _make_entry(db, status="destroyed")
+
+    assert db.get_archive_entry(main_id)["archive_tier"] == "main"
+    assert db.get_archive_entry(quarantine_id)["archive_tier"] == "quarantine"
+    assert db.get_archive_entry(graveyard_id)["archive_tier"] == "graveyard"
+
+    db.update_entry_status(main_id, "retracted")
+    assert db.get_archive_entry(main_id)["archive_tier"] == "graveyard"
+
+
+def test_researcher_context_main_only_and_meta_uses_graveyard(db, tmp_path):
+    _make_entry(db, display_id="#001", status="surviving", raw_claim_text="Main claim")
+    _make_entry(db, display_id="#002", status="partial", raw_claim_text="Partial claim")
+    _make_entry(db, display_id="#003", status="destroyed", raw_claim_text="Failed claim", outcome_reasoning="bad logic")
+
+    fake_engine = SimpleNamespace(db=db, cycle=7, output_dir=tmp_path)
+
+    citable_context = PerpetualEngine._build_archive_context(fake_engine, domain="", state_name="TestState")
+    meta = PerpetualEngine._get_meta_learning(fake_engine, state_name="TestState")
+
+    assert "#001" in citable_context
+    assert "#002" not in citable_context
+    assert "#003" not in citable_context
+    assert "#003" in meta
+
+
+def test_export_archive_grouped_by_tier(db, tmp_path):
+    _make_entry(db, display_id="#001", status="surviving", raw_claim_text="Main")
+    _make_entry(db, display_id="#002", status="partial", raw_claim_text="Quarantine")
+    _make_entry(db, display_id="#003", status="retracted", raw_claim_text="Graveyard")
+
+    fake_engine = SimpleNamespace(db=db, cycle=3, output_dir=tmp_path)
+    PerpetualEngine._export_archive(fake_engine)
+
+    archive_md = (tmp_path / "archive.md").read_text(encoding="utf-8")
+    assert "## Main Archive (Surviving)" in archive_md
+    assert "## Quarantine (Partial/Under Review)" in archive_md
+    assert "## Graveyard (Destroyed/Retracted)" in archive_md

@@ -63,6 +63,7 @@ class PersistenceLayer:
                 source_entity TEXT NOT NULL DEFAULT '',
                 cycle_created INTEGER NOT NULL,
                 status TEXT NOT NULL,
+                archive_tier TEXT NOT NULL DEFAULT 'quarantine',
                 claim_type TEXT DEFAULT '',
                 position TEXT DEFAULT '',
                 reasoning_chain_json TEXT DEFAULT '[]',
@@ -190,6 +191,28 @@ class PersistenceLayer:
         cols = {r[1] for r in rows}
         if "ruling_type" not in cols:
             conn.execute("ALTER TABLE archive_entries ADD COLUMN ruling_type TEXT DEFAULT ''")
+        if "archive_tier" not in cols:
+            conn.execute(
+                "ALTER TABLE archive_entries ADD COLUMN archive_tier TEXT NOT NULL DEFAULT 'quarantine'"
+            )
+        conn.execute(
+            "UPDATE archive_entries "
+            "SET archive_tier = CASE "
+            "WHEN status IN ('surviving', 'survived') THEN 'main' "
+            "WHEN status IN ('partial', 'founding') THEN 'quarantine' "
+            "WHEN status IN ('destroyed', 'retracted') THEN 'graveyard' "
+            "ELSE 'quarantine' END"
+        )
+
+    @staticmethod
+    def _archive_tier_for_status(status: str) -> str:
+        if status in ("surviving", "survived"):
+            return "main"
+        if status in ("partial", "founding"):
+            return "quarantine"
+        if status in ("destroyed", "retracted"):
+            return "graveyard"
+        return "quarantine"
 
     # ═══════════════════════════════════════════════════════
     # DISPLAY ID
@@ -228,7 +251,7 @@ class PersistenceLayer:
             conn.execute("""
                 INSERT INTO archive_entries (
                     entry_id, display_id, entry_type, source_state, source_entity,
-                    cycle_created, status, claim_type, position, reasoning_chain_json,
+                    cycle_created, status, archive_tier, claim_type, position, reasoning_chain_json,
                     conclusion, keywords_json, raw_claim_text, raw_challenge_text,
                     raw_rebuttal_text, lab_origin_text, explicit_premises_json,
                     implicit_assumptions_json, challenge_step_targeted, challenger_entity,
@@ -238,7 +261,7 @@ class PersistenceLayer:
                     stability_score, impact_score, tokens_earned, created_at
                 ) VALUES (
                     :entry_id, :display_id, :entry_type, :source_state, :source_entity,
-                    :cycle_created, :status, :claim_type, :position, :reasoning_chain_json,
+                    :cycle_created, :status, :archive_tier, :claim_type, :position, :reasoning_chain_json,
                     :conclusion, :keywords_json, :raw_claim_text, :raw_challenge_text,
                     :raw_rebuttal_text, :lab_origin_text, :explicit_premises_json,
                     :implicit_assumptions_json, :challenge_step_targeted, :challenger_entity,
@@ -255,6 +278,7 @@ class PersistenceLayer:
                 "source_entity": d.get("source_entity", ""),
                 "cycle_created": d.get("cycle_created", 0),
                 "status": d.get("status", "surviving"),
+                "archive_tier": self._archive_tier_for_status(d.get("status", "surviving")),
                 "claim_type": d.get("claim_type", ""),
                 "position": d.get("position", ""),
                 "reasoning_chain_json": json.dumps(d.get("reasoning_chain", [])),
@@ -354,11 +378,23 @@ class PersistenceLayer:
 
     def update_entry_status(self, display_id: str, new_status: str, note: str = ""):
         """Append-only: text never modified, only status changes."""
+        archive_tier = self._archive_tier_for_status(new_status)
         with self._get_conn() as conn:
             conn.execute(
-                "UPDATE archive_entries SET status = ? WHERE display_id = ?",
-                (new_status, display_id)
+                "UPDATE archive_entries SET status = ?, archive_tier = ? WHERE display_id = ?",
+                (new_status, archive_tier, display_id)
             )
+
+    def get_graveyard_claims(self, state_name: str, limit: int = 5) -> List[Dict]:
+        """Last N graveyard claims for meta-learning (not citable)."""
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM archive_entries "
+                "WHERE source_state = ? AND archive_tier = 'graveyard' "
+                "ORDER BY cycle_created DESC, display_id DESC LIMIT ?",
+                (state_name, limit)
+            ).fetchall()
+        return [self._unpack_entry(r) for r in rows]
 
     def update_referenced_by(self, cited_display_id: str, new_entry_display_id: str):
         """Add new_entry_display_id to cited entry's referenced_by list. Updates impact_score."""

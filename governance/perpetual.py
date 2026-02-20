@@ -433,6 +433,7 @@ class PerpetualEngine:
                 source_entity=f"{state.name} Researcher",
                 cycle_created=self.cycle,
                 status="surviving",
+                archive_tier="main",
                 claim_type="discovery",
                 raw_claim_text=raw,
                 outcome="survived",
@@ -525,6 +526,7 @@ class PerpetualEngine:
             source_entity=f"{target.get('source_state', '')} Researcher",
             cycle_created=self.cycle,
             status=outcome["outcome"],
+            archive_tier=self.db._archive_tier_for_status(outcome["outcome"]),
             claim_type="challenge",
             raw_claim_text=target.get("raw_claim_text", ""),
             raw_challenge_text=challenge_text,
@@ -760,6 +762,7 @@ class PerpetualEngine:
                 source_entity=f"System (Cycle {self.cycle})",
                 cycle_created=self.cycle,
                 status="surviving",
+                archive_tier="main",
                 claim_type="foundation",
                 raw_claim_text=principles_text,
                 citations=[c["display_id"] for c in top_claims],
@@ -1019,6 +1022,14 @@ class PerpetualEngine:
             "destroyed": "destroyed",
         }
         status = status_map.get(out, "surviving")
+        archive_tier_map = {
+            "surviving": "main",
+            "partial": "quarantine",
+            "founding": "quarantine",
+            "destroyed": "graveyard",
+            "retracted": "graveyard",
+        }
+        archive_tier = archive_tier_map.get(status, "quarantine")
 
         return ArchiveEntry(
             entry_id=str(uuid.uuid4()),
@@ -1028,6 +1039,7 @@ class PerpetualEngine:
             source_entity=f"{state.name} Researcher",
             cycle_created=self.cycle,
             status=status,
+            archive_tier=archive_tier,
             claim_type=norm.get("claim_type", "discovery"),
             position=norm.get("position", ""),
             reasoning_chain=norm.get("reasoning_chain", []),
@@ -1641,7 +1653,7 @@ class PerpetualEngine:
 
     def _export_archive(self):
         """
-        Rebuild output/archive.md (human-readable, domain+cycle order).
+        Rebuild output/archive.md (human-readable, grouped by archive tier).
         Rebuild output/archive.json (programmatic access).
         """
         all_entries = self.db.get_all_archive_entries()
@@ -1649,58 +1661,70 @@ class PerpetualEngine:
         # Sort by display_id (which encodes insertion order)
         all_entries.sort(key=lambda e: e.get("display_id", "#000"))
 
-        # Markdown archive
         md_lines = ["# Atlantis V2 — Archive\n", f"_Last updated: cycle {self.cycle}_\n\n"]
-        for e in all_entries:
-            status = e.get("status", "?")
-            did = e.get("display_id", "?")
-            source = e.get("source_state", "?")
-            entity = e.get("source_entity", "?")
-            cltype = e.get("claim_type", "?")
-            outcome = e.get("outcome", "")
-            outcome_reasoning = e.get("outcome_reasoning", "")
-            citations = e.get("citations") or []
+        tier_sections = [
+            ("main", "## Main Archive (Surviving)\n\n"),
+            ("quarantine", "## Quarantine (Partial/Under Review)\n\n"),
+            ("graveyard", "## Graveyard (Destroyed/Retracted)\n\n"),
+        ]
 
-            scores = {
-                "Novelty": e.get("novelty_score"),
-                "Impact": e.get("impact_score"),
-                "Depth": e.get("depth_score"),
-                "Drama": e.get("drama_score"),
-                "Stability": e.get("stability_score"),
-                "Tokens": e.get("tokens_earned"),
-            }
-            score_line = " | ".join(
-                f"{label}: {value}" for label, value in scores.items() if value is not None
-            )
+        for tier, heading in tier_sections:
+            tier_entries = [e for e in all_entries if e.get("archive_tier") == tier]
+            md_lines.append(heading)
+            if not tier_entries:
+                md_lines.append("_No entries in this tier._\n\n")
+                continue
 
-            md_lines.append(
-                f"## {did} [{status.upper()}]\n"
-                f"**Source State**: {source}  |  **Entity**: {entity}\n"
-                f"**Claim Type**: {cltype}  |  **Cycle**: {e.get('cycle_created', '?')}\n\n"
-                f"### Claim\n{e.get('raw_claim_text', '')}\n\n"
-            )
-            if e.get("raw_challenge_text"):
-                md_lines.append(f"### Challenge\n{e.get('raw_challenge_text', '')}\n\n")
-            if e.get("raw_rebuttal_text"):
-                md_lines.append(f"### Rebuttal\n{e.get('raw_rebuttal_text', '')}\n\n")
-            if outcome:
-                md_lines.append(f"### Outcome\n- Status: {outcome}\n")
-                if outcome_reasoning:
-                    md_lines.append(f"- Judge reasoning: {outcome_reasoning}\n")
-                md_lines.append("\n")
+            for e in tier_entries:
+                status = e.get("status", "?")
+                did = e.get("display_id", "?")
+                source = e.get("source_state", "?")
+                entity = e.get("source_entity", "?")
+                cltype = e.get("claim_type", "?")
+                outcome = e.get("outcome", "")
+                outcome_reasoning = e.get("outcome_reasoning", "")
+                citations = e.get("citations") or []
 
-            md_lines.append("### Scores\n")
-            md_lines.append(f"{score_line if score_line else 'No scores recorded.'}\n\n")
+                scores = {
+                    "Novelty": e.get("novelty_score"),
+                    "Impact": e.get("impact_score"),
+                    "Depth": e.get("depth_score"),
+                    "Drama": e.get("drama_score"),
+                    "Stability": e.get("stability_score"),
+                    "Tokens": e.get("tokens_earned"),
+                }
+                score_line = " | ".join(
+                    f"{label}: {value}" for label, value in scores.items() if value is not None
+                )
 
-            md_lines.append("### Citations\n")
-            if citations:
-                for citation in citations:
-                    md_lines.append(f"- {citation}\n")
-                md_lines.append("\n")
-            else:
-                md_lines.append("- None\n\n")
+                md_lines.append(
+                    f"### {did} [{status.upper()}]\n"
+                    f"**Source State**: {source}  |  **Entity**: {entity}\n"
+                    f"**Claim Type**: {cltype}  |  **Cycle**: {e.get('cycle_created', '?')}\n\n"
+                    f"#### Claim\n{e.get('raw_claim_text', '')}\n\n"
+                )
+                if e.get("raw_challenge_text"):
+                    md_lines.append(f"#### Challenge\n{e.get('raw_challenge_text', '')}\n\n")
+                if e.get("raw_rebuttal_text"):
+                    md_lines.append(f"#### Rebuttal\n{e.get('raw_rebuttal_text', '')}\n\n")
+                if outcome:
+                    md_lines.append(f"#### Outcome\n- Status: {outcome}\n")
+                    if outcome_reasoning:
+                        md_lines.append(f"- Judge reasoning: {outcome_reasoning}\n")
+                    md_lines.append("\n")
 
-            md_lines.append("---\n\n")
+                md_lines.append("#### Scores\n")
+                md_lines.append(f"{score_line if score_line else 'No scores recorded.'}\n\n")
+
+                md_lines.append("#### Citations\n")
+                if citations:
+                    for citation in citations:
+                        md_lines.append(f"- {citation}\n")
+                    md_lines.append("\n")
+                else:
+                    md_lines.append("- None\n\n")
+
+                md_lines.append("---\n\n")
 
         (self.output_dir / "archive.md").write_text("".join(md_lines), encoding="utf-8")
 
@@ -1742,10 +1766,11 @@ class PerpetualEngine:
     # ─── HELPERS ─────────────────────────────────────────────────
 
     def _build_archive_context(self, domain: str, state_name: str) -> str:
-        """Summary of surviving claims in domain for Researcher's context."""
+        """Summary of main-tier claims in domain for Researcher's citable context."""
         claims = self.db.get_surviving_claims(domain=domain)
+        claims = [c for c in claims if c.get("archive_tier") == "main"]
         if not claims:
-            return "(no surviving claims in domain yet)"
+            return "(no citable main-archive claims in domain yet)"
         lines = []
         for c in claims[:15]:
             lines.append(
@@ -1755,15 +1780,10 @@ class PerpetualEngine:
         return "\n".join(lines)
 
     def _get_meta_learning(self, state_name: str) -> str:
-        """Last 3-5 destroyed claims from this State with judge reasoning."""
-        destroyed = [
-            e for e in self.db.get_surviving_claims(state_name=state_name)
-            if e.get("status") == "destroyed"
-        ]
-        destroyed.sort(key=lambda e: e.get("display_id", ""), reverse=True)
-        recent = destroyed[:5]
+        """Last 3-5 graveyard claims from this State with judge reasoning."""
+        recent = self.db.get_graveyard_claims(state_name=state_name, limit=5)
         if not recent:
-            return "(no destroyed claims yet — this is your first cycles)"
+            return "(no graveyard claims yet — this is your first cycles)"
         lines = []
         for e in recent:
             lines.append(
@@ -1791,17 +1811,13 @@ class PerpetualEngine:
         return "\n".join(questions[:5]) or "(no specific research directions yet)"
 
     def _get_recently_destroyed(self, state_name: str) -> str:
-        """Recently destroyed claims for Lab hypothesis context."""
-        destroyed = [
-            e for e in self.db.get_surviving_claims(state_name=state_name)
-            if e.get("status") == "destroyed"
-        ]
-        destroyed.sort(key=lambda e: e.get("display_id", ""), reverse=True)
+        """Recently graveyarded claims for Lab hypothesis context."""
+        destroyed = self.db.get_graveyard_claims(state_name=state_name, limit=3)
         if not destroyed:
             return "(no destroyed claims)"
         return "\n".join(
             f"{e.get('display_id', '?')}: {e.get('raw_claim_text', '')[:200]}"
-            for e in destroyed[:3]
+            for e in destroyed
         )
 
 

@@ -81,6 +81,7 @@ class ArchiveEntry:
     cycle_created: int
     status: str                              # surviving|partial|retracted|destroyed|founding|
                                              # overturned|foundation_challenged|chain_broken
+    archive_tier: str = "quarantine"         # main|quarantine|graveyard
     claim_type: str = ""                     # foundation|discovery|challenge
     position: str = ""
     reasoning_chain: List[str] = field(default_factory=list)
@@ -190,8 +191,8 @@ class State:
             f"{previous_claims_summary}\n\n"
             "You must not repeat previous claims. "
             "Build on, challenge, or extend prior work.\n\n"
-            f"ARCHIVE CONTEXT (surviving claims in your domain):\n{archive_context}\n\n"
-            f"META-LEARNING (recent destroyed claims with judge reasoning):\n{meta_learning}\n\n"
+            f"ARCHIVE CONTEXT (MAIN archive only; citable):\n{archive_context}\n\n"
+            f"META-LEARNING (graveyard claims; learn but do not cite):\n{meta_learning}\n\n"
         )
         if lab_hypothesis:
             base += (
@@ -199,10 +200,10 @@ class State:
             )
         archive_is_empty = (
             not archive_context.strip()
-            or "no surviving claims" in archive_context.lower()
+            or "no citable main-archive claims" in archive_context.lower()
         )
         claim_type_hint = (
-            "NOTE: The Archive has no surviving claims yet. Produce a DISCOVERY claim "
+            "NOTE: The Archive has no citable main claims yet. Produce a DISCOVERY claim "
             "(first-principles reasoning — no citations required).\n\n"
             if archive_is_empty
             else "Produce a Foundation, Discovery, or Challenge claim.\n\n"
@@ -473,7 +474,9 @@ def validate_claim(
     has_citation = bool(re.search(r"#\d{3}", claim_text))
     if is_foundation_claim and not is_discovery_claim and not has_citation:
         # Check whether there are any citable entries in the Archive yet.
-        has_citable = len(db.get_surviving_claims()) > 0 if db else False
+        has_citable = any(
+            c.get("archive_tier") == "main" for c in (db.get_surviving_claims() if db else [])
+        )
         if has_citable:
             errors.append("Foundation claims require at least one citation (e.g., #001)")
 
@@ -915,6 +918,7 @@ class City:
             source_entity=f"{self.city_id} Analyst",
             cycle_created=self.cycle,
             status="surviving",
+            archive_tier="main",
             claim_type="foundation",
             raw_claim_text=response.content or "",
             citations=self.cluster_ids,
@@ -1001,6 +1005,7 @@ class Town:
             source_entity=f"{self.town_id} Builder",
             cycle_created=self.cycle,
             status="surviving",
+            archive_tier="main",
             raw_claim_text=response.content or "",
             citations=[a.get("display_id", "") for a in city_analyses if a.get("display_id")],
         )
