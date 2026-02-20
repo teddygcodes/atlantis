@@ -57,6 +57,7 @@ class ModelRouter:
             tier: {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
             for tier in self.MODEL_PRICING
         }
+        self._cost_by_task_type = {}
 
     @classmethod
     def validate_model_allocation(cls) -> list[dict]:
@@ -104,11 +105,21 @@ class ModelRouter:
         if pricing:
             input_cost = (response.input_tokens / 1_000_000) * pricing["input"]
             output_cost = (response.output_tokens / 1_000_000) * pricing["output"]
+            call_cost = input_cost + output_cost
             bucket = self._cost_by_model_tier[model_tier]
             bucket["calls"] += 1
             bucket["input_tokens"] += response.input_tokens
             bucket["output_tokens"] += response.output_tokens
-            bucket["cost_usd"] += input_cost + output_cost
+            bucket["cost_usd"] += call_cost
+
+            task_bucket = self._cost_by_task_type.setdefault(
+                task_type,
+                {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0},
+            )
+            task_bucket["calls"] += 1
+            task_bucket["input_tokens"] += response.input_tokens
+            task_bucket["output_tokens"] += response.output_tokens
+            task_bucket["cost_usd"] += call_cost
 
         return response
 
@@ -125,6 +136,13 @@ class ModelRouter:
             total_cost += values["cost_usd"]
         stats["model_router_cost_usd"] = round(total_cost, 6)
         stats["cost_by_model_tier"] = cost_by_model
+        stats["cost_by_task_type"] = {
+            task_type: {
+                **values,
+                "cost_usd": round(values["cost_usd"], 6),
+            }
+            for task_type, values in self._cost_by_task_type.items()
+        }
         return stats
 
     def print_cost_summary(self):
@@ -139,6 +157,10 @@ class ModelRouter:
                 f"cost=${values['cost_usd']:.6f}"
             )
         print(f"  TOTAL estimated cost: ${stats['model_router_cost_usd']:.6f}")
+        supreme = stats.get("cost_by_task_type", {}).get("supreme_court", {})
+        print(
+            f"  Opus calls: {supreme.get('calls', 0)} (Supreme Court) — ${supreme.get('cost_usd', 0.0):.2f}"
+        )
 
     @property
     def is_mock(self) -> bool:

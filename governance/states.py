@@ -820,6 +820,7 @@ def determine_outcome(
     models: ModelRouter,
     constitution_context: str = "",
     unverified_numeric_assertions: Optional[List[str]] = None,
+    task_type: str = "judge",
 ) -> dict:
     """
     Judge determines outcome of claim exchange.
@@ -863,7 +864,7 @@ def determine_outcome(
     )
 
     response = models.complete(
-        task_type="judge",
+        task_type=task_type,
         system_prompt=(
             "You are a domain-aware judge evaluating an adversarial knowledge exchange. "
             "You have no personality — only rigorous evaluation. "

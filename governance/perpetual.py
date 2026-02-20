@@ -56,6 +56,7 @@ from config.settings import (
     CONTENT_THRESHOLDS,
     EXECUTIVE_ELECTION_INTERVAL,
     EXECUTIVE_TERM_CYCLES,
+    APPEAL_COST_TOKENS,
 )
 
 
@@ -105,6 +106,7 @@ class PerpetualEngine:
             if tier > 0
         }
         self.active_executive: Optional[Dict] = None
+        self.supreme_court_rulings: List[Dict] = []
 
     def run_cycles(self, num_cycles: int):
         """num_cycles=0 runs indefinitely."""
@@ -172,6 +174,7 @@ class PerpetualEngine:
                 },
                 "senate_votes": [],
                 "executive": None,
+                "supreme_court": [],
             },
         }
 
@@ -322,6 +325,29 @@ class PerpetualEngine:
             b_raw, a_challenge, b_rebuttal, b_newness, pair.domain, approaches, self.models,
             self.phase2_constitution_extract,
             unverified_numeric_assertions=b_science.get("unverified_assertions", []),
+        )
+
+        a_outcome = self._maybe_run_supreme_court_appeal(
+            state=sa,
+            entry_claim_text=a_raw,
+            challenge_text=b_challenge,
+            rebuttal_text=a_rebuttal,
+            newness_result=a_newness,
+            domain=pair.domain,
+            approaches=approaches,
+            outcome=a_outcome,
+            appeal_target_id=None,
+        )
+        b_outcome = self._maybe_run_supreme_court_appeal(
+            state=sb,
+            entry_claim_text=b_raw,
+            challenge_text=a_challenge,
+            rebuttal_text=b_rebuttal,
+            newness_result=b_newness,
+            domain=pair.domain,
+            approaches=approaches,
+            outcome=b_outcome,
+            appeal_target_id=None,
         )
 
         self._apply_unverified_numeric_drama_bonus(a_outcome, b_challenge, a_science)
@@ -534,6 +560,18 @@ class PerpetualEngine:
             self.phase2_constitution_extract,
         )
 
+        outcome = self._maybe_run_supreme_court_appeal(
+            state=target_state,
+            entry_claim_text=target.get("raw_claim_text", ""),
+            challenge_text=challenge_text,
+            rebuttal_text=rebuttal_text,
+            newness_result=newness,
+            domain=domain,
+            approaches=approaches,
+            outcome=outcome,
+            appeal_target_id=target["display_id"],
+        )
+
         # Deposit as separate Archive entry
         display_id = self.db.next_display_id()
         fed_entry = ArchiveEntry(
@@ -595,6 +633,153 @@ class PerpetualEngine:
             "inverted_assumption": inverted_assumption,
             "outcome": outcome["outcome"],
         }
+
+    def _count_recursive_dependents(self, display_id: str) -> int:
+        """Count unique recursive dependents of an entry (potential chain-collapse impact)."""
+        visited = set()
+        queue = [display_id]
+        max_depth = int(self.config.get("chain_collapse_max_depth", 10))
+        depth_map = {display_id: 0}
+
+        while queue:
+            current = queue.pop(0)
+            depth = depth_map.get(current, 0)
+            if depth >= max_depth:
+                continue
+            for dep_id in self.db.get_entry_dependents(current):
+                if dep_id in visited:
+                    continue
+                visited.add(dep_id)
+                queue.append(dep_id)
+                depth_map[dep_id] = depth + 1
+        return len(visited)
+
+    def _run_court_appeal_vote(
+        self,
+        claim_text: str,
+        challenge_text: str,
+        rebuttal_text: str,
+        outcome: dict,
+        domain: str,
+    ) -> Dict[str, object]:
+        """Three-judge appeal vote. Returns counts and vote records."""
+        judges = ["Originalist", "Pragmatist", "Protectionist"]
+        records = []
+        overturn = 0
+        uphold = 0
+
+        for philosophy in judges:
+            response = self.models.complete(
+                task_type="court_judges",
+                system_prompt=(
+                    f"You are a Court Judge with {philosophy} philosophy. "
+                    "Decide appeal vote only. Return one line starting with OVERTURN:, UPHOLD:, or ABSTAIN:."
+                ),
+                user_prompt=(
+                    f"DOMAIN: {domain}\n"
+                    f"CURRENT OUTCOME: {outcome.get('outcome', '')} ({outcome.get('ruling_type', '')})\n\n"
+                    f"CLAIM:\n{claim_text}\n\n"
+                    f"CHALLENGE:\n{challenge_text}\n\n"
+                    f"REBUTTAL:\n{rebuttal_text}\n\n"
+                    "Vote OVERTURN or UPHOLD the current ruling."
+                ),
+                max_tokens=180,
+            ).content or ""
+
+            text = response.strip().upper()
+            vote = "ABSTAIN"
+            if text.startswith("OVERTURN"):
+                vote = "OVERTURN"
+                overturn += 1
+            elif text.startswith("UPHOLD"):
+                vote = "UPHOLD"
+                uphold += 1
+            records.append({"judge": philosophy, "vote": vote, "reasoning": response.strip()})
+
+        return {
+            "overturn": overturn,
+            "uphold": uphold,
+            "margin": abs(overturn - uphold),
+            "records": records,
+        }
+
+    def _maybe_run_supreme_court_appeal(
+        self,
+        state: State,
+        entry_claim_text: str,
+        challenge_text: str,
+        rebuttal_text: str,
+        newness_result: dict,
+        domain: str,
+        approaches: Dict[str, str],
+        outcome: dict,
+        appeal_target_id: Optional[str],
+    ) -> dict:
+        """
+        Supreme Court (Opus) is invoked ONLY when:
+        1) Senator files appeal for a destroyed claim,
+        2) Court appeal vote is tied/within 1 vote,
+        3) Chain collapse would affect 3+ dependent claims.
+        """
+        if outcome.get("outcome") != "destroyed":
+            return outcome
+        if state.token_budget < APPEAL_COST_TOKENS:
+            return outcome
+
+        state.deduct_tokens(APPEAL_COST_TOKENS)
+        potential_dependents = (
+            self._count_recursive_dependents(appeal_target_id) if appeal_target_id else 0
+        )
+        vote = self._run_court_appeal_vote(
+            claim_text=entry_claim_text,
+            challenge_text=challenge_text,
+            rebuttal_text=rebuttal_text,
+            outcome=outcome,
+            domain=domain,
+        )
+        close_vote = vote["margin"] <= 1
+        invoke_supreme = close_vote and potential_dependents >= 3
+
+        appeal_record = {
+            "state": state.name,
+            "domain": domain,
+            "appeal_target": appeal_target_id,
+            "filed": True,
+            "vote": vote,
+            "potential_dependents": potential_dependents,
+            "invoked_supreme_court": invoke_supreme,
+        }
+        self.cycle_log_data["governance"]["supreme_court"].append(appeal_record)
+
+        if not invoke_supreme:
+            return outcome
+
+        supreme_outcome = determine_outcome(
+            entry_claim_text,
+            challenge_text,
+            rebuttal_text,
+            newness_result,
+            domain,
+            approaches,
+            self.models,
+            constitution_context=self.constitution_text,
+            task_type="supreme_court",
+        )
+        supreme_outcome["appeal_final"] = True
+        supreme_outcome["reasoning"] = (
+            f"{supreme_outcome.get('reasoning', '').strip()} "
+            "Supreme Court ruling is final — no further appeal."
+        ).strip()
+        self.supreme_court_rulings.append(
+            {
+                "cycle": self.cycle,
+                "state": state.name,
+                "domain": domain,
+                "appeal_target": appeal_target_id,
+                "outcome": supreme_outcome.get("outcome"),
+            }
+        )
+        return supreme_outcome
 
     # ─── END-OF-CYCLE (STEP 19) ──────────────────────────────────
 
