@@ -98,7 +98,12 @@ def test_claim_validation_foundation(db):
 
 
 def test_claim_validation_discovery(db):
-    claim = """CLAIM TYPE: Discovery\nPOSITION: I propose a new battery architecture.\nSTEP 1: Because layered anodes reduce dendrite growth.\nCONCLUSION: Therefore cycle life improves."""
+    claim = """CLAIM TYPE: Discovery
+POSITION: Layered anodes improve cycle life, operationally defined as >=10% more retained capacity after 500 cycles measured by standardized charge/discharge tests.
+STEP 1: If layered anodes are used, then dendrite-related failure rates should decrease in controlled cycling experiments (testable implication).
+GAP ADDRESSED: Prior claims do not specify a measurable threshold for improved cycle life.
+ESTIMATE: 12% cycle-life gain under identical test protocols. ASSUMPTIONS: same electrolyte chemistry and temperature window.
+CONCLUSION: Therefore cycle life improves."""
     is_valid, errors = validate_claim(claim, StubModels("{}"), db)
     assert is_valid
     assert errors == []
@@ -107,7 +112,37 @@ def test_claim_validation_discovery(db):
 
 def test_claim_validation_discovery_no_citations_with_survivors(db):
     _make_entry(db, status="survived")
-    claim = """CLAIM TYPE: Discovery\nPOSITION: I propose a new battery architecture.\nSTEP 1: Because layered anodes reduce dendrite growth.\nCONCLUSION: Therefore cycle life improves."""
+    claim = """CLAIM TYPE: Discovery
+POSITION: Layered anodes improve cycle life, operationally defined as >=10% more retained capacity after 500 cycles measured by standardized charge/discharge tests.
+STEP 1: If layered anodes are used, then dendrite-related failure rates should decrease in controlled cycling experiments (falsifiable).
+GAP ADDRESSED: Prior claims do not specify a measurable threshold for improved cycle life.
+EVIDENCE CLASS: preliminary bench test.
+CONCLUSION: Therefore cycle life improves."""
+    is_valid, errors = validate_claim(claim, StubModels("{}"), db)
+    assert is_valid
+    assert errors == []
+
+
+def test_claim_validation_foundation_requires_structural_fields(db):
+    main_id = _make_entry(db, status="surviving")
+    claim = f"""CLAIM TYPE: Foundation
+POSITION: Existing archive evidence supports a stable mechanism.
+STEP 1: Prior measurements align with this synthesis.
+CITATIONS: {main_id}
+DEPENDS ON: {main_id}
+SCOPE BOUNDARY: This claim does not address long-term deployment risks.
+CONCLUSION: The mechanism has credible support in the archive."""
+    is_valid, errors = validate_claim(claim, StubModels("{}"), db)
+    assert is_valid
+    assert errors == []
+
+
+def test_claim_validation_challenge_requires_target_step_and_alternative(db):
+    claim = """CLAIM TYPE: Challenge
+CHALLENGE TARGET: #001
+STEP 2 is attacked because it assumes linear scaling.
+PROPOSED ALTERNATIVE: Use a saturation model with bounded response under high load.
+CONCLUSION: The alternative better fits known constraints."""
     is_valid, errors = validate_claim(claim, StubModels("{}"), db)
     assert is_valid
     assert errors == []

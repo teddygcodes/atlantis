@@ -427,10 +427,12 @@ def validate_claim(
         r"\b(FOUNDATION|DISCOVERY|CHALLENGE)\s+CLAIM\b",
         r"^\s*(FOUNDATION|DISCOVERY|CHALLENGE)\b",
     ]
-    has_explicit_type = any(
-        re.search(p, text_upper, re.IGNORECASE | re.MULTILINE)
+    explicit_types = {
+        m.group(1).upper()
         for p in explicit_type_patterns
-    )
+        for m in re.finditer(p, text_upper, re.IGNORECASE | re.MULTILINE)
+    }
+    has_explicit_type = bool(explicit_types)
     implies_challenge = bool(re.search(
         r"\b(reservation|concern|critic|reject|wrong|fails?|flaw|counter|dispute|challenge)\b",
         text_upper,
@@ -444,6 +446,18 @@ def validate_claim(
     has_type = has_explicit_type or implies_challenge or implies_discovery
     if not has_type:
         errors.append("Missing CLAIM TYPE declaration (Foundation|Discovery|Challenge)")
+
+    claim_type = None
+    if len(explicit_types) > 1:
+        errors.append("Ambiguous CLAIM TYPE: include exactly one of Foundation|Discovery|Challenge")
+    elif len(explicit_types) == 1:
+        claim_type = next(iter(explicit_types)).lower()
+    elif implies_challenge:
+        claim_type = "challenge"
+    elif implies_discovery:
+        claim_type = "discovery"
+    elif has_type:
+        claim_type = "foundation"
 
     # Must have at least one reasoning step, explicit OR natural-language chain.
     has_explicit_step = bool(re.search(r'\bSTEP\s*\d+\b', claim_text, re.IGNORECASE))
@@ -463,22 +477,79 @@ def validate_claim(
         text_upper,
         re.IGNORECASE,
     ))
-    if not (has_position_header or has_conclusion_header or has_natural_conclusion):
+    if claim_type in {"foundation", "discovery"} and not (has_position_header or has_conclusion_header or has_natural_conclusion):
         errors.append("Missing POSITION or CONCLUSION statement")
 
-    # Discovery claims do not require citations.
-    # Foundation claims must include at least one archive citation,
-    # but only if surviving/partial entries actually exist to cite.
-    is_discovery_claim = bool(re.search(r"\bDISCOVERY\b", text_upper, re.IGNORECASE))
-    is_foundation_claim = bool(re.search(r"\bFOUNDATION\b", text_upper, re.IGNORECASE))
-    has_citation = bool(re.search(r"#\d{3}", claim_text))
-    if is_foundation_claim and not is_discovery_claim and not has_citation:
-        # Check whether there are any citable entries in the Archive yet.
-        has_citable = any(
-            c.get("archive_tier") == "main" for c in (db.get_surviving_claims() if db else [])
-        )
-        if has_citable:
-            errors.append("Foundation claims require at least one citation (e.g., #001)")
+    surviving_claims = db.get_surviving_claims() if db else []
+    main_ids = {
+        c.get("display_id")
+        for c in surviving_claims
+        if c.get("archive_tier") == "main" and c.get("display_id")
+    }
+
+    if claim_type == "discovery":
+        position_match = re.search(r"^\s*POSITION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+        if not position_match:
+            errors.append("Discovery claims must include POSITION with an operational definition")
+        else:
+            position_text = position_match.group(1)
+            has_operational_definition = bool(re.search(
+                r"\b(defined as|operational(?:ly)?|measured by|quantified by|observed as|when\s+measured|by\s+tracking)\b",
+                position_text,
+                re.IGNORECASE,
+            ))
+            if not has_operational_definition:
+                errors.append("Discovery POSITION must include an operational definition")
+
+        step_lines = re.findall(r"^\s*STEP\s*\d+\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+        has_testable_step = any(re.search(
+            r"\b(testable|falsifiable|predicts?|would\s+(increase|decrease|change)|if\s+.+\s+then|can\s+be\s+tested|experiment)\b",
+            s,
+            re.IGNORECASE,
+        ) for s in step_lines)
+        if not has_testable_step:
+            errors.append("Discovery claims must include at least one falsifiable or testable implication in STEP lines")
+
+        if not re.search(r"^\s*GAP\s+ADDRESSED\s*[:\-]\s*.+$", claim_text, re.IGNORECASE | re.MULTILINE):
+            errors.append("Discovery claims must include GAP ADDRESSED")
+
+        has_numeric_assertion = bool(re.search(r"\b\d+(?:\.\d+)?\b", claim_text))
+        has_estimate_with_assumptions = bool(re.search(
+            r"^\s*ESTIMATE\s*[:\-].+\bASSUMPTIONS?\b",
+            claim_text,
+            re.IGNORECASE | re.MULTILINE,
+        ))
+        has_evidence_class = bool(re.search(r"\bEVIDENCE\s+CLASS\b\s*[:\-]\s*.+", claim_text, re.IGNORECASE))
+        if has_numeric_assertion and not (has_estimate_with_assumptions or has_evidence_class):
+            errors.append("Discovery numeric assertions require ESTIMATE with assumptions or an EVIDENCE CLASS")
+
+    if claim_type == "foundation":
+        citations_line = re.search(r"^\s*CITATIONS\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+        cited_ids = set(re.findall(r"#\d{3}", citations_line.group(1) if citations_line else ""))
+        valid_citations = cited_ids & main_ids
+        if not citations_line:
+            errors.append("Foundation claims must include CITATIONS with at least one main archive #ID")
+        elif not valid_citations:
+            errors.append("Foundation CITATIONS must include at least one valid main archive #ID")
+
+        depends_line = re.search(r"^\s*DEPENDS\s+ON\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+        if not depends_line or not re.search(r"#\d{3}", depends_line.group(1)):
+            errors.append("Foundation claims must include DEPENDS ON with prior claim #ID(s)")
+
+        if not re.search(r"^\s*SCOPE\s+BOUNDARY\s*[:\-]\s*.+$", claim_text, re.IGNORECASE | re.MULTILINE):
+            errors.append("Foundation claims must include SCOPE BOUNDARY")
+
+    if claim_type == "challenge":
+        target_line = re.search(r"^\s*CHALLENGE\s+TARGET\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+        if not target_line or not re.search(r"#\d{3}", target_line.group(1)):
+            errors.append("Challenge claims must include CHALLENGE TARGET with a specific #ID")
+
+        if not re.search(r"\bSTEP\s*\d+\b", claim_text, re.IGNORECASE):
+            errors.append("Challenge claims must identify which STEP number is being attacked")
+
+        alternative_line = re.search(r"^\s*PROPOSED\s+ALTERNATIVE\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+        if not alternative_line or len(alternative_line.group(1).strip()) < 5:
+            errors.append("Challenge claims must include a substantive PROPOSED ALTERNATIVE")
 
     if errors:
         print("[validate_claim] claim rejected. reasons=", errors)
