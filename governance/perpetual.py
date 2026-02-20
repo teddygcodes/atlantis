@@ -35,6 +35,7 @@ from governance.states import (
     validate_claim,
     validate_challenge,
     normalize_claim,
+    run_science_gate,
     decompose_premises,
     check_rebuttal_newness,
     check_anti_loop,
@@ -270,6 +271,10 @@ class PerpetualEngine:
         a_norm = normalize_claim(a_raw, self.models)
         b_norm = normalize_claim(b_raw, self.models)
 
+        # Step 5.5: Science gate (Haiku post-normalization)
+        a_science = run_science_gate(a_raw, a_norm, self.models)
+        b_science = run_science_gate(b_raw, b_norm, self.models)
+
         # Step 6: Decompose both (Haiku)
         a_premises = decompose_premises(a_raw, self.models)
         b_premises = decompose_premises(b_raw, self.models)
@@ -308,18 +313,31 @@ class PerpetualEngine:
 
         # Step 14: Judge determines outcomes (Sonnet)
         approaches = {sa.name: sa.approach, sb.name: sb.approach}
-        a_outcome = determine_outcome(a_raw, b_challenge, a_rebuttal, a_newness, pair.domain, approaches, self.models, self.phase2_constitution_extract)
-        b_outcome = determine_outcome(b_raw, a_challenge, b_rebuttal, b_newness, pair.domain, approaches, self.models, self.phase2_constitution_extract)
+        a_outcome = determine_outcome(
+            a_raw, b_challenge, a_rebuttal, a_newness, pair.domain, approaches, self.models,
+            self.phase2_constitution_extract,
+            unverified_numeric_assertions=a_science.get("unverified_assertions", []),
+        )
+        b_outcome = determine_outcome(
+            b_raw, a_challenge, b_rebuttal, b_newness, pair.domain, approaches, self.models,
+            self.phase2_constitution_extract,
+            unverified_numeric_assertions=b_science.get("unverified_assertions", []),
+        )
+
+        self._apply_unverified_numeric_drama_bonus(a_outcome, b_challenge, a_science)
+        self._apply_unverified_numeric_drama_bonus(b_outcome, a_challenge, b_science)
 
         # Step 15: Build ArchiveEntry objects and deposit
         a_entry = self._build_archive_entry(
             state=sa, raw=a_raw, challenge=b_challenge, rebuttal=a_rebuttal,
             norm=a_norm, premises=a_premises, outcome=a_outcome,
+            science_gate=a_science,
             challenger_entity=f"{sb.name} Critic", lab_hypothesis=a_lab,
         )
         b_entry = self._build_archive_entry(
             state=sb, raw=b_raw, challenge=a_challenge, rebuttal=b_rebuttal,
             norm=b_norm, premises=b_premises, outcome=b_outcome,
+            science_gate=b_science,
             challenger_entity=f"{sa.name} Critic", lab_hypothesis=b_lab,
         )
 
@@ -999,6 +1017,24 @@ class PerpetualEngine:
             "exchange": {"state_name": state.name, "domain": state.domain},
         })
 
+
+    def _apply_unverified_numeric_drama_bonus(self, outcome: dict, challenge_text: str, science_gate: dict):
+        """+1 drama when a challenge likely targets an unverified numeric assertion."""
+        unverified = [s.lower() for s in (science_gate or {}).get("unverified_assertions", []) if isinstance(s, str)]
+        if not unverified:
+            return
+        challenge_lower = (challenge_text or "").lower()
+        if not challenge_lower.strip():
+            return
+
+        targeted = any(
+            numeric and (numeric in challenge_lower or any(tok in challenge_lower for tok in re.findall(r"\d+(?:\.\d+)?", numeric)))
+            for numeric in unverified
+        )
+        if targeted and outcome.get("outcome") in ("destroyed", "retracted", "partial"):
+            scores = outcome.setdefault("scores", {})
+            scores["drama"] = min(10, int(scores.get("drama", 0)) + 1)
+
     # ─── ARCHIVE ENTRY BUILDER ────────────────────────────────────
 
     def _build_archive_entry(
@@ -1010,6 +1046,7 @@ class PerpetualEngine:
         norm: dict,
         premises: dict,
         outcome: dict,
+        science_gate: Optional[dict] = None,
         challenger_entity: str = "",
         lab_hypothesis: Optional[str] = None,
     ) -> ArchiveEntry:
@@ -1030,6 +1067,8 @@ class PerpetualEngine:
             "retracted": "graveyard",
         }
         archive_tier = archive_tier_map.get(status, "quarantine")
+
+        science_gate = science_gate or {}
 
         return ArchiveEntry(
             entry_id=str(uuid.uuid4()),
@@ -1062,6 +1101,7 @@ class PerpetualEngine:
             citations=norm.get("citations", []),
             stability_score=1,
             tokens_earned=0,
+            unverified_numerics=science_gate.get("unverified_assertions", []),
         )
 
     # ─── TOKEN OUTCOMES ───────────────────────────────────────────

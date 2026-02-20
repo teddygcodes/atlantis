@@ -10,7 +10,14 @@ import pytest
 
 from core.persistence import PersistenceLayer
 from governance.perpetual import PerpetualEngine
-from governance.states import ArchiveEntry, check_anti_loop, normalize_claim, validate_claim
+from governance.states import (
+    ArchiveEntry,
+    check_anti_loop,
+    determine_outcome,
+    normalize_claim,
+    run_science_gate,
+    validate_claim,
+)
 
 
 class StubModels:
@@ -19,6 +26,17 @@ class StubModels:
 
     def complete(self, **kwargs):
         return SimpleNamespace(content=self.content)
+
+
+class SequenceStubModels:
+    def __init__(self, contents):
+        self.contents = list(contents)
+        self.calls = []
+
+    def complete(self, **kwargs):
+        self.calls.append(kwargs)
+        content = self.contents.pop(0) if self.contents else "{}"
+        return SimpleNamespace(content=content)
 
 
 @pytest.fixture
@@ -217,3 +235,45 @@ def test_export_archive_grouped_by_tier(db, tmp_path):
     assert "## Main Archive (Surviving)" in archive_md
     assert "## Quarantine (Partial/Under Review)" in archive_md
     assert "## Graveyard (Destroyed/Retracted)" in archive_md
+
+
+def test_science_gate_classifies_and_extracts_unverified():
+    models = StubModels('{"assertions":[{"text":"500 years","classification":"UNVERIFIED","source_or_assumption":""},{"text":"12%","classification":"ESTIMATE","source_or_assumption":"assumes fixed temp"}]}')
+    out = run_science_gate("Over 500 years it rises 12%.", {"position": "x"}, models)
+    assert out["unverified_assertions"] == ["500 years"]
+
+
+def test_determine_outcome_includes_numeric_skepticism_note():
+    models = SequenceStubModels(['{"outcome":"survived","ruling_type":"SURVIVED","reasoning":"ok","open_questions":[],"scores":{"drama":5,"novelty":5,"depth":5}}'])
+    determine_outcome(
+        claim_text="The effect is 47%",
+        challenge_text="Challenge",
+        rebuttal_text="Rebuttal",
+        newness_result={"new_reasoning": True},
+        domain="physics",
+        state_approaches={"A": "empirical", "B": "formal"},
+        models=models,
+        unverified_numeric_assertions=["47%"],
+    )
+    prompt = models.calls[0]["user_prompt"]
+    assert "This claim contains unverified numeric assertions" in prompt
+    assert "47%" in prompt
+
+
+def test_archive_persists_unverified_numerics_json(db):
+    did = _make_entry(db, unverified_numerics=["47%", "500 years"])
+    loaded = db.get_archive_entry(did)
+    assert loaded is not None
+    assert loaded["unverified_numerics"] == ["47%", "500 years"]
+
+
+def test_unverified_numeric_challenge_bonus_applies_to_drama():
+    engine = PerpetualEngine.__new__(PerpetualEngine)
+    outcome = {"outcome": "partial", "scores": {"drama": 6, "novelty": 4, "depth": 4}}
+    PerpetualEngine._apply_unverified_numeric_drama_bonus(
+        engine,
+        outcome,
+        "STEP TARGETED: the 47% increase is unsupported",
+        {"unverified_assertions": ["47% increase"]},
+    )
+    assert outcome["scores"]["drama"] == 7

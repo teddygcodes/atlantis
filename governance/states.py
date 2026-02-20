@@ -107,6 +107,7 @@ class ArchiveEntry:
     stability_score: int = 1
     impact_score: int = 0
     tokens_earned: int = 0
+    unverified_numerics: List[str] = field(default_factory=list)
     created_at: str = field(default_factory=_now)
 
 
@@ -659,6 +660,56 @@ def normalize_claim(claim_text: str, models: ModelRouter) -> dict:
     return parsed
 
 
+def run_science_gate(claim_text: str, normalized_claim: dict, models: ModelRouter) -> dict:
+    """
+    Haiku post-normalization scan for numeric assertions and verification status.
+    Returns: {assertions: [{text, classification, source_or_assumption}], unverified_assertions: [text, ...]}
+    """
+    response = models.complete(
+        task_type="science_gate",
+        system_prompt=(
+            "You are a strict numeric-claim verifier. Find all numeric assertions and classify each as "
+            "CITED, ESTIMATE, or UNVERIFIED. Return valid JSON only."
+        ),
+        user_prompt=(
+            f"RAW CLAIM TEXT:\n{claim_text}\n\n"
+            f"NORMALIZED CLAIM JSON:\n{json.dumps(normalized_claim)}\n\n"
+            "Numeric assertions include quantities, percentages, rates, timescales, and measurements.\n"
+            "Classification rules:\n"
+            "- CITED: tied to a specific source/prior claim in the text (e.g., #ID, named source).\n"
+            "- ESTIMATE: explicitly framed as estimate/projection with assumptions.\n"
+            "- UNVERIFIED: naked number with no explicit source or assumptions.\n\n"
+            "Return JSON exactly as:\n"
+            '{"assertions": [{"text": "...", "classification": "CITED|ESTIMATE|UNVERIFIED", "source_or_assumption": "..."}]}'
+        ),
+        max_tokens=500,
+    )
+
+    result = _parse_json_response(response.content, default={"assertions": []})
+    assertions = result.get("assertions") if isinstance(result, dict) else []
+    if not isinstance(assertions, list):
+        assertions = []
+
+    cleaned = []
+    for item in assertions:
+        if not isinstance(item, dict):
+            continue
+        txt = str(item.get("text", "")).strip()
+        classification = str(item.get("classification", "UNVERIFIED")).upper().strip()
+        if classification not in {"CITED", "ESTIMATE", "UNVERIFIED"}:
+            classification = "UNVERIFIED"
+        source_or_assumption = str(item.get("source_or_assumption", "")).strip()
+        if txt:
+            cleaned.append({
+                "text": txt,
+                "classification": classification,
+                "source_or_assumption": source_or_assumption,
+            })
+
+    unverified = [a["text"] for a in cleaned if a.get("classification") == "UNVERIFIED"]
+    return {"assertions": cleaned, "unverified_assertions": unverified}
+
+
 def decompose_premises(claim_text: str, models: ModelRouter) -> dict:
     """
     Haiku call. Decomposes claim into explicit and implicit premises.
@@ -768,6 +819,7 @@ def determine_outcome(
     state_approaches: dict,
     models: ModelRouter,
     constitution_context: str = "",
+    unverified_numeric_assertions: Optional[List[str]] = None,
 ) -> dict:
     """
     Judge determines outcome of claim exchange.
@@ -796,6 +848,15 @@ def determine_outcome(
         f"{name} ({approach})" for name, approach in state_approaches.items()
     )
 
+    unverified_numeric_assertions = unverified_numeric_assertions or []
+    skepticism_note = ""
+    if unverified_numeric_assertions:
+        skepticism_note = (
+            "This claim contains unverified numeric assertions: "
+            f"{json.dumps(unverified_numeric_assertions)}. "
+            "Weight these assertions with appropriate skepticism.\n\n"
+        )
+
     constitution_block = (
         f"PHASE 2 CONSTITUTIONAL EXTRACT (authoritative):\n{constitution_context}\n\n"
         if constitution_context else ""
@@ -817,6 +878,7 @@ def determine_outcome(
             f"REBUTTAL:\n{rebuttal_text}\n\n"
             f"REBUTTAL NEWNESS: {newness_note}\n\n"
             f"SCORING RUBRIC:\n{SCORING_RUBRIC}\n\n"
+            f"{skepticism_note}"
             f"Determine the outcome:\n"
             f"First determine ruling_type (required):\n"
             f"- REJECT_FACT: empirically false claim\n"
