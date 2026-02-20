@@ -139,7 +139,7 @@ class LLMProvider:
 
     def complete(self, system_prompt: str, user_prompt: str,
                  max_tokens: int = None, temperature: float = None,
-                 model: str = None) -> LLMResponse:
+                 model: str = None, task_type: str = "unknown") -> LLMResponse:
         """
         Send a completion request to the LLM.
         This is the ONLY way agents communicate with the LLM.
@@ -179,11 +179,9 @@ class LLMProvider:
             print(user_prompt)
             response = self._simulate_local(system_prompt, user_prompt, max_tokens, model)
         else:
-            timeout_retries = 3
-            server_error_retries = 2
-            timeout_attempt = 0
-            server_error_attempt = 0
-            retry_delay = 1.0
+            max_retries = 3
+            backoff_schedule = [5.0, 15.0, 45.0]
+            attempt = 0
             while True:
                 try:
                     if self.mode == "api" and self.client:
@@ -191,30 +189,19 @@ class LLMProvider:
                     else:
                         response = self._simulate_local(system_prompt, user_prompt, max_tokens, model)
                     break
-                except anthropic.RateLimitError as e:
-                    wait = max(_safe_retry_after_seconds(e), retry_delay)
-                    self._log_error("rate_limit", model, e, wait)
-                    print(f"    ⚠ Rate limit hit, waiting {wait:.1f}s before retry")
-                    time.sleep(wait)
-                except anthropic.APITimeoutError as e:
-                    timeout_attempt += 1
-                    wait = retry_delay * (2 ** (timeout_attempt - 1))
-                    self._log_error("timeout", model, e, wait)
-                    if timeout_attempt <= timeout_retries:
-                        print(f"    ⚠ API timeout, retry {timeout_attempt}/{timeout_retries} in {wait:.1f}s")
-                        time.sleep(wait)
-                        continue
-                    raise LLMTimeoutException(f"API timeout after {timeout_retries} retries")
-                except anthropic.InternalServerError as e:
-                    server_error_attempt += 1
-                    wait = retry_delay * (2 ** (server_error_attempt - 1))
-                    self._log_error("server_error", model, e, wait)
-                    if server_error_attempt <= server_error_retries:
-                        print(f"    ⚠ API 500, retry {server_error_attempt}/{server_error_retries} in {wait:.1f}s")
-                        time.sleep(wait)
-                        continue
-                    raise
                 except Exception as e:
+                    if self._should_retry_transient_error(e) and attempt < max_retries:
+                        wait = backoff_schedule[attempt]
+                        attempt += 1
+                        self._log_error("transient_retry", model, e, wait)
+                        print(f"Retry {attempt}/3 for {task_type} after {e}")
+                        time.sleep(wait)
+                        continue
+
+                    if self._is_timeout_error(e):
+                        self._log_error("timeout", model, e, 0.0)
+                        raise LLMTimeoutException(f"API timeout after {max_retries} retries")
+
                     self._log_error("unhandled", model, e, 0.0)
                     # Last resort - return error response
                     response = LLMResponse(
@@ -248,6 +235,40 @@ class LLMProvider:
         }
         with self._error_log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(payload) + "\n")
+
+    @staticmethod
+    def _is_timeout_error(error: Exception) -> bool:
+        return error.__class__.__name__ == "APITimeoutError"
+
+    @classmethod
+    def _should_retry_transient_error(cls, error: Exception) -> bool:
+        status_code = getattr(error, "status_code", None)
+        if status_code in {400, 401}:
+            return False
+
+        body = getattr(error, "body", None)
+        error_type = ""
+        if isinstance(body, dict):
+            err = body.get("error")
+            if isinstance(err, dict):
+                error_type = str(err.get("type", "")).lower()
+            else:
+                error_type = str(body.get("type", "")).lower()
+
+        message = str(error).lower()
+        cls_name = error.__class__.__name__
+
+        if cls_name in {"APITimeoutError", "RateLimitError"}:
+            return True
+        if status_code in {503, 529}:
+            return True
+        if "timeout" in message:
+            return True
+        if "overloaded" in message or "rate limit" in message or "rate_limit" in message:
+            return True
+        if error_type in {"overloaded_error", "rate_limit_error", "timeout_error"}:
+            return True
+        return False
 
     def _call_api(self, system_prompt: str, user_prompt: str,
                   max_tokens: int, temperature: float, model: str) -> LLMResponse:
