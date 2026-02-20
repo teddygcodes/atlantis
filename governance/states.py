@@ -668,6 +668,48 @@ def validate_claim(
     return (len(errors) == 0, errors)
 
 
+def extract_validation_rejection_types(claim_text: str, errors: List[str]) -> List[str]:
+    """Map validate_claim failures (and soft discovery misses) to budget rejection counters."""
+    rejection_types: List[str] = []
+    error_text = "\n".join(errors or []).lower()
+
+    if "gap addressed" in error_text:
+        rejection_types.append("missing_gap_addressed")
+    if "citations" in error_text:
+        rejection_types.append("missing_citations")
+    if "challenge target" in error_text:
+        rejection_types.append("missing_challenge_target")
+
+    # Soft discovery checks are counted even when they are warnings in non-empirical domains.
+    position_match = re.search(r"^\s*POSITION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+    if not position_match:
+        rejection_types.append("missing_operational_definition")
+    else:
+        position_text = position_match.group(1)
+        has_operational_definition = bool(re.search(
+            r"\b(defined as|operational(?:ly)?|measured by|quantified by|observed as|when\s+measured|by\s+tracking)\b",
+            position_text,
+            re.IGNORECASE,
+        ))
+        if not has_operational_definition:
+            rejection_types.append("missing_operational_definition")
+
+    step_lines = re.findall(r"^\s*STEP\s*\d+\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+    has_testable_step = any(re.search(
+        r"\b(testable|falsifiable|predicts?|would\s+(increase|decrease|change)|if\s+.+\s+then|can\s+be\s+tested|experiment)\b",
+        s,
+        re.IGNORECASE,
+    ) for s in step_lines)
+    if not has_testable_step:
+        rejection_types.append("missing_testable_implication")
+
+    deduped = []
+    for key in rejection_types:
+        if key not in deduped:
+            deduped.append(key)
+    return deduped
+
+
 def validate_challenge(challenge_text: str) -> Tuple[bool, str]:
     """
     Engine-side check: does challenge reference a specific step?

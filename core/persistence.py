@@ -814,7 +814,7 @@ class PersistenceLayer:
             out.append(d)
         return out
 
-    def increment_pipeline_claims(self, state_name: str, survived: bool, ruling_type: str = "", cycle: Optional[int] = None):
+    def increment_pipeline_claims(self, state_name: str, survived: bool, ruling_type: str = "", cycle: Optional[int] = None, rejection_types: Optional[List[str]] = None):
         with self._get_conn() as conn:
             row = conn.execute(
                 "SELECT total_rejections_by_type, cycles_to_first_survival, created_at_cycle "
@@ -849,6 +849,9 @@ class PersistenceLayer:
             else:
                 if ruling_type:
                     rejections[ruling_type] = int(rejections.get(ruling_type, 0)) + 1
+                for rejection_type in (rejection_types or []):
+                    if rejection_type:
+                        rejections[rejection_type] = int(rejections.get(rejection_type, 0)) + 1
                 conn.execute(
                     "UPDATE state_budgets "
                     "SET total_pipeline_claims = total_pipeline_claims + 1, "
