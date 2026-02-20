@@ -54,6 +54,7 @@ class AtlantisEngine:
         mock: bool = False,
         dry_run: bool = False,
         force_clean: bool = False,
+        verbose: bool = False,
         api_key: Optional[str] = None,
     ):
         self._check_v1_data(force_clean)
@@ -62,6 +63,7 @@ class AtlantisEngine:
         self.config = config or MOCK_CONFIG
         self.mock = mock
         self.dry_run = dry_run
+        self.verbose = verbose
         self.output_dir = Path("output")
         self._initialize_run_folder()
         self._prepare_output_workspace()
@@ -127,6 +129,7 @@ class AtlantisEngine:
             content_gen=self.content_gen,
             config=self.config,
             output_dir=str(self.output_dir),
+            verbose=self.verbose,
         )
         perpetual.run_cycles(self.config["governance_cycles"])
 
@@ -727,6 +730,10 @@ def main():
         "--dry-run", action="store_true",
         help="Run full pipeline and print prompts/model settings without live API calls"
     )
+    parser.add_argument(
+        "--verbose", action="store_true",
+        help="Print full raw claim/challenge/rebuttal text in cycle logs"
+    )
     args = parser.parse_args()
 
     config = MOCK_CONFIG if args.mock else PRODUCTION_CONFIG
@@ -736,5 +743,6 @@ def main():
         mock=args.mock,
         dry_run=args.dry_run,
         force_clean=args.force_clean,
+        verbose=args.verbose,
     )
     engine.run()

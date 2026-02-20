@@ -86,6 +86,7 @@ class PerpetualEngine:
         content_gen,                   # ContentGenerator (imported in engine.py)
         config: dict,
         output_dir: str = "output",
+        verbose: bool = False,
     ):
         self.state_manager = state_manager
         self.founder_profiles = founder_profiles
@@ -109,6 +110,7 @@ class PerpetualEngine:
         }
         self.active_executive: Optional[Dict] = None
         self.supreme_court_rulings: List[Dict] = []
+        self.verbose = verbose
 
     def run_cycles(self, num_cycles: int):
         """num_cycles=0 runs indefinitely."""
@@ -122,6 +124,70 @@ class PerpetualEngine:
             self._run_cycle()
 
     # ─── MAIN CYCLE ──────────────────────────────────────────────
+
+    @staticmethod
+    def _one_line(text: str, limit: int = 90) -> str:
+        cleaned = " ".join((text or "").split())
+        if len(cleaned) <= limit:
+            return cleaned
+        return cleaned[: limit - 3].rstrip() + "..."
+
+    @classmethod
+    def _extract_claim_summary(cls, raw_claim: str) -> Dict[str, str]:
+        claim_type_match = re.search(r"(?mi)^\s*CLAIM TYPE:\s*([^\n]+)", raw_claim or "")
+        claim_type = (claim_type_match.group(1).strip() if claim_type_match else "Claim")
+
+        proposition_match = re.search(r"(?mi)^\s*PROPOSITION:\s*([^\n]+)", raw_claim or "")
+        proposition = proposition_match.group(1).strip() if proposition_match else cls._one_line(raw_claim, 80)
+
+        chain_match = re.search(r"(?mi)^\s*REASONING CHAIN:\s*\n(.*?)(?=\n\s*[A-Z][A-Z _-]*:|$)", raw_claim or "", re.DOTALL)
+        if chain_match:
+            steps = re.findall(r"(?m)^\s*(?:[-*]|\d+[.)])\s+", chain_match.group(1))
+            if not steps:
+                steps = [ln for ln in chain_match.group(1).splitlines() if ln.strip()]
+            step_count = len(steps)
+        else:
+            step_count = 0
+
+        return {
+            "claim_type": claim_type.title(),
+            "proposition": proposition,
+            "steps": str(step_count),
+        }
+
+    @classmethod
+    def _extract_challenge_summary(cls, challenge_text: str) -> str:
+        target_step = "?"
+        label = ""
+        step_match = re.search(r"(?mi)(?:STEP\s*(\d+)|REASONING STEP ATTACKED:\s*Step\s*(\d+))", challenge_text or "")
+        if step_match:
+            target_step = step_match.group(1) or step_match.group(2) or "?"
+
+        label_match = re.search(r"(?mi)^\s*STEP \d+[^:\n]*:\s*([^\n]+)", challenge_text or "")
+        if label_match:
+            label = label_match.group(1).strip()
+
+        if not label:
+            why_match = re.search(r"(?mi)^\s*WHY THIS STEP FAILS:\s*([^\n]+)", challenge_text or "")
+            if why_match:
+                label = why_match.group(1).strip()
+
+        if not label:
+            label = cls._one_line(challenge_text, 40)
+
+        return f"targets Step {target_step} ({cls._one_line(label, 45)})"
+
+    @classmethod
+    def _extract_rebuttal_summary(cls, rebuttal_text: str) -> str:
+        option_match = re.search(r"(?mi)\bOPTION\s*([ABC])\b", rebuttal_text or "")
+        option = option_match.group(1) if option_match else "?"
+
+        defense_match = re.search(r"(?mi)^\s*NEW EVIDENCE OR REASONING:\s*([^\n]+)", rebuttal_text or "")
+        if not defense_match:
+            defense_match = re.search(r"(?mi)^\s*REBUTTAL:\s*([^\n]+)", rebuttal_text or "")
+        defense = defense_match.group(1).strip() if defense_match else cls._one_line(rebuttal_text, 48)
+
+        return f"Option {option} — {cls._one_line(defense, 55)}"
 
 
     @staticmethod
@@ -243,8 +309,19 @@ class PerpetualEngine:
             self._get_previous_claim_positions(sb.name),
             b_lab,
         )
-        _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
-        _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
+        a_claim_summary = self._extract_claim_summary(a_raw)
+        b_claim_summary = self._extract_claim_summary(b_raw)
+        _log(
+            f"  {sa.name}: {a_claim_summary['claim_type']} — '{self._one_line(a_claim_summary['proposition'], 58)}' "
+            f"({a_claim_summary['steps']} steps)"
+        )
+        _log(
+            f"  {sb.name}: {b_claim_summary['claim_type']} — '{self._one_line(b_claim_summary['proposition'], 58)}' "
+            f"({b_claim_summary['steps']} steps)"
+        )
+        if self.verbose:
+            _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
+            _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
 
         # Step 2.5: Discovery GAP ADDRESSED auto-fill repair (Haiku normalization)
         a_raw, a_auto_filled_gap = autofill_discovery_gap(a_raw, self.models)
@@ -305,6 +382,11 @@ class PerpetualEngine:
         # Steps 8-9: Critics cross-challenge (A attacks B, B attacks A)
         a_challenge = sa.produce_challenge(b_raw, b_premises, self.phase2_constitution_extract)
         b_challenge = sb.produce_challenge(a_raw, a_premises, self.phase2_constitution_extract)
+        _log(f"  Challenge by {sa.name} Critic: {self._extract_challenge_summary(a_challenge)}")
+        _log(f"  Challenge by {sb.name} Critic: {self._extract_challenge_summary(b_challenge)}")
+        if self.verbose:
+            _log(f"  RAW CHALLENGE ({sa.name}→{sb.name}):\n{a_challenge}\n")
+            _log(f"  RAW CHALLENGE ({sb.name}→{sa.name}):\n{b_challenge}\n")
 
         # Step 10: Validate challenges
         a_ch_ok, _ = validate_challenge(a_challenge)
@@ -319,6 +401,11 @@ class PerpetualEngine:
         # Steps 11-12: Researchers rebut
         b_rebuttal = sb.produce_rebuttal(a_challenge, b_raw, self.phase2_constitution_extract) if a_challenge else "OPTION A: No challenge to rebut."
         a_rebuttal = sa.produce_rebuttal(b_challenge, a_raw, self.phase2_constitution_extract) if b_challenge else "OPTION A: No challenge to rebut."
+        _log(f"  Rebuttal ({sb.name}): {self._extract_rebuttal_summary(b_rebuttal)}")
+        _log(f"  Rebuttal ({sa.name}): {self._extract_rebuttal_summary(a_rebuttal)}")
+        if self.verbose:
+            _log(f"  RAW REBUTTAL ({sb.name}):\n{b_rebuttal}\n")
+            _log(f"  RAW REBUTTAL ({sa.name}):\n{a_rebuttal}\n")
 
         # Step 13: Rebuttal newness (Haiku)
         a_newness = check_rebuttal_newness(a_raw, a_rebuttal, self.models)
@@ -437,7 +524,18 @@ class PerpetualEngine:
             })
             self.cycle_log_data["content"].extend(content_files)
 
-        _log(f"  {sa.name}: {a_outcome['outcome']} ({a_outcome.get('ruling_type', '')}) | {sb.name}: {b_outcome['outcome']} ({b_outcome.get('ruling_type', '')})")
+        _log(
+            f"  {sa.name} VERDICT: {a_outcome['outcome']} ({a_outcome.get('ruling_type', '')}) "
+            f"| Drama: {int(a_outcome['scores'].get('drama', 0))} "
+            f"Novelty: {int(a_outcome['scores'].get('novelty', 0))} "
+            f"Depth: {int(a_outcome['scores'].get('depth', 0))}"
+        )
+        _log(
+            f"  {sb.name} VERDICT: {b_outcome['outcome']} ({b_outcome.get('ruling_type', '')}) "
+            f"| Drama: {int(b_outcome['scores'].get('drama', 0))} "
+            f"Novelty: {int(b_outcome['scores'].get('novelty', 0))} "
+            f"Depth: {int(b_outcome['scores'].get('depth', 0))}"
+        )
         return {
             "pair": f"{sa.name} vs {sb.name}",
             "a_entry": a_entry.display_id,
@@ -846,6 +944,24 @@ class PerpetualEngine:
         self._update_domain_health_file()
         # 19j. Export archive
         self._export_archive()
+        # 19k. Console cycle summary
+        self._log_cycle_summary()
+
+    def _log_cycle_summary(self):
+        entries = self.db.get_archive_entries()
+        cycle_entries = [e for e in entries if int(e.get("cycle_created", 0) or 0) == self.cycle and e.get("entry_type") == "claim"]
+        survived = sum(1 for e in cycle_entries if e.get("status") == "surviving")
+        partial = sum(1 for e in cycle_entries if e.get("status") == "partial")
+        destroyed = sum(1 for e in cycle_entries if e.get("status") in {"destroyed", "retracted"})
+
+        all_claims = [e for e in entries if e.get("entry_type") == "claim"]
+        rolling_survived = sum(1 for e in all_claims if e.get("status") in {"surviving", "partial"})
+        rolling_survival = (rolling_survived / len(all_claims) * 100.0) if all_claims else 0.0
+
+        _log(
+            f"Cycle {self.cycle} complete: {survived} survived, {partial} partial, {destroyed} destroyed "
+            f"| Rolling survival: {rolling_survival:.0f}%"
+        )
 
     def _check_city_formation(self):
         """
