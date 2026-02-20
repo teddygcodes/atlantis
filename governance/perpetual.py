@@ -33,6 +33,7 @@ from governance.states import (
     City,
     Town,
     validate_claim,
+    extract_validation_rejection_types,
     validate_challenge,
     autofill_discovery_gap,
     normalize_claim,
@@ -253,9 +254,13 @@ class PerpetualEngine:
         a_valid, a_errors = validate_claim(a_raw, self.models, self.db, domain_type=pair.domain_type)
         b_valid, b_errors = validate_claim(b_raw, self.models, self.db, domain_type=pair.domain_type)
         if not a_valid:
+            a_rejections = extract_validation_rejection_types(a_raw, a_errors)
+            self.db.increment_pipeline_claims(sa.name, False, "", self.cycle, rejection_types=a_rejections)
             _log(f"  {sa.name} claim invalid: {a_errors}")
             return {"pair": f"{sa.name} vs {sb.name}", "skipped": True, "reason": "invalid_claim_a"}
         if not b_valid:
+            b_rejections = extract_validation_rejection_types(b_raw, b_errors)
+            self.db.increment_pipeline_claims(sb.name, False, "", self.cycle, rejection_types=b_rejections)
             _log(f"  {sb.name} claim invalid: {b_errors}")
             return {"pair": f"{sa.name} vs {sb.name}", "skipped": True, "reason": "invalid_claim_b"}
 

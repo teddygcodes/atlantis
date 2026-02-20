@@ -412,3 +412,40 @@ def test_domain_health_includes_revision_efficiency_metrics(db, tmp_path):
     assert metrics["revision_depth"] == 2.0
     assert metrics["failure_distribution"] == {"REJECT_LOGIC": 1, "REJECT_FACT": 1}
     assert metrics["survival_rate"] == pytest.approx(1 / 3, 0.001)
+
+
+def test_extract_validation_rejection_types_counts_required_and_soft_flags():
+    from governance.states import extract_validation_rejection_types
+
+    claim = """CLAIM TYPE: Discovery
+STEP 1: We observed a pattern in the archive.
+CONCLUSION: Something novel follows.
+"""
+    errors = [
+        "Discovery claims must include GAP ADDRESSED",
+        "Foundation claims must include CITATIONS with at least one main archive #ID",
+    ]
+
+    rejection_types = extract_validation_rejection_types(claim, errors)
+
+    assert "missing_gap_addressed" in rejection_types
+    assert "missing_citations" in rejection_types
+    assert "missing_operational_definition" in rejection_types
+    assert "missing_testable_implication" in rejection_types
+
+
+def test_increment_pipeline_claims_tracks_validation_rejection_types(db):
+    db.save_state_budget("Axiom", "physics", "empirical", budget=100, rival_name="Rival", cycle=1)
+
+    db.increment_pipeline_claims(
+        "Axiom",
+        survived=False,
+        ruling_type="",
+        cycle=2,
+        rejection_types=["missing_gap_addressed", "missing_citations", "missing_gap_addressed"],
+    )
+
+    row = db.get_state_budget_row("Axiom")
+    assert row is not None
+    assert row["total_rejections_by_type"]["missing_gap_addressed"] == 2
+    assert row["total_rejections_by_type"]["missing_citations"] == 1

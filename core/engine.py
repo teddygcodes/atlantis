@@ -509,17 +509,35 @@ class AtlantisEngine:
             avg_cycles = sum((d.get("cycles_to_first_survival", 0.0) or 0.0) for d in domain_health.values()) / len(domain_health)
             total_survival = sum((d.get("survival_rate", 0.0) or 0.0) for d in domain_health.values()) / len(domain_health)
             rejection_counts = {}
+            validation_keys = [
+                "missing_gap_addressed",
+                "missing_citations",
+                "missing_challenge_target",
+                "missing_operational_definition",
+                "missing_testable_implication",
+            ]
             for d in domain_health.values():
                 for ruling_type, count in (d.get("failure_distribution", {}) or {}).items():
                     rejection_counts[ruling_type] = rejection_counts.get(ruling_type, 0) + int(count)
-            if rejection_counts:
-                top_reason, top_count = max(rejection_counts.items(), key=lambda item: item[1])
+
+            validation_counts = {
+                key: int(rejection_counts.get(key, 0) or 0)
+                for key in validation_keys
+            }
+            if any(validation_counts.values()):
+                top_reason, top_count = max(validation_counts.items(), key=lambda item: item[1])
                 top_reason_summary = f"{top_reason} ({top_count} times)"
             else:
                 top_reason_summary = "None (0 times)"
 
             print("\n  Revision Efficiency:")
             print(f"    Avg cycles to first survival: {avg_cycles:.2f}")
+            print("    Validation rejections:")
+            print(f"      GAP ADDRESSED missing: {validation_counts['missing_gap_addressed']}")
+            print(f"      CITATIONS missing: {validation_counts['missing_citations']}")
+            print(f"      CHALLENGE TARGET missing: {validation_counts['missing_challenge_target']}")
+            print(f"      OPERATIONAL DEFINITION missing: {validation_counts['missing_operational_definition']}")
+            print(f"      TESTABLE IMPLICATION missing: {validation_counts['missing_testable_implication']}")
             print(f"    Top rejection reason: {top_reason_summary}")
             print(f"    Survival rate: {total_survival * 100:.1f}%")
         self.models.print_cost_summary()
