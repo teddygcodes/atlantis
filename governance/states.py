@@ -1097,9 +1097,9 @@ def determine_outcome(
     ruling_to_outcome = {
         "REJECT_FACT": "destroyed",
         "REJECT_LOGIC": "destroyed",
-        "REJECT_SCOPE": "destroyed",
-        "REJECT_CITATION": "destroyed",
-        "REJECT_CLARITY": "destroyed",
+        "REJECT_SCOPE": "retracted",
+        "REJECT_CITATION": "retracted",
+        "REJECT_CLARITY": "retracted",
         "REVISE": "partial",
         "SURVIVED": "survived",
     }
