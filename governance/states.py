@@ -1036,6 +1036,10 @@ def determine_outcome(
             f"SCORING RUBRIC:\n{SCORING_RUBRIC}\n\n"
             f"{skepticism_note}"
             f"Determine the outcome:\n"
+            f"You should destroy claims that merely restate definitions, rely on thought experiments "
+            f"without novel reasoning, or fail to advance beyond what previous claims already "
+            f"established. A claim must demonstrate genuine intellectual progress to survive. "
+            f"When in doubt, destroy.\n\n"
             f"First determine ruling_type (required):\n"
             f"- REJECT_FACT: empirically false claim\n"
             f"- REJECT_LOGIC: invalid inference or reasoning error\n"
@@ -1045,9 +1049,12 @@ def determine_outcome(
             f"- REVISE: narrow and resubmit (not a full destruction)\n\n"
             f"Map ruling_type to outcome:\n"
             f"- REJECT_FACT and REJECT_LOGIC => destroyed\n"
-            f"- REJECT_SCOPE, REJECT_CITATION, and REJECT_CLARITY => retracted\n"
+            f"- REJECT_SCOPE, REJECT_CITATION, and REJECT_CLARITY => destroyed\n"
             f"- REVISE => partial\n"
             f"- survived is only allowed when the rebuttal successfully defends the claim.\n\n"
+            f"If drama_score < 4 AND novelty_score < 4, the claim is routine and should receive "
+            f"'destroyed' with ruling_type REJECT_SCOPE unless it demonstrates clear advancement "
+            f"over existing archive entries.\n\n"
             f"Return JSON:\n"
             f'{{"outcome": "survived|partial|retracted|destroyed",\n'
             f' "ruling_type": "SURVIVED|REJECT_FACT|REJECT_LOGIC|REJECT_SCOPE|REJECT_CITATION|REJECT_CLARITY|REVISE",\n'
@@ -1069,9 +1076,9 @@ def determine_outcome(
     ruling_to_outcome = {
         "REJECT_FACT": "destroyed",
         "REJECT_LOGIC": "destroyed",
-        "REJECT_SCOPE": "retracted",
-        "REJECT_CITATION": "retracted",
-        "REJECT_CLARITY": "retracted",
+        "REJECT_SCOPE": "destroyed",
+        "REJECT_CITATION": "destroyed",
+        "REJECT_CLARITY": "destroyed",
         "REVISE": "partial",
         "SURVIVED": "survived",
     }

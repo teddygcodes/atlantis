@@ -110,12 +110,12 @@ TOKEN_VALUES = {
     "discovery_survived": 1000,
     "discovery_first_cited": 3000,       # Permanent — not clawed back if citing claim overturned
     "discovery_partial": 600,
-    "challenge_succeeded": 4000,
+    "challenge_succeeded": 6000,
     "challenge_failed": -1000,            # Clamped to 0 floor
     "retracted": 500,
     "destroyed": 0,
-    "rival_destroyed_by_critic": 1000,
-    "rival_narrowed_by_critic": 800,
+    "rival_destroyed_by_critic": 3000,
+    "rival_narrowed_by_critic": 2000,
     "city_published": 1000,
     "city_cited_by_town": 1500,
     "city_cross_domain": 2000,
