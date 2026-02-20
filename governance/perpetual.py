@@ -330,11 +330,17 @@ class PerpetualEngine:
             a_raw, b_challenge, a_rebuttal, a_newness, pair.domain, approaches, self.models,
             self.phase2_constitution_extract,
             unverified_numeric_assertions=a_science.get("unverified_assertions", []),
+            state_tier=sa.tier,
+            claim_citations=a_norm.get("citations", []),
+            surviving_citation_count=self._count_surviving_citations(a_norm.get("citations", [])),
         )
         b_outcome = determine_outcome(
             b_raw, a_challenge, b_rebuttal, b_newness, pair.domain, approaches, self.models,
             self.phase2_constitution_extract,
             unverified_numeric_assertions=b_science.get("unverified_assertions", []),
+            state_tier=sb.tier,
+            claim_citations=b_norm.get("citations", []),
+            surviving_citation_count=self._count_surviving_citations(b_norm.get("citations", [])),
         )
 
         a_outcome = self._maybe_run_supreme_court_appeal(
@@ -570,6 +576,9 @@ class PerpetualEngine:
             approaches,
             self.models,
             self.phase2_constitution_extract,
+            state_tier=target_state.tier,
+            claim_citations=target.get("citations", []),
+            surviving_citation_count=self._count_surviving_citations(target.get("citations", [])),
         )
 
         outcome = self._maybe_run_supreme_court_appeal(
@@ -775,6 +784,7 @@ class PerpetualEngine:
             approaches,
             self.models,
             constitution_context=self.constitution_text,
+            state_tier=state.tier,
             task_type="supreme_court",
         )
         supreme_outcome["appeal_final"] = True
@@ -792,6 +802,19 @@ class PerpetualEngine:
             }
         )
         return supreme_outcome
+
+    def _count_surviving_citations(self, citations: List[str]) -> int:
+        """Count citations that currently reference surviving archive claims."""
+        if not citations:
+            return 0
+        count = 0
+        for cid in citations:
+            if not cid:
+                continue
+            entry = self.db.get_archive_entry(cid)
+            if entry and entry.get("status") in {"surviving", "survived"}:
+                count += 1
+        return count
 
     # ─── END-OF-CYCLE (STEP 19) ──────────────────────────────────
 
