@@ -34,6 +34,7 @@ from governance.states import (
     Town,
     validate_claim,
     validate_challenge,
+    autofill_discovery_gap,
     normalize_claim,
     run_science_gate,
     decompose_premises,
@@ -244,6 +245,10 @@ class PerpetualEngine:
         _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
         _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
 
+        # Step 2.5: Discovery GAP ADDRESSED auto-fill repair (Haiku normalization)
+        a_raw, a_auto_filled_gap = autofill_discovery_gap(a_raw, self.models)
+        b_raw, b_auto_filled_gap = autofill_discovery_gap(b_raw, self.models)
+
         # Step 3: Structural validation
         a_valid, a_errors = validate_claim(a_raw, self.models, self.db, domain_type=pair.domain_type)
         b_valid, b_errors = validate_claim(b_raw, self.models, self.db, domain_type=pair.domain_type)
@@ -359,12 +364,14 @@ class PerpetualEngine:
             norm=a_norm, premises=a_premises, outcome=a_outcome,
             science_gate=a_science,
             challenger_entity=f"{sb.name} Critic", lab_hypothesis=a_lab,
+            auto_filled_gap=a_auto_filled_gap,
         )
         b_entry = self._build_archive_entry(
             state=sb, raw=b_raw, challenge=a_challenge, rebuttal=b_rebuttal,
             norm=b_norm, premises=b_premises, outcome=b_outcome,
             science_gate=b_science,
             challenger_entity=f"{sa.name} Critic", lab_hypothesis=b_lab,
+            auto_filled_gap=b_auto_filled_gap,
         )
 
         self.db.save_archive_entry(a_entry)
@@ -1234,6 +1241,7 @@ class PerpetualEngine:
         science_gate: Optional[dict] = None,
         challenger_entity: str = "",
         lab_hypothesis: Optional[str] = None,
+        auto_filled_gap: bool = False,
     ) -> ArchiveEntry:
         display_id = self.db.next_display_id()
         out = outcome["outcome"]
@@ -1287,6 +1295,7 @@ class PerpetualEngine:
             stability_score=1,
             tokens_earned=0,
             unverified_numerics=science_gate.get("unverified_assertions", []),
+            auto_filled_gap=auto_filled_gap,
         )
 
     # ─── TOKEN OUTCOMES ───────────────────────────────────────────

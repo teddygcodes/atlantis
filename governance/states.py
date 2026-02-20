@@ -108,6 +108,7 @@ class ArchiveEntry:
     impact_score: int = 0
     tokens_earned: int = 0
     unverified_numerics: List[str] = field(default_factory=list)
+    auto_filled_gap: bool = False
     created_at: str = field(default_factory=_now)
 
 
@@ -347,6 +348,93 @@ class State:
         return f"State({self.name}, {self.domain}, tier={self.tier}, budget={self.token_budget})"
 
 
+def detect_claim_type(claim_text: str) -> str:
+    """Best-effort claim type detection from raw claim text."""
+    text_upper = (claim_text or "").upper()
+    explicit_type_patterns = [
+        r"\bCLAIM\s*TYPE\b\s*[:\-]?\s*(FOUNDATION|DISCOVERY|CHALLENGE)",
+        r"\bTYPE\b\s*[:\-]?\s*(FOUNDATION|DISCOVERY|CHALLENGE)",
+        r"\b(FOUNDATION|DISCOVERY|CHALLENGE)\s+CLAIM\b",
+        r"^\s*(FOUNDATION|DISCOVERY|CHALLENGE)\b",
+    ]
+    explicit_types = {
+        m.group(1).upper()
+        for p in explicit_type_patterns
+        for m in re.finditer(p, text_upper, re.IGNORECASE | re.MULTILINE)
+    }
+
+    if len(explicit_types) == 1:
+        return next(iter(explicit_types)).lower()
+    if len(explicit_types) > 1:
+        return ""
+
+    implies_challenge = bool(re.search(
+        r"\b(reservation|concern|critic|reject|wrong|fails?|flaw|counter|dispute|challenge)\b",
+        text_upper,
+        re.IGNORECASE,
+    ))
+    implies_discovery = bool(re.search(
+        r"\b(new|novel|propose|hypothesis|discover|introduce|first principles?|findings?|analysis)\b",
+        text_upper,
+        re.IGNORECASE,
+    ))
+
+    if implies_challenge:
+        return "challenge"
+    if implies_discovery:
+        return "discovery"
+    return ""
+
+
+def needs_discovery_gap_autofill(claim_text: str) -> bool:
+    """True when a Discovery claim is missing the GAP ADDRESSED field."""
+    return detect_claim_type(claim_text) == "discovery" and not bool(re.search(
+        r"^\s*GAP\s+ADDRESSED\s*[:\-]\s*.+$",
+        claim_text or "",
+        re.IGNORECASE | re.MULTILINE,
+    ))
+
+
+def append_gap_addressed_to_claim(claim_text: str, gap_text: str) -> str:
+    """Append a generated GAP ADDRESSED section to claim text."""
+    cleaned_claim = (claim_text or "").rstrip()
+    cleaned_gap = (gap_text or "").strip()
+    if not cleaned_gap:
+        return cleaned_claim
+    return f"{cleaned_claim}\nGAP ADDRESSED: {cleaned_gap}\n"
+
+
+def autofill_discovery_gap(claim_text: str, models: ModelRouter) -> Tuple[str, bool]:
+    """
+    For Discovery claims missing GAP ADDRESSED, generate and append it using a cheap Haiku normalization call.
+    Returns (possibly updated claim_text, auto_filled_gap flag).
+    """
+    if not needs_discovery_gap_autofill(claim_text):
+        return claim_text, False
+
+    position_match = re.search(r"^\s*POSITION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+    conclusion_match = re.search(r"^\s*CONCLUSION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+    position = position_match.group(1).strip() if position_match else ""
+    conclusion = conclusion_match.group(1).strip() if conclusion_match else ""
+
+    response = models.complete(
+        task_type="normalization",
+        system_prompt=(
+            "Given this Discovery claim, write 1-3 sentences describing what gap in existing knowledge this claim addresses. "
+            "Respond with only the GAP ADDRESSED text, nothing else."
+        ),
+        user_prompt=(
+            f"POSITION:\n{position}\n\n"
+            f"CONCLUSION:\n{conclusion}"
+        ),
+        max_tokens=180,
+    )
+    gap_text = (response.content or "").strip()
+    if not gap_text:
+        return claim_text, False
+    return append_gap_addressed_to_claim(claim_text, gap_text), True
+
+
 # ═══════════════════════════════════════
 # STATE MANAGER
 # ═══════════════════════════════════════
@@ -454,17 +542,10 @@ def validate_claim(
     if not has_type:
         errors.append("Missing CLAIM TYPE declaration (Foundation|Discovery|Challenge)")
 
-    claim_type = None
+    claim_type = detect_claim_type(claim_text)
     if len(explicit_types) > 1:
         errors.append("Ambiguous CLAIM TYPE: include exactly one of Foundation|Discovery|Challenge")
-    elif len(explicit_types) == 1:
-        claim_type = next(iter(explicit_types)).lower()
-    elif implies_challenge:
-        claim_type = "challenge"
-    elif implies_discovery:
-        claim_type = "discovery"
-    elif has_type:
-        claim_type = "foundation"
+        claim_type = ""
 
     # Must have at least one reasoning step, explicit OR natural-language chain.
     has_explicit_step = bool(re.search(r'\bSTEP\s*\d+\b', claim_text, re.IGNORECASE))

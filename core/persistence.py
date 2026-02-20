@@ -90,6 +90,7 @@ class PersistenceLayer:
                 impact_score INTEGER DEFAULT 0,
                 tokens_earned INTEGER DEFAULT 0,
                 unverified_numerics_json TEXT DEFAULT '[]',
+                auto_filled_gap INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL
             );
 
@@ -201,6 +202,8 @@ class PersistenceLayer:
             )
         if "unverified_numerics_json" not in cols:
             conn.execute("ALTER TABLE archive_entries ADD COLUMN unverified_numerics_json TEXT DEFAULT '[]'")
+        if "auto_filled_gap" not in cols:
+            conn.execute("ALTER TABLE archive_entries ADD COLUMN auto_filled_gap INTEGER DEFAULT 0")
         conn.execute(
             "UPDATE archive_entries "
             "SET archive_tier = CASE "
@@ -279,7 +282,8 @@ class PersistenceLayer:
                     outcome, ruling_type, outcome_reasoning, open_questions_json,
                     drama_score, novelty_score, depth_score,
                     citations_json, referenced_by_json,
-                    stability_score, impact_score, tokens_earned, unverified_numerics_json, created_at
+                    stability_score, impact_score, tokens_earned, unverified_numerics_json,
+                    auto_filled_gap, created_at
                 ) VALUES (
                     :entry_id, :display_id, :entry_type, :source_state, :source_entity,
                     :cycle_created, :status, :archive_tier, :claim_type, :position, :reasoning_chain_json,
@@ -289,7 +293,8 @@ class PersistenceLayer:
                     :outcome, :ruling_type, :outcome_reasoning, :open_questions_json,
                     :drama_score, :novelty_score, :depth_score,
                     :citations_json, :referenced_by_json,
-                    :stability_score, :impact_score, :tokens_earned, :unverified_numerics_json, :created_at
+                    :stability_score, :impact_score, :tokens_earned, :unverified_numerics_json,
+                    :auto_filled_gap, :created_at
                 )
             """, {
                 "entry_id": d.get("entry_id", ""),
@@ -326,6 +331,7 @@ class PersistenceLayer:
                 "impact_score": d.get("impact_score", 0),
                 "tokens_earned": d.get("tokens_earned", 0),
                 "unverified_numerics_json": json.dumps(d.get("unverified_numerics", [])),
+                "auto_filled_gap": 1 if d.get("auto_filled_gap", False) else 0,
                 "created_at": d.get("created_at", _now()),
             })
         return d.get("display_id", "")
@@ -1250,6 +1256,7 @@ class PersistenceLayer:
                 d[py_field] = json.loads(raw or "[]")
             except (json.JSONDecodeError, TypeError):
                 d[py_field] = []
+        d["auto_filled_gap"] = bool(d.get("auto_filled_gap", 0))
         return d
 
     def _get_states_for_domain(self, domain: str) -> List[str]:

@@ -17,6 +17,7 @@ from governance.states import (
     normalize_claim,
     run_science_gate,
     validate_claim,
+    autofill_discovery_gap,
 )
 
 
@@ -198,6 +199,52 @@ CONCLUSION: The alternative better fits known constraints."""
     is_valid, errors = validate_claim(claim, StubModels("{}"), db)
     assert is_valid
     assert errors == []
+
+
+
+def test_autofill_discovery_gap_appends_gap_when_missing():
+    claim = """CLAIM TYPE: Discovery
+POSITION: Layered anodes improve cycle life, operationally defined as >=10% retained capacity after 500 cycles when measured by standardized tests.
+STEP 1: If layered anodes are used, then dendrite-related failure rates should decrease in controlled cycling experiments (testable implication).
+CONCLUSION: Therefore cycle life improves."""
+    models = SequenceStubModels(["This closes a measurement gap by defining a testable threshold for cycle-life gains."])
+
+    updated, was_filled = autofill_discovery_gap(claim, models)
+
+    assert was_filled is True
+    assert "GAP ADDRESSED:" in updated
+    assert len(models.calls) == 1
+    assert models.calls[0]["task_type"] == "normalization"
+
+
+def test_autofill_discovery_gap_skips_foundation_and_challenge():
+    foundation_claim = """CLAIM TYPE: Foundation
+POSITION: Existing archive evidence supports a stable mechanism.
+STEP 1: Prior measurements align with this synthesis.
+CONCLUSION: The mechanism has credible support in the archive."""
+    challenge_claim = """CLAIM TYPE: Challenge
+CHALLENGE TARGET: #001
+STEP 1: The claim overstates certainty.
+PROPOSED ALTERNATIVE: Treat the result as context-dependent.
+CONCLUSION: The target claim should be narrowed."""
+    models = SequenceStubModels(["Should not be used"])
+
+    foundation_updated, foundation_filled = autofill_discovery_gap(foundation_claim, models)
+    challenge_updated, challenge_filled = autofill_discovery_gap(challenge_claim, models)
+
+    assert foundation_filled is False
+    assert challenge_filled is False
+    assert foundation_updated == foundation_claim
+    assert challenge_updated == challenge_claim
+    assert models.calls == []
+
+
+def test_archive_entry_persists_auto_filled_gap_metadata(db):
+    did = _make_entry(db, auto_filled_gap=True)
+    loaded = db.get_archive_entry(did)
+
+    assert loaded is not None
+    assert loaded["auto_filled_gap"] is True
 
 def test_normalize_claim():
     models = StubModels('{"claim_type": "discovery", "position": "P", "reasoning_chain": ["A", "B"], "conclusion": "C", "citations": [], "keywords": ["k"]}')
