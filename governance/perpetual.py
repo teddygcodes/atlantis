@@ -1055,7 +1055,7 @@ class PerpetualEngine:
             target_tier = current_tier + 1
             tier_info = V2_TIERS.get(target_tier, {})
             threshold = tier_info.get("surviving_claims", 999999)
-            surviving = self.db.get_surviving_claims_count(state.name)
+            surviving = self.db.get_surviving_claims_count(state.name, tier_filter="main")
 
             if surviving < threshold:
                 continue
@@ -1189,7 +1189,7 @@ class PerpetualEngine:
                 context=(
                     f"{candidate.name} has budget=0 and {DISSOLUTION_TRIGGER}+ consecutive probation cycles. "
                     f"Domain: {candidate.domain}. "
-                    f"Surviving claims: {self.db.get_surviving_claims_count(candidate.name)}"
+                    f"Surviving claims: {self.db.get_surviving_claims_count(candidate.name, tier_filter='main')}"
                 ),
             )
             if vote_text.upper().strip().startswith("YES"):
@@ -1223,7 +1223,7 @@ class PerpetualEngine:
             "exchange": {
                 "state_name": state.name,
                 "domain": state.domain,
-                "surviving_claims": self.db.get_surviving_claims_count(state.name),
+                "surviving_claims": self.db.get_surviving_claims_count(state.name, tier_filter="main"),
                 "final_budget": state.token_budget,
             },
         })
@@ -1579,7 +1579,7 @@ class PerpetualEngine:
         }
 
         total_surviving = sum(
-            self.db.get_surviving_claims_count(state.name) for state in active_states
+            self.db.get_surviving_claims_count(state.name, tier_filter="main") for state in active_states
         )
 
         return {
@@ -2079,8 +2079,7 @@ class PerpetualEngine:
 
     def _build_archive_context(self, domain: str, state_name: str) -> str:
         """Summary of main-tier claims in domain for Researcher's citable context."""
-        claims = self.db.get_surviving_claims(domain=domain)
-        claims = [c for c in claims if c.get("archive_tier") == "main"]
+        claims = self.db.get_main_archive_claims(domain=domain)
         if not claims:
             return "(no citable main-archive claims in domain yet)"
         lines = []
