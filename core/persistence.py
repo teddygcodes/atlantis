@@ -386,21 +386,51 @@ class PersistenceLayer:
             results = [r for r in results if r["source_state"] in domain_states]
         return results
 
-    def get_surviving_claims_count(self, state_name: str) -> int:
+    def get_main_archive_claims(
+        self, state_name: Optional[str] = None, domain: Optional[str] = None
+    ) -> List[Dict]:
+        """Main archive claims only (surviving + citable for progression)."""
+        query = (
+            "SELECT * FROM archive_entries "
+            "WHERE archive_tier = 'main' AND status = 'surviving'"
+        )
+        params = []
+        if state_name:
+            query += " AND source_state = ?"
+            params.append(state_name)
+        query += " ORDER BY impact_score DESC, stability_score DESC"
+        with self._get_conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        results = [self._unpack_entry(r) for r in rows]
+        if domain:
+            domain_states = self._get_states_for_domain(domain)
+            results = [r for r in results if r["source_state"] in domain_states]
+        return results
+
+    def get_surviving_claims_count(
+        self, state_name: str, tier_filter: Optional[str] = None
+    ) -> int:
+        query = (
+            "SELECT COUNT(*) as cnt FROM archive_entries "
+            "WHERE source_state = ? AND status IN ('surviving', 'partial')"
+        )
+        params: List = [state_name]
+        if tier_filter:
+            query += " AND archive_tier = ?"
+            params.append(tier_filter)
         with self._get_conn() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) as cnt FROM archive_entries "
-                "WHERE source_state = ? AND status IN ('surviving', 'partial')",
-                (state_name,)
+                query,
+                params,
             ).fetchone()
         return row["cnt"] if row else 0
 
     def count_surviving_claims(self) -> int:
-        """Total surviving claims across all States (for Federal Lab activation)."""
+        """Total main-archive surviving claims across all States."""
         with self._get_conn() as conn:
             row = conn.execute(
                 "SELECT COUNT(*) as cnt FROM archive_entries "
-                "WHERE status IN ('surviving', 'partial')"
+                "WHERE archive_tier = 'main' AND status = 'surviving'"
             ).fetchone()
         return row["cnt"] if row else 0
 

@@ -310,6 +310,30 @@ def test_archive_tier_assignment_and_status_updates(db):
     assert db.get_archive_entry(main_id)["archive_tier"] == "graveyard"
 
 
+
+
+def test_main_archive_claims_excludes_quarantine_partial(db):
+    _make_entry(db, display_id="#001", status="surviving", raw_claim_text="Main claim")
+    _make_entry(db, display_id="#002", status="partial", raw_claim_text="Quarantine partial")
+
+    main_claims = db.get_main_archive_claims(state_name="TestState")
+
+    assert [c["display_id"] for c in main_claims] == ["#001"]
+
+
+def test_surviving_claim_count_supports_optional_tier_filter(db):
+    _make_entry(db, status="surviving")
+    _make_entry(db, status="partial")
+
+    assert db.get_surviving_claims_count("TestState") == 2
+    assert db.get_surviving_claims_count("TestState", tier_filter="main") == 1
+
+
+def test_count_surviving_claims_main_only(db):
+    _make_entry(db, status="surviving")
+    _make_entry(db, status="partial")
+
+    assert db.count_surviving_claims() == 1
 def test_researcher_context_main_only_and_meta_uses_graveyard(db, tmp_path):
     _make_entry(db, display_id="#001", status="surviving", raw_claim_text="Main claim")
     _make_entry(db, display_id="#002", status="partial", raw_claim_text="Partial claim")
