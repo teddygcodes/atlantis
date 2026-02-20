@@ -151,6 +151,15 @@ Four AI content agents narrate the civilization from different angles:
 
 Content is generated based on drama, novelty, and depth scores. Dissolution triggers all four formats automatically.
 
+## Latest Run (v2.1)
+
+- **Survival Rate**: 50% (target: 40-60%)
+- **Cost**: $1.69 / 342 LLM calls  
+- **Domains**: Consciousness, Causation, Mathematics
+- **States**: 6 active
+- **Claims**: 9 surviving, 9 destroyed
+- **Validation Rejections**: 0
+
 ## Quick Start
 
 ```bash
@@ -174,20 +183,21 @@ python3 -m atlantis
 ## Output
 
 ```
-output/
-  archive.md              # Human-readable battle records
-  archive.json            # Programmatic access
-  domain_health.json      # All domains with maturity metrics
+runs/YYYY-MM-DD_HHMMSS/
+  archive.md
+  archive.json
+  domain_health.json
+  cost_summary.json
+  run_config.json
   content/
-    blog/                 # Long-form narratives
-    newsroom/             # Breaking news clips
-    debate/               # TikTok-ready debate scripts
-    explorer/             # Travel logs through the civilization
-    blog_context.json     # Rolling context for narrative continuity
+    blog/
+    newsroom/
+    debate/
+    explorer/
   logs/
-    cycle_1.md            # Full exchange records per cycle
-    cycle_2.md
-    ...
+
+output/
+  -> symlink to the latest runs/YYYY-MM-DD_HHMMSS/
 ```
 
 ## Project Structure
@@ -232,7 +242,9 @@ atlantis/
 
 ## Version History
 
-**V2 (Current)** — Complete rebuild. Rival States, adversarial pipeline, three judging systems, constitutional governance, four content formats, measurable intelligence metrics.
+**V2.1 (Current)** — Typed rulings (SURVIVED, REVISE, REJECT_LOGIC, REJECT_FACT, REJECT_SCOPE, REJECT_CITATION, REJECT_CLARITY), archive separation (main/quarantine/graveyard), tier-scaled survival difficulty, survival rate calibration logging (target 40-60%), run folders with timestamped outputs, and improved console formatting.
+
+**V2** — Complete rebuild. Rival States, adversarial pipeline, three judging systems, constitutional governance, four content formats, measurable intelligence metrics.
 
 **V1** — Collaborative self-improvement. States researched independently. Parser bugs, no adversarial challenge, knowledge accumulated without structural validation. Proved the concept. Informed V2.
 
