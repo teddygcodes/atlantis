@@ -96,6 +96,7 @@ class ModelRouter:
             max_tokens=max_tokens,
             temperature=temperature,
             model=model_id,
+            task_type=task_type,
         )
 
         pricing = self.MODEL_PRICING.get(model_tier)

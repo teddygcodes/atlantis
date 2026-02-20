@@ -17,6 +17,7 @@ import json
 import copy
 import os
 import uuid
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Tuple
@@ -85,6 +86,7 @@ class PerpetualEngine:
         self.state_manager = state_manager
         self.founder_profiles = founder_profiles
         self.constitution_text = constitution_text
+        self.phase2_constitution_extract = self._build_phase2_constitution_extract(constitution_text)
         self.db = db
         self.models = models
         self.content_gen = content_gen
@@ -115,6 +117,45 @@ class PerpetualEngine:
             self._run_cycle()
 
     # ─── MAIN CYCLE ──────────────────────────────────────────────
+
+
+    @staticmethod
+    def _extract_article(text: str, article_heading: str) -> str:
+        pattern = rf"(?ms)^##\s+{re.escape(article_heading)}\s*$\n(.*?)(?=^##\s+ARTICLE\s+|^##\s+SIGNATURES|\Z)"
+        match = re.search(pattern, text)
+        return match.group(1).strip() if match else ""
+
+    @staticmethod
+    def _extract_named_section(article_body: str, section_title: str) -> str:
+        pattern = rf"(?ms)^\*\*Section\s+\d+\s*:\s*{re.escape(section_title)}\*\*\n(.*?)(?=^\*\*Section\s+\d+\s*:|\Z)"
+        match = re.search(pattern, article_body)
+        if not match:
+            return ""
+        return f"**Section: {section_title}**\n" + match.group(1).strip()
+
+    @classmethod
+    def _build_phase2_constitution_extract(cls, constitution_text: str) -> str:
+        article_iv = cls._extract_article(constitution_text, "ARTICLE IV: KNOWLEDGE AND THE CLAIM PIPELINE")
+        article_vi = cls._extract_article(constitution_text, "ARTICLE VI: TOKEN ECONOMY")
+
+        requested_blocks = [
+            cls._extract_named_section(article_iv, "Claim Types and Mandatory Structure"),
+            cls._extract_named_section(article_iv, "Structural Validation"),
+            cls._extract_named_section(article_iv, "Rebuttal Structure"),
+            cls._extract_named_section(article_iv, "Four Claim Outcomes"),
+            cls._extract_named_section(article_vi, "Budget"),
+            cls._extract_named_section(article_vi, "Earning — Claims"),
+        ]
+        blocks = [b for b in requested_blocks if b]
+        if not blocks:
+            return constitution_text[:10000]
+
+        extract = (
+            "CONSTITUTIONAL EXTRACT FOR PHASE 2 CLAIM ADJUDICATION\n"
+            "(claim validation rules, outcomes, scoring rubric, token economy)\n\n"
+            + "\n\n".join(blocks)
+        )
+        return extract[:10000]
 
     def _run_cycle(self):
         self.cycle_log_data = {
@@ -244,8 +285,8 @@ class PerpetualEngine:
             return {"pair": f"{sa.name} vs {sb.name}", "skipped": True, "reason": "depth_b"}
 
         # Steps 8-9: Critics cross-challenge (A attacks B, B attacks A)
-        a_challenge = sa.produce_challenge(b_raw, b_premises)
-        b_challenge = sb.produce_challenge(a_raw, a_premises)
+        a_challenge = sa.produce_challenge(b_raw, b_premises, self.phase2_constitution_extract)
+        b_challenge = sb.produce_challenge(a_raw, a_premises, self.phase2_constitution_extract)
 
         # Step 10: Validate challenges
         a_ch_ok, _ = validate_challenge(a_challenge)
@@ -258,8 +299,8 @@ class PerpetualEngine:
             b_challenge = ""
 
         # Steps 11-12: Researchers rebut
-        b_rebuttal = sb.produce_rebuttal(a_challenge, b_raw) if a_challenge else "OPTION A: No challenge to rebut."
-        a_rebuttal = sa.produce_rebuttal(b_challenge, a_raw) if b_challenge else "OPTION A: No challenge to rebut."
+        b_rebuttal = sb.produce_rebuttal(a_challenge, b_raw, self.phase2_constitution_extract) if a_challenge else "OPTION A: No challenge to rebut."
+        a_rebuttal = sa.produce_rebuttal(b_challenge, a_raw, self.phase2_constitution_extract) if b_challenge else "OPTION A: No challenge to rebut."
 
         # Step 13: Rebuttal newness (Haiku)
         a_newness = check_rebuttal_newness(a_raw, a_rebuttal, self.models)
@@ -267,8 +308,8 @@ class PerpetualEngine:
 
         # Step 14: Judge determines outcomes (Sonnet)
         approaches = {sa.name: sa.approach, sb.name: sb.approach}
-        a_outcome = determine_outcome(a_raw, b_challenge, a_rebuttal, a_newness, pair.domain, approaches, self.models)
-        b_outcome = determine_outcome(b_raw, a_challenge, b_rebuttal, b_newness, pair.domain, approaches, self.models)
+        a_outcome = determine_outcome(a_raw, b_challenge, a_rebuttal, a_newness, pair.domain, approaches, self.models, self.phase2_constitution_extract)
+        b_outcome = determine_outcome(b_raw, a_challenge, b_rebuttal, b_newness, pair.domain, approaches, self.models, self.phase2_constitution_extract)
 
         # Step 15: Build ArchiveEntry objects and deposit
         a_entry = self._build_archive_entry(
@@ -449,7 +490,9 @@ class PerpetualEngine:
             return {"skipped": True, "reason": "target_state_not_found", "domain": domain}
 
         rebuttal_text = target_state.produce_rebuttal(
-            challenge_text, target.get("raw_claim_text", "")
+            challenge_text,
+            target.get("raw_claim_text", ""),
+            self.phase2_constitution_extract,
         )
 
         # Newness check
@@ -467,6 +510,7 @@ class PerpetualEngine:
             domain,
             approaches,
             self.models,
+            self.phase2_constitution_extract,
         )
 
         # Deposit as separate Archive entry

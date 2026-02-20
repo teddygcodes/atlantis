@@ -247,7 +247,7 @@ class State:
         return None
 
     def produce_challenge(
-        self, rival_claim_full: str, rival_premises: dict
+        self, rival_claim_full: str, rival_premises: dict, constitution_context: str = ""
     ) -> str:
         """
         Critic challenges rival's claim. Must target a specific reasoning step.
@@ -257,10 +257,15 @@ class State:
             f"Explicit premises: {rival_premises.get('explicit_premises', [])}\n"
             f"Implicit assumptions: {rival_premises.get('implicit_assumptions', [])}"
         )
+        constitution_block = (
+            f"PHASE 2 CONSTITUTIONAL EXTRACT (authoritative):\n{constitution_context}\n\n"
+            if constitution_context else ""
+        )
         response = self.models.complete(
             task_type="critic_challenges",
             system_prompt=self.critic_config.system_prompt,
             user_prompt=(
+                f"{constitution_block}"
                 f"RIVAL CLAIM (full text):\n{rival_claim_full}\n\n"
                 f"DECOMPOSED PREMISES:\n{premises_text}\n\n"
                 f"Challenge this claim. Identify a specific step and explain why it fails.\n"
@@ -275,16 +280,21 @@ class State:
         return response.content or ""
 
     def produce_rebuttal(
-        self, challenge_text: str, original_claim: str
+        self, challenge_text: str, original_claim: str, constitution_context: str = ""
     ) -> str:
         """
         Researcher rebuts a challenge (from rival Critic OR Federal Lab).
         Must choose Option A (Defend), B (Concede and Narrow), or C (Retract).
         """
+        constitution_block = (
+            f"PHASE 2 CONSTITUTIONAL EXTRACT (authoritative):\n{constitution_context}\n\n"
+            if constitution_context else ""
+        )
         response = self.models.complete(
             task_type="researcher_rebuttals",
             system_prompt=self.researcher_config.system_prompt,
             user_prompt=(
+                f"{constitution_block}"
                 f"YOUR ORIGINAL CLAIM:\n{original_claim}\n\n"
                 f"CHALLENGE:\n{challenge_text}\n\n"
                 f"Choose your response:\n"
@@ -682,6 +692,7 @@ def determine_outcome(
     domain: str,
     state_approaches: dict,
     models: ModelRouter,
+    constitution_context: str = "",
 ) -> dict:
     """
     Judge determines outcome of claim exchange.
@@ -709,6 +720,11 @@ def determine_outcome(
         f"{name} ({approach})" for name, approach in state_approaches.items()
     )
 
+    constitution_block = (
+        f"PHASE 2 CONSTITUTIONAL EXTRACT (authoritative):\n{constitution_context}\n\n"
+        if constitution_context else ""
+    )
+
     response = models.complete(
         task_type="judge",
         system_prompt=(
@@ -717,6 +733,7 @@ def determine_outcome(
             "Return valid JSON only."
         ),
         user_prompt=(
+            f"{constitution_block}"
             f"DOMAIN: {domain}\n"
             f"APPROACHES: {approaches_text}\n\n"
             f"CLAIM:\n{claim_text}\n\n"
