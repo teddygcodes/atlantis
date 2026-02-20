@@ -8,7 +8,7 @@ export function About() {
     <section className="mx-auto max-w-2xl">
       <div className="mb-16 flex animate-fade-in-up justify-center">
         <Image
-          src="/images/logo.png"
+          src="/images/logo.jpg"
           alt="Atlantis logo"
           width={120}
           height={120}

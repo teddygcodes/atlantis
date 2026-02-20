@@ -18,7 +18,7 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
           aria-label="Go to Chronicle"
         >
           <Image
-            src="/images/logo.png"
+            src="/images/logo.jpg"
             alt="Atlantis logo"
             width={40}
             height={40}
