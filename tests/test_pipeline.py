@@ -277,3 +277,57 @@ def test_unverified_numeric_challenge_bonus_applies_to_drama():
         {"unverified_assertions": ["47% increase"]},
     )
     assert outcome["scores"]["drama"] == 7
+
+
+def test_state_budget_tracks_rejections_and_first_survival_cycle(db):
+    db.save_state_budget("Axiom", "physics", "empirical", budget=100, rival_name="Rival", cycle=3)
+
+    db.increment_pipeline_claims("Axiom", survived=False, ruling_type="REJECT_LOGIC", cycle=4)
+    db.increment_pipeline_claims("Axiom", survived=False, ruling_type="REJECT_FACT", cycle=5)
+    db.increment_pipeline_claims("Axiom", survived=True, ruling_type="SURVIVED", cycle=6)
+
+    row = db.get_state_budget_row("Axiom")
+    assert row is not None
+    assert row["cycles_to_first_survival"] == 4
+    assert row["total_rejections_by_type"] == {"REJECT_LOGIC": 1, "REJECT_FACT": 1}
+
+
+def test_domain_health_includes_revision_efficiency_metrics(db, tmp_path):
+    db.save_state_budget("A", "physics", "empirical", budget=100, rival_name="B", cycle=1)
+    db.save_state_budget("B", "physics", "formal", budget=100, rival_name="A", cycle=1)
+
+    db.increment_pipeline_claims("A", survived=False, ruling_type="REJECT_LOGIC", cycle=1)
+    db.increment_pipeline_claims("A", survived=True, ruling_type="SURVIVED", cycle=2)
+    db.increment_pipeline_claims("B", survived=False, ruling_type="REJECT_FACT", cycle=1)
+
+    _make_entry(
+        db,
+        source_state="A",
+        position="shared topic",
+        status="destroyed",
+        ruling_type="REJECT_LOGIC",
+    )
+    _make_entry(
+        db,
+        source_state="A",
+        position="shared topic",
+        status="surviving",
+        ruling_type="SURVIVED",
+    )
+    _make_entry(
+        db,
+        source_state="B",
+        position="other topic",
+        status="destroyed",
+        ruling_type="REJECT_FACT",
+    )
+
+    engine = PerpetualEngine.__new__(PerpetualEngine)
+    engine.db = db
+    engine.cycle = 2
+    metrics = PerpetualEngine._compute_domain_health(engine, "physics")
+
+    assert metrics["cycles_to_first_survival"] == 2.0
+    assert metrics["revision_depth"] == 2.0
+    assert metrics["failure_distribution"] == {"REJECT_LOGIC": 1, "REJECT_FACT": 1}
+    assert metrics["survival_rate"] == pytest.approx(1 / 3, 0.001)

@@ -111,6 +111,8 @@ class PersistenceLayer:
                 is_active INTEGER DEFAULT 1,
                 warmup_remaining INTEGER DEFAULT 0,
                 rival_state_name TEXT DEFAULT '',
+                total_rejections_by_type TEXT NOT NULL DEFAULT '{}',
+                cycles_to_first_survival INTEGER,
                 created_at_cycle INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             );
@@ -185,6 +187,7 @@ class PersistenceLayer:
             CREATE INDEX IF NOT EXISTS idx_log_level ON log_entries(level);
         """)
         self._ensure_archive_entries_columns(conn)
+        self._ensure_state_budget_columns(conn)
 
     def _ensure_archive_entries_columns(self, conn: sqlite3.Connection):
         """Lightweight schema migration for archive_entries additions."""
@@ -206,6 +209,21 @@ class PersistenceLayer:
             "WHEN status IN ('destroyed', 'retracted') THEN 'graveyard' "
             "ELSE 'quarantine' END"
         )
+
+    def _ensure_state_budget_columns(self, conn: sqlite3.Connection):
+        """Lightweight schema migration for state_budgets additions."""
+        rows = conn.execute("PRAGMA table_info(state_budgets)").fetchall()
+        cols = {r[1] for r in rows}
+        if "total_rejections_by_type" not in cols:
+            conn.execute(
+                "ALTER TABLE state_budgets "
+                "ADD COLUMN total_rejections_by_type TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "cycles_to_first_survival" not in cols:
+            conn.execute(
+                "ALTER TABLE state_budgets "
+                "ADD COLUMN cycles_to_first_survival INTEGER"
+            )
 
     @staticmethod
     def _archive_tier_for_status(status: str) -> str:
@@ -738,8 +756,9 @@ class PersistenceLayer:
                 INSERT OR REPLACE INTO state_budgets
                 (state_name, domain, approach, token_budget, tier, probation_counter,
                  total_pipeline_claims, surviving_pipeline_claims, is_active,
-                 warmup_remaining, rival_state_name, created_at_cycle, created_at)
-                VALUES (?, ?, ?, ?, 0, 0, 0, 0, 1, 0, ?, ?, ?)
+                 warmup_remaining, rival_state_name, total_rejections_by_type,
+                 cycles_to_first_survival, created_at_cycle, created_at)
+                VALUES (?, ?, ?, ?, 0, 0, 0, 0, 1, 0, ?, '{}', NULL, ?, ?)
             """, (state_name, domain, approach, budget, rival_name, cycle, _now()))
 
     def update_state_budget(self, state_name: str, delta: int):
@@ -765,31 +784,71 @@ class PersistenceLayer:
             row = conn.execute(
                 "SELECT * FROM state_budgets WHERE state_name = ?", (state_name,)
             ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        data = dict(row)
+        try:
+            data["total_rejections_by_type"] = json.loads(data.get("total_rejections_by_type") or "{}")
+        except json.JSONDecodeError:
+            data["total_rejections_by_type"] = {}
+        return data
 
     def get_all_active_states(self) -> List[Dict]:
         with self._get_conn() as conn:
             rows = conn.execute(
                 "SELECT * FROM state_budgets WHERE is_active = 1"
             ).fetchall()
-        return [dict(r) for r in rows]
+        out = []
+        for row in rows:
+            d = dict(row)
+            try:
+                d["total_rejections_by_type"] = json.loads(d.get("total_rejections_by_type") or "{}")
+            except json.JSONDecodeError:
+                d["total_rejections_by_type"] = {}
+            out.append(d)
+        return out
 
-    def increment_pipeline_claims(self, state_name: str, survived: bool):
+    def increment_pipeline_claims(self, state_name: str, survived: bool, ruling_type: str = "", cycle: Optional[int] = None):
         with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT total_rejections_by_type, cycles_to_first_survival, created_at_cycle "
+                "FROM state_budgets WHERE state_name = ?",
+                (state_name,),
+            ).fetchone()
+            if not row:
+                return
+
+            try:
+                rejections = json.loads(row["total_rejections_by_type"] or "{}")
+            except json.JSONDecodeError:
+                rejections = {}
+            if not isinstance(rejections, dict):
+                rejections = {}
+
             if survived:
+                updates = [
+                    "total_pipeline_claims = total_pipeline_claims + 1",
+                    "surviving_pipeline_claims = surviving_pipeline_claims + 1",
+                ]
+                params = []
+                if row["cycles_to_first_survival"] is None and cycle is not None:
+                    created_at_cycle = row["created_at_cycle"] or 0
+                    updates.append("cycles_to_first_survival = ?")
+                    params.append(max(0, int(cycle) - int(created_at_cycle) + 1))
+                params.append(state_name)
+                conn.execute(
+                    "UPDATE state_budgets SET " + ", ".join(updates) + " WHERE state_name = ?",
+                    tuple(params),
+                )
+            else:
+                if ruling_type:
+                    rejections[ruling_type] = int(rejections.get(ruling_type, 0)) + 1
                 conn.execute(
                     "UPDATE state_budgets "
                     "SET total_pipeline_claims = total_pipeline_claims + 1, "
-                    "    surviving_pipeline_claims = surviving_pipeline_claims + 1 "
+                    "    total_rejections_by_type = ? "
                     "WHERE state_name = ?",
-                    (state_name,)
-                )
-            else:
-                conn.execute(
-                    "UPDATE state_budgets "
-                    "SET total_pipeline_claims = total_pipeline_claims + 1 "
-                    "WHERE state_name = ?",
-                    (state_name,)
+                    (json.dumps(rejections), state_name),
                 )
 
     def update_state_tier(self, state_name: str, new_tier: int):

@@ -501,6 +501,25 @@ class AtlantisEngine:
         print(f"    output/domain_health.json — DMI metrics")
         print(f"    output/logs/            — Per-cycle logs")
         print(f"    output/content/         — Generated content (blog, newsroom, debate, explorer)")
+
+        domain_health = self.db.get_domain_health(domain=None, latest_only=True)
+        if domain_health:
+            avg_cycles = sum((d.get("cycles_to_first_survival", 0.0) or 0.0) for d in domain_health.values()) / len(domain_health)
+            total_survival = sum((d.get("survival_rate", 0.0) or 0.0) for d in domain_health.values()) / len(domain_health)
+            rejection_counts = {}
+            for d in domain_health.values():
+                for ruling_type, count in (d.get("failure_distribution", {}) or {}).items():
+                    rejection_counts[ruling_type] = rejection_counts.get(ruling_type, 0) + int(count)
+            if rejection_counts:
+                top_reason, top_count = max(rejection_counts.items(), key=lambda item: item[1])
+                top_reason_summary = f"{top_reason} ({top_count} times)"
+            else:
+                top_reason_summary = "None (0 times)"
+
+            print("\n  Revision Efficiency:")
+            print(f"    Avg cycles to first survival: {avg_cycles:.2f}")
+            print(f"    Top rejection reason: {top_reason_summary}")
+            print(f"    Survival rate: {total_survival * 100:.1f}%")
         self.models.print_cost_summary()
         stats = self.models.get_stats()
         print(f"  Total LLM calls: {stats['total_calls']}")
