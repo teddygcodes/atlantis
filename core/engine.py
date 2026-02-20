@@ -531,6 +531,7 @@ class AtlantisEngine:
             "logs",
             "cost_summary.json",
             "run_config.json",
+            "executive_summary.md",
         ]
         for artifact in artifacts:
             src = self.output_dir / artifact
@@ -554,6 +555,75 @@ class AtlantisEngine:
             os.symlink(self.run_output_dir, self.output_dir, target_is_directory=True)
         except OSError:
             shutil.copytree(self.run_output_dir, self.output_dir, dirs_exist_ok=True)
+
+    def _build_executive_summary_input(
+        self,
+        domain_health: dict,
+        total_survivors: int,
+        total_cost_usd: float,
+    ) -> str:
+        """Create compact run summary input for executive-summary generation."""
+        domains = sorted(self.db.get_all_domains())
+        domain_list = ", ".join(domains) if domains else "None"
+
+        if domain_health:
+            avg_survival_rate = (
+                sum((d.get("survival_rate", 0.0) or 0.0) for d in domain_health.values())
+                / len(domain_health)
+            )
+        else:
+            avg_survival_rate = 0.0
+
+        surviving_positions = []
+        for claim in self.db.get_surviving_claims()[:3]:
+            position = (claim.get("position") or "").strip()
+            if position:
+                surviving_positions.append(position)
+        if not surviving_positions:
+            surviving_positions = ["No surviving claim positions available."]
+
+        cycle_count = self.config.get("governance_cycles") or "indefinite"
+
+        return (
+            f"Domains: {domain_list}\n"
+            f"Survivor count: {total_survivors}\n"
+            f"Survival rate: {avg_survival_rate * 100:.1f}%\n"
+            f"Estimated total cost (USD): ${total_cost_usd:.6f}\n"
+            f"Number of governance cycles: {cycle_count}\n"
+            f"Example surviving claim positions:\n"
+            f"- {surviving_positions[0]}\n"
+            + (f"- {surviving_positions[1]}\n" if len(surviving_positions) > 1 else "")
+            + (f"- {surviving_positions[2]}\n" if len(surviving_positions) > 2 else "")
+        )
+
+    def _generate_executive_summary(self, domain_health: dict, total_survivors: int, stats: dict) -> str:
+        """Generate a plain-English executive summary via Haiku and persist it."""
+        system_prompt = (
+            "Write a 3-paragraph executive summary of this adversarial knowledge engine "
+            "run for a non-technical executive."
+        )
+        user_prompt = self._build_executive_summary_input(
+            domain_health=domain_health,
+            total_survivors=total_survivors,
+            total_cost_usd=stats.get("model_router_cost_usd", 0.0),
+        )
+
+        response = self.models.complete(
+            task_type="executive_summary",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=700,
+        )
+
+        summary = response.content.strip()
+        if not summary:
+            summary = "Executive summary unavailable for this run."
+
+        summary_path_output = self.output_dir / "executive_summary.md"
+        summary_path_run = self.run_output_dir / "executive_summary.md"
+        summary_path_output.write_text(summary + "\n", encoding="utf-8")
+        summary_path_run.write_text(summary + "\n", encoding="utf-8")
+        return summary
 
     def _final_report(self):
         """Print summary and note output file locations."""
@@ -613,6 +683,17 @@ class AtlantisEngine:
         if self.config["governance_cycles"]:
             per_cycle = stats["model_router_cost_usd"] / self.config["governance_cycles"]
             print(f"  Estimated cost per governance cycle: ${per_cycle:.6f}")
+
+        executive_summary = self._generate_executive_summary(
+            domain_health=domain_health,
+            total_survivors=total,
+            stats=stats,
+        )
+        print("\n  Executive Summary:")
+        print("  " + "-" * 48)
+        for line in executive_summary.splitlines():
+            print(f"  {line}")
+
         self._save_run_artifacts()
         print(f"  Run saved to: {self.run_output_dir.as_posix()}/")
         print(f"\n  Done.\n")
