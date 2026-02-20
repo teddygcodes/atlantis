@@ -75,6 +75,7 @@ MODEL_ALLOCATION = {
     "founder_research": "haiku",
     "founder_vote": "haiku",
     "normalization": "haiku",
+    "science_gate": "haiku",
     "premise_decomposition": "haiku",
     "rebuttal_newness": "haiku",
     "anti_loop": "haiku",

@@ -23,6 +23,7 @@ class ModelRouter:
     TASK_TEMPERATURES = {
         # Zero temp for deterministic structured extraction
         "normalization": 0.0,
+        "science_gate": 0.0,
         "premise_decomposition": 0.0,
         "rebuttal_newness": 0.0,
         "anti_loop": 0.0,

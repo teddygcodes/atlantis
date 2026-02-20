@@ -89,6 +89,7 @@ class PersistenceLayer:
                 stability_score INTEGER DEFAULT 1,
                 impact_score INTEGER DEFAULT 0,
                 tokens_earned INTEGER DEFAULT 0,
+                unverified_numerics_json TEXT DEFAULT '[]',
                 created_at TEXT NOT NULL
             );
 
@@ -195,6 +196,8 @@ class PersistenceLayer:
             conn.execute(
                 "ALTER TABLE archive_entries ADD COLUMN archive_tier TEXT NOT NULL DEFAULT 'quarantine'"
             )
+        if "unverified_numerics_json" not in cols:
+            conn.execute("ALTER TABLE archive_entries ADD COLUMN unverified_numerics_json TEXT DEFAULT '[]'")
         conn.execute(
             "UPDATE archive_entries "
             "SET archive_tier = CASE "
@@ -258,7 +261,7 @@ class PersistenceLayer:
                     outcome, ruling_type, outcome_reasoning, open_questions_json,
                     drama_score, novelty_score, depth_score,
                     citations_json, referenced_by_json,
-                    stability_score, impact_score, tokens_earned, created_at
+                    stability_score, impact_score, tokens_earned, unverified_numerics_json, created_at
                 ) VALUES (
                     :entry_id, :display_id, :entry_type, :source_state, :source_entity,
                     :cycle_created, :status, :archive_tier, :claim_type, :position, :reasoning_chain_json,
@@ -268,7 +271,7 @@ class PersistenceLayer:
                     :outcome, :ruling_type, :outcome_reasoning, :open_questions_json,
                     :drama_score, :novelty_score, :depth_score,
                     :citations_json, :referenced_by_json,
-                    :stability_score, :impact_score, :tokens_earned, :created_at
+                    :stability_score, :impact_score, :tokens_earned, :unverified_numerics_json, :created_at
                 )
             """, {
                 "entry_id": d.get("entry_id", ""),
@@ -304,6 +307,7 @@ class PersistenceLayer:
                 "stability_score": d.get("stability_score", 1),
                 "impact_score": d.get("impact_score", 0),
                 "tokens_earned": d.get("tokens_earned", 0),
+                "unverified_numerics_json": json.dumps(d.get("unverified_numerics", [])),
                 "created_at": d.get("created_at", _now()),
             })
         return d.get("display_id", "")
@@ -1179,6 +1183,7 @@ class PersistenceLayer:
             "open_questions_json": "open_questions",
             "citations_json": "citations",
             "referenced_by_json": "referenced_by",
+            "unverified_numerics_json": "unverified_numerics",
         }
         for db_field, py_field in json_fields.items():
             raw = d.pop(db_field, "[]")

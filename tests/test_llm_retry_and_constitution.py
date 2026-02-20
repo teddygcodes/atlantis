@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.llm import LLMProvider
 from governance.perpetual import PerpetualEngine
+from config.settings import MODEL_ALLOCATION
 
 
 class StubError(Exception):
@@ -38,3 +39,7 @@ def test_phase2_constitution_extract_trimmed_and_targeted():
     assert "Claim Types and Mandatory Structure" in extract
     assert "Four Claim Outcomes" in extract
     assert "Earning — Claims" in extract
+
+
+def test_science_gate_model_allocation_uses_haiku():
+    assert MODEL_ALLOCATION.get("science_gate") == "haiku"
