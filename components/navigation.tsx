@@ -23,6 +23,7 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
             width={40}
             height={40}
             className="object-contain"
+            style={{ width: "auto", height: "auto" }}
           />
           <span
             className="font-[var(--font-cinzel)] text-lg tracking-[0.3em] text-foreground"
