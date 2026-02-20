@@ -1,4 +1,5 @@
 """Atlantis — The Lost Civilization, Rebuilt"""
+import sys
 from pathlib import Path
 try:
     from dotenv import load_dotenv
@@ -9,4 +10,5 @@ except ImportError:
 from core.engine import main
 
 if __name__ == "__main__":
-    main()
+    # Forward CLI args (including --demo-electrical) to core.engine.main.
+    main(sys.argv[1:])
