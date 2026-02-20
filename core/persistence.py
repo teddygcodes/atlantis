@@ -77,6 +77,7 @@ class PersistenceLayer:
                 challenge_step_targeted TEXT DEFAULT '',
                 challenger_entity TEXT DEFAULT '',
                 outcome TEXT DEFAULT '',
+                ruling_type TEXT DEFAULT '',
                 outcome_reasoning TEXT DEFAULT '',
                 open_questions_json TEXT DEFAULT '[]',
                 drama_score INTEGER DEFAULT 0,
@@ -181,6 +182,14 @@ class PersistenceLayer:
             CREATE INDEX IF NOT EXISTS idx_log_cycle ON log_entries(cycle);
             CREATE INDEX IF NOT EXISTS idx_log_level ON log_entries(level);
         """)
+        self._ensure_archive_entries_columns(conn)
+
+    def _ensure_archive_entries_columns(self, conn: sqlite3.Connection):
+        """Lightweight schema migration for archive_entries additions."""
+        rows = conn.execute("PRAGMA table_info(archive_entries)").fetchall()
+        cols = {r[1] for r in rows}
+        if "ruling_type" not in cols:
+            conn.execute("ALTER TABLE archive_entries ADD COLUMN ruling_type TEXT DEFAULT ''")
 
     # ═══════════════════════════════════════════════════════
     # DISPLAY ID
@@ -223,7 +232,7 @@ class PersistenceLayer:
                     conclusion, keywords_json, raw_claim_text, raw_challenge_text,
                     raw_rebuttal_text, lab_origin_text, explicit_premises_json,
                     implicit_assumptions_json, challenge_step_targeted, challenger_entity,
-                    outcome, outcome_reasoning, open_questions_json,
+                    outcome, ruling_type, outcome_reasoning, open_questions_json,
                     drama_score, novelty_score, depth_score,
                     citations_json, referenced_by_json,
                     stability_score, impact_score, tokens_earned, created_at
@@ -233,7 +242,7 @@ class PersistenceLayer:
                     :conclusion, :keywords_json, :raw_claim_text, :raw_challenge_text,
                     :raw_rebuttal_text, :lab_origin_text, :explicit_premises_json,
                     :implicit_assumptions_json, :challenge_step_targeted, :challenger_entity,
-                    :outcome, :outcome_reasoning, :open_questions_json,
+                    :outcome, :ruling_type, :outcome_reasoning, :open_questions_json,
                     :drama_score, :novelty_score, :depth_score,
                     :citations_json, :referenced_by_json,
                     :stability_score, :impact_score, :tokens_earned, :created_at
@@ -260,6 +269,7 @@ class PersistenceLayer:
                 "challenge_step_targeted": d.get("challenge_step_targeted", ""),
                 "challenger_entity": d.get("challenger_entity", ""),
                 "outcome": d.get("outcome", ""),
+                "ruling_type": d.get("ruling_type", ""),
                 "outcome_reasoning": d.get("outcome_reasoning", ""),
                 "open_questions_json": json.dumps(d.get("open_questions", [])),
                 "drama_score": d.get("drama_score", 0),

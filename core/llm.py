@@ -374,22 +374,31 @@ class LLMProvider:
                 "and are archived for later dependency audits."
             )
 
-        if "return json:" in prompt_lower and "\"outcome\": \"survived|partial|destroyed\"" in prompt_lower:
-            selector = int(hashlib.md5(user_prompt.encode()).hexdigest(), 16) % 3
+        if "return json:" in prompt_lower and "\"ruling_type\"" in prompt_lower and "\"outcome\": \"survived|partial|retracted|destroyed\"" in prompt_lower:
+            selector = int(hashlib.md5(user_prompt.encode()).hexdigest(), 16) % 4
             if selector == 0:
                 outcome = "survived"
+                ruling_type = "SURVIVED"
                 reasoning = "The challenge raises pressure but fails to overturn the claim's core mechanism under the provided evidence."
                 scores = {"drama": 6, "novelty": 5, "depth": 7}
             elif selector == 1:
                 outcome = "partial"
+                ruling_type = "REVISE"
                 reasoning = "The challenge identifies a real boundary condition and the rebuttal concedes it while preserving a narrower core claim."
                 scores = {"drama": 7, "novelty": 6, "depth": 8}
+            elif selector == 2:
+                outcome = "retracted"
+                ruling_type = "REJECT_SCOPE"
+                reasoning = "The challenge demonstrates the claim is overbroad and the rebuttal does not narrow it enough for the stated domain."
+                scores = {"drama": 6, "novelty": 5, "depth": 6}
             else:
                 outcome = "destroyed"
-                reasoning = "The challenge targets a central step and the rebuttal does not supply a sufficient replacement chain of reasoning."
+                ruling_type = "REJECT_LOGIC"
+                reasoning = "The challenge targets a central inference and the rebuttal does not supply a valid replacement chain of reasoning."
                 scores = {"drama": 8, "novelty": 6, "depth": 7}
             return json.dumps({
                 "outcome": outcome,
+                "ruling_type": ruling_type,
                 "reasoning": reasoning,
                 "open_questions": [
                     "How should rebuttal quality be measured before archival?",

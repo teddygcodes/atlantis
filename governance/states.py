@@ -95,6 +95,7 @@ class ArchiveEntry:
     challenge_step_targeted: str = ""
     challenger_entity: str = ""
     outcome: str = ""
+    ruling_type: str = ""
     outcome_reasoning: str = ""
     open_questions: List[str] = field(default_factory=list)
     drama_score: int = 0
@@ -697,7 +698,7 @@ def determine_outcome(
     """
     Judge determines outcome of claim exchange.
     Domain-aware. Includes SCORING_RUBRIC.
-    Returns: {outcome, reasoning, open_questions, scores: {drama, novelty, depth}}
+    Returns: {outcome, ruling_type, reasoning, open_questions, scores: {drama, novelty, depth}}
 
     Outcomes: survived | partial | retracted | destroyed
     """
@@ -705,6 +706,7 @@ def determine_outcome(
     if _detect_option_c(rebuttal_text):
         return {
             "outcome": "retracted",
+            "ruling_type": "REJECT_SCOPE",
             "reasoning": "Researcher chose to retract (Option C).",
             "open_questions": [],
             "scores": {"drama": 3, "novelty": 1, "depth": 1},
@@ -742,11 +744,21 @@ def determine_outcome(
             f"REBUTTAL NEWNESS: {newness_note}\n\n"
             f"SCORING RUBRIC:\n{SCORING_RUBRIC}\n\n"
             f"Determine the outcome:\n"
-            f"- survived: rebuttal successfully defends the claim\n"
-            f"- partial: rebuttal concedes a flaw but salvages the core (Option B)\n"
-            f"- destroyed: challenge is fatal, rebuttal fails\n\n"
+            f"First determine ruling_type (required):\n"
+            f"- REJECT_FACT: empirically false claim\n"
+            f"- REJECT_LOGIC: invalid inference or reasoning error\n"
+            f"- REJECT_SCOPE: too broad, category error, or off-domain\n"
+            f"- REJECT_CITATION: claims without required support\n"
+            f"- REJECT_CLARITY: ambiguous or poorly defined\n"
+            f"- REVISE: narrow and resubmit (not a full destruction)\n\n"
+            f"Map ruling_type to outcome:\n"
+            f"- REJECT_FACT and REJECT_LOGIC => destroyed\n"
+            f"- REJECT_SCOPE, REJECT_CITATION, and REJECT_CLARITY => retracted\n"
+            f"- REVISE => partial\n"
+            f"- survived is only allowed when the rebuttal successfully defends the claim.\n\n"
             f"Return JSON:\n"
-            f'{{"outcome": "survived|partial|destroyed",\n'
+            f'{{"outcome": "survived|partial|retracted|destroyed",\n'
+            f' "ruling_type": "SURVIVED|REJECT_FACT|REJECT_LOGIC|REJECT_SCOPE|REJECT_CITATION|REJECT_CLARITY|REVISE",\n'
             f' "reasoning": "2-3 sentences",\n'
             f' "open_questions": ["question raised by exchange", ...],\n'
             f' "scores": {{"drama": 1-10, "novelty": 1-10, "depth": 1-10}}}}'
@@ -756,10 +768,32 @@ def determine_outcome(
 
     result = _parse_json_response(response.content, default={
         "outcome": "survived",
+        "ruling_type": "SURVIVED",
         "reasoning": "Unable to parse judge response.",
         "open_questions": [],
         "scores": {"drama": 3, "novelty": 3, "depth": 3},
     })
+
+    ruling_to_outcome = {
+        "REJECT_FACT": "destroyed",
+        "REJECT_LOGIC": "destroyed",
+        "REJECT_SCOPE": "retracted",
+        "REJECT_CITATION": "retracted",
+        "REJECT_CLARITY": "retracted",
+        "REVISE": "partial",
+        "SURVIVED": "survived",
+    }
+
+    valid_ruling_types = set(ruling_to_outcome.keys())
+    ruling_type = result.get("ruling_type", "").upper()
+    if ruling_type not in valid_ruling_types:
+        ruling_type = "SURVIVED"
+    result["ruling_type"] = ruling_type
+
+    mapped_outcome = ruling_to_outcome[ruling_type]
+    judge_outcome = result.get("outcome")
+    if judge_outcome != mapped_outcome:
+        result["outcome"] = mapped_outcome
 
     # Normalise outcome to known values
     valid_outcomes = {"survived", "partial", "destroyed", "retracted"}
