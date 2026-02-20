@@ -975,6 +975,9 @@ def determine_outcome(
     models: ModelRouter,
     constitution_context: str = "",
     unverified_numeric_assertions: Optional[List[str]] = None,
+    state_tier: int = 0,
+    claim_citations: Optional[List[str]] = None,
+    surviving_citation_count: Optional[int] = None,
     task_type: str = "judge",
 ) -> dict:
     """
@@ -1018,6 +1021,20 @@ def determine_outcome(
         if constitution_context else ""
     )
 
+    claim_citations = claim_citations or []
+    if surviving_citation_count is None:
+        surviving_citation_count = len(claim_citations)
+
+    tier_expectations = (
+        "Tier-scaled expectations:\n"
+        "- Tier 0-1: Standard evaluation. New claims get reasonable benefit of the doubt.\n"
+        "- Tier 2: Claims must demonstrate engagement with existing archive. "
+        "Pure first-principles claims without citations should be destroyed.\n"
+        "- Tier 3+: Claims must show genuine novelty beyond archive content. "
+        "Restating or minor extensions of existing claims get destroyed. "
+        "Require minimum 2 citations to surviving claims.\n"
+    )
+
     response = models.complete(
         task_type=task_type,
         system_prompt=(
@@ -1033,6 +1050,10 @@ def determine_outcome(
             f"CHALLENGE:\n{challenge_text}\n\n"
             f"REBUTTAL:\n{rebuttal_text}\n\n"
             f"REBUTTAL NEWNESS: {newness_note}\n\n"
+            f"CLAIM CITATIONS: {json.dumps(claim_citations)}\n"
+            f"CITATIONS TO SURVIVING CLAIMS: {surviving_citation_count}\n"
+            f"This claim comes from a Tier {state_tier} State. Higher-tier States are held to stricter standards.\n\n"
+            f"{tier_expectations}\n"
             f"SCORING RUBRIC:\n{SCORING_RUBRIC}\n\n"
             f"{skepticism_note}"
             f"Determine the outcome:\n"

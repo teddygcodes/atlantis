@@ -363,6 +363,29 @@ def test_determine_outcome_includes_numeric_skepticism_note():
     assert "47%" in prompt
 
 
+def test_determine_outcome_includes_tier_scaled_rules_and_state_tier():
+    models = SequenceStubModels(['{"outcome":"destroyed","ruling_type":"REJECT_CITATION","reasoning":"insufficient archival engagement","open_questions":[],"scores":{"drama":4,"novelty":3,"depth":4}}'])
+    determine_outcome(
+        claim_text="A first-principles proposal",
+        challenge_text="Challenge",
+        rebuttal_text="Rebuttal",
+        newness_result={"new_reasoning": True},
+        domain="physics",
+        state_approaches={"A": "empirical", "B": "formal"},
+        models=models,
+        state_tier=3,
+        claim_citations=["#001", "#002"],
+        surviving_citation_count=2,
+    )
+    prompt = models.calls[0]["user_prompt"]
+    assert "This claim comes from a Tier 3 State. Higher-tier States are held to stricter standards." in prompt
+    assert "Tier 0-1: Standard evaluation. New claims get reasonable benefit of the doubt." in prompt
+    assert "Tier 2: Claims must demonstrate engagement with existing archive." in prompt
+    assert "Tier 3+: Claims must show genuine novelty beyond archive content." in prompt
+    assert "Require minimum 2 citations to surviving claims." in prompt
+    assert "CITATIONS TO SURVIVING CLAIMS: 2" in prompt
+
+
 def test_archive_persists_unverified_numerics_json(db):
     did = _make_entry(db, unverified_numerics=["47%", "500 years"])
     loaded = db.get_archive_entry(did)
