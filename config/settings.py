@@ -65,6 +65,12 @@ PRODUCTION_CONFIG = {
     "chain_collapse_max_depth": 10,
 }
 
+DEMO_ELECTRICAL_CONFIG = {
+    **PRODUCTION_CONFIG,
+    "founding_era_target_pairs": 2,
+    "governance_cycles": 3,
+}
+
 # ═══════════════════════════════════════
 # MODEL ALLOCATION
 # ═══════════════════════════════════════

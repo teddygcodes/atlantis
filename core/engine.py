@@ -25,7 +25,7 @@ from typing import List, Optional
 
 from config.settings import (
     SYSTEM_NAME, VERSION,
-    MOCK_CONFIG, PRODUCTION_CONFIG,
+    MOCK_CONFIG, PRODUCTION_CONFIG, DEMO_ELECTRICAL_CONFIG,
     V1_DATA_PATHS, OUTPUT_DIRS,
     MODEL_ALLOCATION,
     SENATE_PAIR_SUPERMAJORITY,
@@ -56,6 +56,7 @@ class AtlantisEngine:
         force_clean: bool = False,
         verbose: bool = False,
         api_key: Optional[str] = None,
+        demo_electrical: bool = False,
     ):
         self._check_v1_data(force_clean)
         self.constitution_text = self._load_constitution()
@@ -64,6 +65,7 @@ class AtlantisEngine:
         self.mock = mock
         self.dry_run = dry_run
         self.verbose = verbose
+        self.demo_electrical = demo_electrical
         self.output_dir = Path("output")
         self._initialize_run_folder()
         self._prepare_output_workspace()
@@ -146,12 +148,87 @@ class AtlantisEngine:
 
     # ─── FOUNDING ERA ────────────────────────────────────────────
 
+    def _run_demo_electrical_founding_era(self) -> StateManager:
+        """Phase 1 demo mode: skip Senate votes and seed two empirical electrical rival pairs."""
+        state_manager = StateManager(self.db, self.models)
+        budget = self.config["initial_token_budget"]
+
+        demo_pairs = [
+            {
+                "domain": "Lighting_Design",
+                "domain_type": "empirical",
+                "approach_a": (
+                    "Lighting design requires fixture-by-fixture verification against reflected "
+                    "ceiling plans, panel schedules, and addenda to prevent costly field errors."
+                ),
+                "approach_b": (
+                    "Lighting design can be efficiently estimated through area-based calculations "
+                    "and standard fixture density ratios without individual fixture verification."
+                ),
+            },
+            {
+                "domain": "Electrical_Estimation",
+                "domain_type": "empirical",
+                "approach_a": (
+                    "Electrical estimation accuracy depends on cross-referencing multiple drawing "
+                    "sheets (plans, schedules, details, addenda) to catch conflicts before bid "
+                    "submission."
+                ),
+                "approach_b": (
+                    "Electrical estimation is best served by single-pass automated counting tools "
+                    "that prioritize speed over exhaustive cross-referencing."
+                ),
+            },
+        ]
+
+        print("\n  Demo electrical mode enabled: skipping Senate vote and seeding 2 empirical pairs.")
+        for cycle, pair_data in enumerate(demo_pairs, start=1):
+            domain = pair_data["domain"]
+            approach_a = pair_data["approach_a"]
+            approach_b = pair_data["approach_b"]
+
+            state_a = State(
+                name=self._generate_state_name(domain, "Alpha", cycle - 1),
+                domain=domain,
+                approach=approach_a,
+                budget=budget,
+                db=self.db,
+                models=self.models,
+                cycle_formed=cycle,
+            )
+            state_b = State(
+                name=self._generate_state_name(domain, "Beta", cycle - 1),
+                domain=domain,
+                approach=approach_b,
+                budget=budget,
+                db=self.db,
+                models=self.models,
+                cycle_formed=cycle,
+            )
+
+            pair = RivalPair(
+                domain=domain,
+                state_a=state_a,
+                state_b=state_b,
+                pair_id=str(uuid.uuid4()),
+                cycle_formed=cycle,
+                warmup_remaining=0,
+                domain_type=pair_data["domain_type"],
+            )
+            state_manager.add_pair(pair)
+            print(f"    DEMO PAIR FORMED: {state_a.name} vs {state_b.name} in '{domain}'")
+
+        return state_manager
+
     def _run_founding_era(self, founder_profiles: List[FounderProfile]) -> StateManager:
         """
         Phase 1: Founders propose rival pairs (domain + two approaches).
         60% supermajority vote required per pair.
         Once target_pairs formed, Founders retire from governance.
         """
+        if self.demo_electrical:
+            return self._run_demo_electrical_founding_era()
+
         state_manager = StateManager(self.db, self.models)
         target = self.config["founding_era_target_pairs"]
         max_cycles = self.config["founding_era_max_cycles"]
@@ -706,7 +783,7 @@ class AtlantisEngine:
 # CLI ENTRY POINT
 # ═══════════════════════════════════════
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Atlantis V2 — Adversarial Knowledge Engine",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -716,6 +793,7 @@ def main():
             "  python -m atlantis                     # Full production run\n"
             "  python -m atlantis --force-clean       # Remove V1 data first\n"
             "  python -m atlantis --dry-run           # Print prompts, skip API calls\n"
+            "  python -m atlantis --demo-electrical   # Electrical-domain empirical demo\n"
         ),
     )
     parser.add_argument(
@@ -734,9 +812,18 @@ def main():
         "--verbose", action="store_true",
         help="Print full raw claim/challenge/rebuttal text in cycle logs"
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--demo-electrical", action="store_true",
+        help="Use electrical-domain demo pairs (empirical) and skip Senate voting in Phase 1"
+    )
+    args = parser.parse_args(argv)
 
-    config = MOCK_CONFIG if args.mock else PRODUCTION_CONFIG
+    if args.mock:
+        config = MOCK_CONFIG
+    elif args.demo_electrical:
+        config = DEMO_ELECTRICAL_CONFIG
+    else:
+        config = PRODUCTION_CONFIG
 
     engine = AtlantisEngine(
         config=config,
@@ -744,5 +831,6 @@ def main():
         dry_run=args.dry_run,
         force_clean=args.force_clean,
         verbose=args.verbose,
+        demo_electrical=args.demo_electrical,
     )
     engine.run()
