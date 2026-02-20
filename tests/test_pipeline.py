@@ -128,6 +128,40 @@ CONCLUSION: Therefore cycle life improves."""
 
 
 
+
+
+def test_claim_validation_discovery_relaxes_empirical_requirements_for_philosophical_domain(db):
+    claim = """CLAIM TYPE: Discovery
+POSITION: Consciousness arises from integrated subjective perspectives.
+STEP 1: Multiple introspective reports converge on unified awareness.
+GAP ADDRESSED: Prior claims do not state what integration must explain.
+CONCLUSION: Therefore integration is a plausible basis for conscious unity."""
+    is_valid, errors = validate_claim(claim, StubModels("{}"), db, domain_type="philosophical")
+    assert is_valid
+    assert errors == []
+
+
+def test_claim_validation_discovery_keeps_empirical_requirements_strict_for_empirical_domain(db):
+    claim = """CLAIM TYPE: Discovery
+POSITION: Layered anodes improve cycle life.
+STEP 1: Layered materials may reduce failure modes.
+GAP ADDRESSED: Prior claims omit a measurable threshold.
+CONCLUSION: Therefore cycle life improves."""
+    is_valid, errors = validate_claim(claim, StubModels("{}"), db, domain_type="empirical")
+    assert not is_valid
+    assert any("operational definition" in err.lower() for err in errors)
+    assert any("falsifiable or testable implication" in err.lower() for err in errors)
+
+
+def test_claim_validation_discovery_without_numeric_assertions_does_not_require_estimate(db):
+    claim = """CLAIM TYPE: Discovery
+POSITION: Cooperative governance improves institutional resilience, operationally defined as sustained coordination quality in documented case analyses.
+STEP 1: If cross-state review protocols are introduced, decision-making consistency should increase under repeated governance simulations (testable implication).
+GAP ADDRESSED: Prior claims do not isolate coordination mechanisms.
+CONCLUSION: Therefore cooperative governance plausibly improves resilience."""
+    is_valid, errors = validate_claim(claim, StubModels("{}"), db, domain_type="empirical")
+    assert is_valid
+    assert errors == []
 def test_claim_validation_discovery_no_citations_with_survivors(db):
     _make_entry(db, status="survived")
     claim = """CLAIM TYPE: Discovery

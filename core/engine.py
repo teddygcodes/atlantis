@@ -221,6 +221,7 @@ class AtlantisEngine:
                     pair_id=str(uuid.uuid4()),
                     cycle_formed=cycle,
                     warmup_remaining=0,
+                    domain_type="philosophical",
                 )
                 state_manager.add_pair(pair)
                 formed_domains.append(domain)
@@ -413,6 +414,7 @@ class AtlantisEngine:
             pair_id=str(uuid.uuid4()),
             cycle_formed=1,
             warmup_remaining=0,
+            domain_type="philosophical",
         )
         state_manager.add_pair(pair)
         print("  Fallback pair: Philosophy_Alpha vs Philosophy_Beta")
