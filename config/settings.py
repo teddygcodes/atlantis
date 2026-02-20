@@ -82,6 +82,7 @@ MODEL_ALLOCATION = {
     "reclassification": "haiku",
     "bridge_extraction": "haiku",
     "content_generation": "haiku",
+    "executive_summary": "haiku",
     # Sonnet: core reasoning (claims, challenges, rebuttals)
     "researcher_claims": "sonnet",
     "critic_challenges": "sonnet",
