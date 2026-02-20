@@ -14,10 +14,12 @@ CONSTITUTION.md must exist in the project root.
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -61,8 +63,8 @@ class AtlantisEngine:
         self.mock = mock
         self.dry_run = dry_run
         self.output_dir = Path("output")
-        self._setup_output_dirs()
-        self._clear_output_data(force_clean)
+        self._initialize_run_folder()
+        self._prepare_output_workspace()
 
         self.db = PersistenceLayer(str(self.output_dir / "atlantis.db"))
         self.models = ModelRouter(
@@ -422,6 +424,22 @@ class AtlantisEngine:
 
     # ─── INFRASTRUCTURE ───────────────────────────────────────────
 
+    def _initialize_run_folder(self):
+        """Create this run's timestamped output folder under runs/."""
+        self.runs_dir = Path("runs")
+        self.run_timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        self.run_output_dir = self.runs_dir / self.run_timestamp
+        self.run_output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _prepare_output_workspace(self):
+        """Reset output/ for a fresh run and recreate expected directories."""
+        if self.output_dir.exists() or self.output_dir.is_symlink():
+            if self.output_dir.is_symlink() or self.output_dir.is_file():
+                self.output_dir.unlink()
+            else:
+                shutil.rmtree(self.output_dir)
+        self._setup_output_dirs()
+
 
     def _clear_output_data(self, force_clean: bool):
         """When force-clean is requested, remove prior run artifacts in output/."""
@@ -488,6 +506,55 @@ class AtlantisEngine:
         from agents.base import FOUNDER_CONFIGS
         return list(FOUNDER_CONFIGS.values())
 
+    def _save_run_artifacts(self):
+        """Persist run metadata and copy this run's outputs to runs/<timestamp>/."""
+        stats = self.models.get_stats()
+        cost_summary_path = self.output_dir / "cost_summary.json"
+        cost_summary_path.write_text(json.dumps(stats, indent=2), encoding="utf-8")
+
+        run_config = {
+            "system": SYSTEM_NAME,
+            "version": VERSION,
+            "mode": "MOCK" if self.mock else ("DRY-RUN" if self.dry_run else "PRODUCTION"),
+            "mock": self.mock,
+            "dry_run": self.dry_run,
+            "config": self.config,
+        }
+        run_config_path = self.output_dir / "run_config.json"
+        run_config_path.write_text(json.dumps(run_config, indent=2), encoding="utf-8")
+
+        artifacts = [
+            "archive.md",
+            "archive.json",
+            "domain_health.json",
+            "content",
+            "logs",
+            "cost_summary.json",
+            "run_config.json",
+        ]
+        for artifact in artifacts:
+            src = self.output_dir / artifact
+            if not src.exists():
+                continue
+            dst = self.run_output_dir / artifact
+            if src.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            else:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+
+        # Keep output/ as a "latest run" symlink when possible.
+        if self.output_dir.exists() or self.output_dir.is_symlink():
+            if self.output_dir.is_symlink() or self.output_dir.is_file():
+                self.output_dir.unlink()
+            else:
+                shutil.rmtree(self.output_dir)
+
+        try:
+            os.symlink(self.run_output_dir, self.output_dir, target_is_directory=True)
+        except OSError:
+            shutil.copytree(self.run_output_dir, self.output_dir, dirs_exist_ok=True)
+
     def _final_report(self):
         """Print summary and note output file locations."""
         total = self.db.count_surviving_claims()
@@ -546,6 +613,8 @@ class AtlantisEngine:
         if self.config["governance_cycles"]:
             per_cycle = stats["model_router_cost_usd"] / self.config["governance_cycles"]
             print(f"  Estimated cost per governance cycle: ${per_cycle:.6f}")
+        self._save_run_artifacts()
+        print(f"  Run saved to: {self.run_output_dir.as_posix()}/")
         print(f"\n  Done.\n")
 
 
