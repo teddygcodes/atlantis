@@ -243,8 +243,9 @@ class PerpetualEngine:
             self._get_previous_claim_positions(sb.name),
             b_lab,
         )
-        _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
-        _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
+        if os.environ.get("ATLANTIS_VERBOSE"):
+            _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
+            _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
 
         # Step 2.5: Discovery GAP ADDRESSED auto-fill repair (Haiku normalization)
         a_raw, a_auto_filled_gap = autofill_discovery_gap(a_raw, self.models)
