@@ -154,6 +154,28 @@ CONCLUSION: Therefore cycle life improves."""
     assert any("falsifiable or testable implication" in err.lower() for err in errors)
 
 
+
+
+def test_claim_validation_discovery_numeric_assertion_without_estimate_is_soft_for_philosophical_domain(db):
+    claim = """CLAIM TYPE: Discovery
+POSITION: Free will debates often reference reaction windows around 2-3 seconds in lived decision narratives.
+STEP 1: If people report pre-reflective impulses, then subjective timing descriptions like 2-3 seconds may still be illustrative rather than evidentiary.
+GAP ADDRESSED: Prior claims omit how informal quantities function in philosophical analysis.
+CONCLUSION: Therefore casual numeric references can support framing without serving as empirical proof."""
+    is_valid, errors = validate_claim(claim, StubModels("{}"), db, domain_type="philosophical")
+    assert is_valid
+    assert errors == []
+
+
+def test_claim_validation_discovery_numeric_assertion_without_estimate_is_strict_for_empirical_domain(db):
+    claim = """CLAIM TYPE: Discovery
+POSITION: Layered anodes improve cycle life, operationally defined as >=10% more retained capacity after 500 cycles measured by standardized charge/discharge tests.
+STEP 1: If layered anodes are used, then failure rates should decrease by 10-13% in controlled cycling experiments (testable implication).
+GAP ADDRESSED: Prior claims do not specify a measurable threshold for improved cycle life.
+CONCLUSION: Therefore cycle life improves."""
+    is_valid, errors = validate_claim(claim, StubModels("{}"), db, domain_type="empirical")
+    assert not is_valid
+    assert any("numeric assertions require estimate" in err.lower() for err in errors)
 def test_claim_validation_discovery_without_numeric_assertions_does_not_require_estimate(db):
     claim = """CLAIM TYPE: Discovery
 POSITION: Cooperative governance improves institutional resilience, operationally defined as sustained coordination quality in documented case analyses.

@@ -629,7 +629,11 @@ def validate_claim(
         ))
         has_evidence_class = bool(re.search(r"\bEVIDENCE\s+CLASS\b\s*[:\-]\s*.+", claim_text, re.IGNORECASE))
         if has_numeric_assertion and not (has_estimate_with_assumptions or has_evidence_class):
-            errors.append("Discovery numeric assertions require ESTIMATE with assumptions or an EVIDENCE CLASS")
+            msg = "Discovery numeric assertions require ESTIMATE with assumptions or an EVIDENCE CLASS"
+            if strict_empirical:
+                errors.append(msg)
+            else:
+                warnings.append(msg)
 
     if claim_type == "foundation":
         citations_line = re.search(r"^\s*CITATIONS\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
