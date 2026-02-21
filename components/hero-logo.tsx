@@ -143,7 +143,7 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
       <ParticleField />
 
       <div className="relative z-10 flex flex-col items-center px-6">
-        <div className="hero-fade-in mb-0">
+        <div className="hero-fade-in">
           <Image
             src="/images/hero-emblem.png"
             alt="Atlantis logo"
@@ -157,7 +157,7 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
         </div>
 
         <h1
-          className="hero-fade-in-delay-1 mt-0 mb-2 text-center text-4xl tracking-[0.4em] text-foreground md:text-5xl"
+          className="hero-fade-in-delay-1 -mt-16 mb-2 text-center text-4xl tracking-[0.4em] text-foreground md:-mt-24 md:text-5xl"
           style={{ fontFamily: "var(--font-cinzel)" }}
         >
           ATLANTIS
