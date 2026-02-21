@@ -142,59 +142,59 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
     >
       <ParticleField />
 
-      <div className="relative z-10 flex flex-col items-center justify-between px-6" style={{ minHeight: "100vh" }}>
-        {/* Top: Logo pushed toward upper portion */}
-        <div className="flex flex-1 items-end pb-4 pt-12 hero-wave-logo">
+      <div className="relative z-10 flex flex-col items-center justify-center gap-4 px-6" style={{ height: "100vh", height: "100dvh" }}>
+        {/* Logo */}
+        <div className="hero-wave-logo flex-shrink-0">
           <Image
             src="/images/hero-emblem.png"
             alt="Atlantis logo"
             width={560}
             height={560}
             className="object-contain drop-shadow-[0_0_100px_rgba(220,38,38,0.3)]"
-            style={{ width: "min(560px, 80vw)", height: "min(560px, 80vw)" }}
+            style={{ width: "min(400px, 55vw, 40vh)", height: "min(400px, 55vw, 40vh)" }}
             priority
             crossOrigin="anonymous"
           />
         </div>
 
-        {/* Middle: Wordmark + three lines */}
-        <div className="flex flex-col items-center">
+        {/* Wordmark + three lines */}
+        <div className="flex flex-shrink-0 flex-col items-center">
           <h1
             className="hero-wave-title text-center tracking-[0.3em] text-foreground"
-            style={{ fontFamily: "var(--font-cinzel)", fontSize: "clamp(48px, 8vw, 72px)" }}
+            style={{ fontFamily: "var(--font-cinzel)", fontSize: "clamp(36px, 6vw, 64px)" }}
           >
             ATLANTIS
           </h1>
 
           <div
-            className="hero-wave-divider mt-6 mb-6 h-px"
+            className="hero-wave-divider mt-4 mb-4 h-px"
             style={{ backgroundColor: "rgba(220, 38, 38, 0.5)" }}
           />
 
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-1.5">
             <p
               className="hero-wave-line-1 text-center"
-              style={{ fontFamily: "var(--font-cormorant)", fontSize: "22px", fontWeight: 600, color: "#d4d4d4" }}
+              style={{ fontFamily: "var(--font-cormorant)", fontSize: "clamp(16px, 2.5vw, 22px)", fontWeight: 600, color: "#d4d4d4" }}
             >
               Hypotheses are proposed.
             </p>
             <p
               className="hero-wave-line-2 text-center"
-              style={{ fontFamily: "var(--font-cormorant)", fontSize: "22px", fontWeight: 600, color: "#d4d4d4" }}
+              style={{ fontFamily: "var(--font-cormorant)", fontSize: "clamp(16px, 2.5vw, 22px)", fontWeight: 600, color: "#d4d4d4" }}
             >
               Challenges are issued.
             </p>
             <p
               className="hero-wave-line-3 text-center"
-              style={{ fontFamily: "var(--font-cormorant)", fontSize: "22px", fontWeight: 600, color: "#d4d4d4" }}
+              style={{ fontFamily: "var(--font-cormorant)", fontSize: "clamp(16px, 2.5vw, 22px)", fontWeight: 600, color: "#d4d4d4" }}
             >
               Only validated knowledge survives.
             </p>
           </div>
         </div>
 
-        {/* Bottom: Scroll prompt */}
-        <div className="flex flex-1 items-start pt-6 pb-16">
+        {/* Scroll prompt */}
+        <div className="flex-shrink-0 pt-4">
           <button
             onClick={onEnter}
             className="hero-wave-scroll group flex flex-col items-center gap-2 transition-opacity hover:opacity-70"
