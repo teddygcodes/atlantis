@@ -44,6 +44,18 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
+        <footer
+          style={{
+            textAlign: "center",
+            padding: "40px 0 32px",
+            fontFamily: "var(--font-ibm-plex-mono)",
+            fontSize: "11px",
+            letterSpacing: "0.2em",
+            color: "#525252",
+          }}
+        >
+          ATLANTIS v2.1
+        </footer>
       </body>
     </html>
   );
