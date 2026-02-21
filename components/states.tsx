@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { STATES, type StateEntity } from "@/lib/data";
 
@@ -43,25 +44,34 @@ export function States() {
 
   return (
     <section ref={containerRef}>
-      {/* Header */}
-      <div className="scroll-reveal mx-auto mb-24 text-center">
-        <h2
-          className="mb-5 tracking-[0.25em] text-foreground"
-          style={{ fontFamily: "var(--font-cinzel)", fontSize: "36px" }}
-        >
-          THE STATES
-        </h2>
-        <p
-          className="text-lg"
-          style={{
-            fontFamily: "var(--font-cormorant)",
-            fontSize: "19px",
-            color: "#a3a3a3",
-          }}
-        >
-          Six entities. Three domains. Each one learning from its failures.
-        </p>
-      </div>
+  {/* Header with logo */}
+  <div className="scroll-reveal mx-auto mb-24 flex items-start gap-8 max-w-[900px]">
+    <Image
+      src="/images/logo.png"
+      alt="Atlantis logo"
+      width={80}
+      height={80}
+      className="mt-1 flex-shrink-0 object-contain"
+      style={{ width: "80px", height: "auto" }}
+    />
+    <div>
+      <h2
+        className="mb-4 tracking-[0.25em] text-foreground"
+        style={{ fontFamily: "var(--font-cinzel)", fontSize: "36px" }}
+      >
+        THE STATES
+      </h2>
+      <p
+        style={{
+          fontFamily: "var(--font-cormorant)",
+          fontSize: "19px",
+          color: "#a3a3a3",
+        }}
+      >
+        Six entities. Three domains. Each one learning from its failures.
+      </p>
+    </div>
+  </div>
 
       {/* State pairs */}
       <div className="mx-auto flex max-w-[900px] flex-col gap-16">

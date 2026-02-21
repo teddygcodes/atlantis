@@ -5,7 +5,7 @@ export default function ChroniclePage() {
   return (
     <>
       <Navigation />
-      <main className="px-4 py-24 md:py-32">
+      <main className="px-4 pt-24 pb-20 md:pt-36">
         <Chronicle />
       </main>
     </>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { CLAIMS, type Claim } from "@/lib/data";
 
 function useScrollReveal() {
@@ -35,16 +36,22 @@ export function Debates() {
   return (
     <section ref={containerRef}>
       {/* Header */}
-      <div className="scroll-reveal mx-auto mb-20 max-w-[800px]">
-        <div className="mb-6 flex items-center gap-4">
+      <div className="scroll-reveal mx-auto mb-20 flex max-w-[800px] items-start gap-8">
+        <Image
+          src="/images/logo.png"
+          alt="Atlantis logo"
+          width={80}
+          height={80}
+          className="mt-1 flex-shrink-0 object-contain"
+          style={{ width: "80px", height: "auto" }}
+        />
+        <div>
           <h2
-            className="text-sm uppercase tracking-[0.3em] text-foreground"
-            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            className="mb-4 tracking-[0.25em] text-foreground"
+            style={{ fontFamily: "var(--font-cinzel)", fontSize: "36px" }}
           >
-            The Debates
+            THE DEBATES
           </h2>
-          <div className="h-px flex-1 bg-accent/20" />
-        </div>
         <p
           className="text-xl leading-[1.9] text-muted"
           style={{ fontFamily: "var(--font-cormorant)" }}
@@ -52,6 +59,7 @@ export function Debates() {
           Every claim. Every challenge. Every verdict. Watch the adversarial
           process unfold.
         </p>
+        </div>
       </div>
 
       {/* Cycle selector */}

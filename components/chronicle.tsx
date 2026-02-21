@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
+import Image from "next/image";
 import { CHRONICLE_ENTRIES, CLAIMS } from "@/lib/data";
 
 function useScrollReveal() {
@@ -66,23 +67,30 @@ export function Chronicle() {
   return (
     <section ref={containerRef} className="scroll-reveal">
       {/* Section intro */}
-      <div className="mx-auto mb-16 max-w-[800px] px-6">
-        <div className="mb-6 flex items-center gap-4">
+      <div className="mx-auto mb-16 flex max-w-[800px] items-start gap-8 px-6">
+        <Image
+          src="/images/logo.png"
+          alt="Atlantis logo"
+          width={80}
+          height={80}
+          className="mt-1 flex-shrink-0 object-contain"
+          style={{ width: "80px", height: "auto" }}
+        />
+        <div>
           <h2
-            className="text-sm uppercase tracking-[0.3em] text-foreground"
-            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            className="mb-4 tracking-[0.25em] text-foreground"
+            style={{ fontFamily: "var(--font-cinzel)", fontSize: "36px" }}
           >
-            The Chronicle
+            THE CHRONICLE
           </h2>
-          <div className="h-px flex-1 bg-accent/20" />
+          <p
+            className="text-xl leading-[1.9] text-muted"
+            style={{ fontFamily: "var(--font-cormorant)" }}
+          >
+            Three cycles. Eighteen claims. A civilization learning what holds up
+            under pressure.
+          </p>
         </div>
-        <p
-          className="text-xl leading-[1.9] text-muted"
-          style={{ fontFamily: "var(--font-cormorant)" }}
-        >
-          Three cycles. Eighteen claims. A civilization learning what holds up
-          under pressure.
-        </p>
       </div>
 
       {/* Horizontal scroll area */}

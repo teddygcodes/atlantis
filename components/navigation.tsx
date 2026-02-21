@@ -23,7 +23,8 @@ export function Navigation() {
 
   return (
     <header className="nav-animate-in sticky top-0 z-50 border-b border-border/50 bg-background/90 backdrop-blur-md">
-      <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <nav className="mx-auto flex max-w-5xl items-center px-6 py-4">
+        {/* Logo home link - left side */}
         <Link
           href="/"
           className="flex items-center gap-2.5 transition-opacity hover:opacity-70"
@@ -37,36 +38,31 @@ export function Navigation() {
             className="object-contain"
             style={{ width: "20px", height: "auto" }}
           />
-          <span
-            className="text-[10px] tracking-[0.3em] text-foreground"
-            style={{ fontFamily: "var(--font-cinzel)" }}
-          >
-            ATLANTIS
-          </span>
         </Link>
 
-        <div className="hidden items-center gap-6 md:flex">
+        {/* Centered nav tabs */}
+        <div className="hidden flex-1 items-center justify-center gap-7 md:flex">
           {NAV_ITEMS.map((item) => (
             <Link
               key={item}
               href={ROUTE_MAP[item] || "/"}
-              className={`relative py-1 text-[10px] uppercase tracking-[0.15em] transition-colors ${
+              className={`relative py-1 text-[10px] uppercase tracking-[0.15em] transition-colors duration-200 ${
                 activeItem === item
-                  ? "text-foreground"
-                  : "text-muted/40 hover:text-muted"
+                  ? "text-[#dc2626]"
+                  : "text-[#e5e5e5] hover:text-[#a3a3a3]"
               }`}
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
               {item}
               {activeItem === item && (
-                <span className="absolute -bottom-[17px] left-0 right-0 h-px bg-accent" />
+                <span className="absolute -bottom-[17px] left-0 right-0 h-px bg-[#dc2626]" />
               )}
             </Link>
           ))}
         </div>
 
-        {/* Mobile */}
-        <div className="md:hidden">
+        {/* Mobile dropdown */}
+        <div className="ml-auto md:hidden">
           <select
             value={activeItem || ""}
             onChange={(e) => {
