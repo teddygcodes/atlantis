@@ -320,7 +320,7 @@ export function StateProfile({ slug }: { slug: string }) {
   );
 
   return (
-    <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+    <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
     <section ref={containerRef} style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
       {/* ── HERO ZONE ── */}
       <div className="scroll-reveal mb-6 text-center">
@@ -339,7 +339,7 @@ export function StateProfile({ slug }: { slug: string }) {
       </div>
 
       {/* State identity */}
-      <div className="scroll-reveal mb-6" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div className="scroll-reveal mb-6" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
         <div
           style={{
             fontFamily: "var(--font-mono)",
@@ -369,7 +369,7 @@ export function StateProfile({ slug }: { slug: string }) {
       </div>
 
       {/* Approach quote */}
-      <div className="scroll-reveal mb-8" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div className="scroll-reveal mb-8" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
         <p
           style={{
             fontFamily: "var(--font-body)",
@@ -533,7 +533,7 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── KNOWLEDGE GRAPH ── */}
-      <div className="scroll-reveal mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div className="scroll-reveal mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
         <SectionLabel>NETWORK</SectionLabel>
         <h2
           style={{
@@ -553,7 +553,7 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── LEARNING ARC ── */}
-      <div className="scroll-reveal mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div className="scroll-reveal mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
         <SectionLabel>EVOLUTION</SectionLabel>
         <h2
           style={{
@@ -661,7 +661,7 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── DEBATES ── */}
-      <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
         <div className="scroll-reveal" style={{ textAlign: "center", width: "100%" }}>
           <SectionLabel>ADVERSARIAL RECORD</SectionLabel>
           <h2
@@ -688,7 +688,7 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── SURVIVING KNOWLEDGE ── */}
-      <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
         <div className="scroll-reveal" style={{ textAlign: "center", width: "100%" }}>
           <SectionLabel>KNOWLEDGE BASE</SectionLabel>
           <h2
@@ -765,7 +765,7 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── GRAVEYARD ── */}
-      <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
         <div className="scroll-reveal" style={{ textAlign: "center", width: "100%" }}>
           <SectionLabel>REFUTED</SectionLabel>
           <h2
