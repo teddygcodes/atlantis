@@ -19,8 +19,9 @@ export async function POST(req: Request) {
 
     return Response.json({ explanation: result.text });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error("[v0] Explain API error:", msg);
-    return Response.json({ error: msg }, { status: 500 });
+    return Response.json(
+      { error: "Failed to generate explanation" },
+      { status: 500 }
+    );
   }
 }
