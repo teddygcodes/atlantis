@@ -29,7 +29,7 @@ from config.settings import (
     SYSTEM_NAME, VERSION,
     MOCK_CONFIG, PRODUCTION_CONFIG, DEMO_ELECTRICAL_CONFIG,
     V1_DATA_PATHS, OUTPUT_DIRS,
-    MODEL_ALLOCATION,
+    MODEL_ALLOCATION, DEBATE_MATCHUPS,
     SENATE_PAIR_SUPERMAJORITY,
 )
 from core.models import ModelRouter
@@ -233,90 +233,51 @@ class AtlantisEngine:
 
         state_manager = StateManager(self.db, self.models)
         target = self.config["founding_era_target_pairs"]
-        max_cycles = self.config["founding_era_max_cycles"]
-        founder_configs = self._get_all_founder_configs()
+        budget = self.config["initial_token_budget"]
 
-        formed = 0
-        cycle = 0
-        formed_domains: List[str] = []
-        formed_domain_keys = set()
+        print(
+            f"\n  Senate: preconfigured domain matchups. "
+            f"Target: {target} pairs."
+        )
 
-        print(f"\n  Senate: {len(founder_configs)} Founders. "
-              f"Target: {target} pairs. Supermajority: {SENATE_PAIR_SUPERMAJORITY:.0%}")
+        for pair_index, pair_data in enumerate(DEBATE_MATCHUPS[:target], start=1):
+            domain = pair_data["domain"]
+            approach_a = pair_data["alpha_approach"]
+            approach_b = pair_data["beta_approach"]
 
-        while formed < target and cycle < max_cycles:
-            cycle += 1
-            print(f"\n  Founding cycle {cycle}/{max_cycles} — {formed}/{target} pairs formed")
+            state_a = State(
+                name=self._generate_state_name(domain, "Alpha", pair_index - 1),
+                domain=domain,
+                approach=approach_a,
+                budget=budget,
+                db=self.db,
+                models=self.models,
+                cycle_formed=pair_index,
+            )
+            state_b = State(
+                name=self._generate_state_name(domain, "Beta", pair_index - 1),
+                domain=domain,
+                approach=approach_b,
+                budget=budget,
+                db=self.db,
+                models=self.models,
+                cycle_formed=pair_index,
+            )
 
-            # Each cycle: one Founder proposes a candidate pair
-            proposer = founder_configs[cycle % len(founder_configs)]
-            candidate = self._founder_propose_pair(proposer, formed_domains)
-            if not candidate:
-                print(f"    {proposer.name} did not propose a valid pair — skipping")
-                continue
+            pair = RivalPair(
+                domain=domain,
+                state_a=state_a,
+                state_b=state_b,
+                pair_id=str(uuid.uuid4()),
+                cycle_formed=pair_index,
+                warmup_remaining=0,
+                domain_type="philosophical",
+            )
+            state_manager.add_pair(pair)
+            print(f"    PAIR FORMED: {state_a.name} vs {state_b.name} in '{domain}'")
 
-            domain = candidate["domain"]
-            approach_a = candidate["approach_a"]
-            approach_b = candidate["approach_b"]
-
-            domain_key = domain.strip().lower()
-            if domain_key in formed_domain_keys:
-                print(
-                    f"    Domain '{domain}' already has a formed rival pair — skipping before vote."
-                )
-                continue
-
-            print(f"    Proposed by {proposer.name}: [{domain}] {approach_a} vs {approach_b}")
-
-            # Senate vote
-            yes_votes = 0
-            no_votes = 0
-            for fc in founder_configs:
-                vote = self._founder_vote_on_pair(fc, domain, approach_a, approach_b)
-                if vote:
-                    yes_votes += 1
-                else:
-                    no_votes += 1
-
-            total = yes_votes + no_votes
-            ratio = yes_votes / total if total > 0 else 0
-            print(f"    Vote: {yes_votes}/{total} ({ratio:.0%}) — "
-                  f"need {SENATE_PAIR_SUPERMAJORITY:.0%}")
-
-            if ratio >= SENATE_PAIR_SUPERMAJORITY:
-                # Form the pair
-                budget = self.config["initial_token_budget"]
-                name_a = self._generate_state_name(domain, "Alpha", formed)
-                name_b = self._generate_state_name(domain, "Beta", formed)
-
-                state_a = State(
-                    name=name_a, domain=domain, approach=approach_a,
-                    budget=budget, db=self.db, models=self.models, cycle_formed=cycle,
-                )
-                state_b = State(
-                    name=name_b, domain=domain, approach=approach_b,
-                    budget=budget, db=self.db, models=self.models, cycle_formed=cycle,
-                )
-
-                pair = RivalPair(
-                    domain=domain,
-                    state_a=state_a,
-                    state_b=state_b,
-                    pair_id=str(uuid.uuid4()),
-                    cycle_formed=cycle,
-                    warmup_remaining=0,
-                    domain_type="philosophical",
-                )
-                state_manager.add_pair(pair)
-                formed_domains.append(domain)
-                formed_domain_keys.add(domain_key)
-                formed += 1
-                print(f"    PAIR FORMED: {name_a} vs {name_b} in '{domain}'")
-            else:
-                print(f"    Pair rejected.")
-
-        if formed == 0:
-            print("  No pairs formed — using fallback pair for testing.")
+        if not state_manager.pairs:
+            print("  No configured pairs available — using fallback pair for testing.")
             state_manager = self._fallback_pair(state_manager)
 
         return state_manager

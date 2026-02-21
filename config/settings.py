@@ -35,7 +35,7 @@ TIER_NAMES = {tier: info["name"] for tier, info in V2_TIERS.items()}
 # MOCK CONFIG (for testing)
 # ═══════════════════════════════════════
 MOCK_CONFIG = {
-    "founding_era_target_pairs": 3,        # 6 States
+    "founding_era_target_pairs": 10,       # 20 States
     "phase0_research_cycles": 3,           # Founder research cycles
     "founding_era_max_cycles": 10,         # Max cycles to form pairs
     "governance_cycles": 5,                # Phase 2 cycles (0 = indefinite)
@@ -52,7 +52,7 @@ MOCK_CONFIG = {
 # PRODUCTION CONFIG
 # ═══════════════════════════════════════
 PRODUCTION_CONFIG = {
-    "founding_era_target_pairs": 3,        # TEMP: 3 for testing (restore to 10)
+    "founding_era_target_pairs": 10,
     "phase0_research_cycles": 1,
     "founding_era_max_cycles": 5,
     "governance_cycles": 3,                # TEMP: 3 for testing (restore to 0 for indefinite)
@@ -257,28 +257,58 @@ FOUNDER_GROUPS = {
     ]
 }
 
-DEBATE_MATCHUPS = {
-    "Hamilton":    {"allies": ["Madison", "Olympia"],    "opponents": ["Jefferson", "Carson"]},
-    "Jefferson":   {"allies": ["Paine", "Aristotle"],    "opponents": ["Hamilton", "Washington"]},
-    "Franklin":    {"allies": ["Curie", "Euclid"],       "opponents": ["Da Vinci", "Darwin"]},
-    "Madison":     {"allies": ["Marshall", "Hamilton"],  "opponents": ["Jefferson", "Paine"]},
-    "Marshall":    {"allies": ["Washington", "Madison"], "opponents": ["Jefferson", "Paine"]},
-    "Washington":  {"allies": ["Hippocrates", "Brunel"], "opponents": ["Darwin", "Smith"]},
-    "Paine":       {"allies": ["Jefferson", "Herodotus"],"opponents": ["Washington", "Hamilton"]},
-    "Tyler":       {"allies": ["Turing", "Brunel"],      "opponents": ["Aristotle", "Jefferson"]},
-    "Darwin":      {"allies": ["Carson", "Hippocrates"], "opponents": ["Euclid", "Washington"]},
-    "Curie":       {"allies": ["Franklin", "Turing"],    "opponents": ["Aristotle", "Da Vinci"]},
-    "Turing":      {"allies": ["Euclid", "Hamilton"],    "opponents": ["Aristotle", "Herodotus"]},
-    "Aristotle":   {"allies": ["Herodotus", "Franklin"], "opponents": ["Turing", "Smith"]},
-    "Hippocrates": {"allies": ["Washington", "Carson"],  "opponents": ["Smith", "Hamilton"]},
-    "Da Vinci":    {"allies": ["Brunel", "Olympia"],     "opponents": ["Euclid", "Franklin"]},
-    "Brunel":      {"allies": ["Hamilton", "Tyler"],     "opponents": ["Carson", "Jefferson"]},
-    "Olympia":     {"allies": ["Smith", "Hamilton"],     "opponents": ["Aristotle", "Herodotus"]},
-    "Smith":       {"allies": ["Hamilton", "Olympia"],   "opponents": ["Carson", "Jefferson"]},
-    "Herodotus":   {"allies": ["Aristotle", "Paine"],    "opponents": ["Turing", "Hamilton"]},
-    "Euclid":      {"allies": ["Turing", "Franklin"],    "opponents": ["Da Vinci", "Paine"]},
-    "Carson":      {"allies": ["Darwin", "Hippocrates"], "opponents": ["Smith", "Hamilton"]},
-}
+DEBATE_MATCHUPS = [
+    {
+        "domain": "Mathematics",
+        "alpha_approach": "Formalist — axioms, proofs, pure structure",
+        "beta_approach": "Applied — real-world modeling, computation, problem-solving",
+    },
+    {
+        "domain": "Physics",
+        "alpha_approach": "Theoretical — equations, predictions, unification",
+        "beta_approach": "Experimental — observation, measurement, falsification",
+    },
+    {
+        "domain": "Biology",
+        "alpha_approach": "Molecular — genes, proteins, cellular mechanisms",
+        "beta_approach": "Systems — ecosystems, evolution, emergent behavior",
+    },
+    {
+        "domain": "Finance",
+        "alpha_approach": "Quantitative — algorithms, risk models, statistical arbitrage",
+        "beta_approach": "Behavioral — psychology, market cycles, sentiment analysis",
+    },
+    {
+        "domain": "Technology",
+        "alpha_approach": "Architecture — systems design, infrastructure, scalability",
+        "beta_approach": "Intelligence — AI, machine learning, automation",
+    },
+    {
+        "domain": "Medicine",
+        "alpha_approach": "Clinical — treatments, trials, patient outcomes",
+        "beta_approach": "Preventive — public health, epidemiology, population science",
+    },
+    {
+        "domain": "Geography",
+        "alpha_approach": "Physical — climate, geology, natural resources",
+        "beta_approach": "Human — demographics, urbanization, migration patterns",
+    },
+    {
+        "domain": "History",
+        "alpha_approach": "Analytical — patterns, causation, cycles",
+        "beta_approach": "Narrative — culture, identity, collective memory",
+    },
+    {
+        "domain": "Economics",
+        "alpha_approach": "Macro — policy, trade systems, monetary theory",
+        "beta_approach": "Micro — incentives, market behavior, game theory",
+    },
+    {
+        "domain": "Philosophy",
+        "alpha_approach": "Empiricist — evidence, logic, scientific method",
+        "beta_approach": "Rationalist — ethics, meaning, consciousness",
+    },
+]
 
 # ═══════════════════════════════════════
 # API CONFIGURATION
