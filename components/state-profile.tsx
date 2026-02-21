@@ -605,6 +605,7 @@ export function StateProfile({ slug }: { slug: string }) {
                     {rulingBadge(claim.ruling)}
                   </div>
                   <p
+                    className="text-center"
                     style={{
                       fontFamily: "var(--font-body)",
                       fontSize: "18px",
@@ -625,8 +626,9 @@ export function StateProfile({ slug }: { slug: string }) {
         </div>
 
         {/* Narrative */}
-        <div className="mx-auto mt-12 max-w-2xl">
+        <div className="mx-auto mt-12 max-w-2xl text-center">
           <p
+            className="text-center"
             style={{
               fontFamily: "var(--font-body)",
               fontSize: "18px",
@@ -726,6 +728,7 @@ export function StateProfile({ slug }: { slug: string }) {
                   {rulingBadge(claim.ruling)}
                 </div>
                 <p
+                  className="text-center"
                   style={{
                     fontFamily: "var(--font-body)",
                     fontSize: "18px",
@@ -801,7 +804,7 @@ export function StateProfile({ slug }: { slug: string }) {
                   {rulingBadge("DESTROYED")}
                 </div>
                 <p
-                  className="mb-3"
+                  className="mb-3 text-center"
                   style={{
                     fontFamily: "var(--font-body)",
                     fontSize: "17px",
@@ -815,6 +818,7 @@ export function StateProfile({ slug }: { slug: string }) {
                   {claim.position}
                 </p>
                 <p
+                  className="text-center"
                   style={{
                     fontFamily: "var(--font-body)",
                     fontSize: "15px",
