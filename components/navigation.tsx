@@ -50,6 +50,7 @@ export function Navigation() {
             alt="Atlantis logo"
             width={56}
             height={56}
+            priority
             className="object-contain"
             style={{ width: "56px", height: "56px" }}
           />
