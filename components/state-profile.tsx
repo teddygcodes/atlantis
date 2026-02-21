@@ -91,7 +91,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
     >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full text-left transition-colors duration-300"
+        className="w-full text-center transition-colors duration-300"
         style={{
           backgroundColor: expanded ? "#0e0e0e" : "transparent",
           border: `1px solid ${expanded ? "#1c1c1c" : "#141414"}`,
@@ -125,7 +125,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
             style={{
               fontFamily: "var(--font-mono)",
               fontSize: "11px",
-              color: "#525252",
+              color: "#a3a3a3",
               letterSpacing: "0.1em",
             }}
           >
@@ -258,7 +258,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
                     style={{
                       fontFamily: "var(--font-mono)",
                       fontSize: "9px",
-                      color: "#525252",
+                      color: "#a3a3a3",
                       letterSpacing: "0.2em",
                     }}
                   >
@@ -286,7 +286,7 @@ export function StateProfile({ slug }: { slug: string }) {
   if (!state) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p style={{ fontFamily: "var(--font-body)", fontSize: "22px", color: "#525252" }}>
+        <p style={{ fontFamily: "var(--font-body)", fontSize: "22px", color: "#a3a3a3" }}>
           State not found.
         </p>
       </div>
@@ -326,7 +326,7 @@ export function StateProfile({ slug }: { slug: string }) {
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: "11px",
-            color: "#525252",
+            color: "#a3a3a3",
             letterSpacing: "0.2em",
           }}
         >
@@ -390,7 +390,7 @@ export function StateProfile({ slug }: { slug: string }) {
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: "11px",
-                color: "#525252",
+                color: "#a3a3a3",
                 letterSpacing: "0.1em",
               }}
             >
@@ -426,7 +426,7 @@ export function StateProfile({ slug }: { slug: string }) {
             style={{
               fontFamily: "var(--font-mono)",
               fontSize: "10px",
-              color: "#525252",
+              color: "#a3a3a3",
               letterSpacing: "0.15em",
             }}
           >
@@ -495,7 +495,7 @@ export function StateProfile({ slug }: { slug: string }) {
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: "11px",
-                color: "#404040",
+                color: "#8a8a8a",
                 letterSpacing: "0.1em",
               }}
             >
@@ -579,7 +579,7 @@ export function StateProfile({ slug }: { slug: string }) {
                       style={{
                         fontFamily: "var(--font-mono)",
                         fontSize: "10px",
-                        color: claim.ruling === "DESTROYED" ? "#525252" : "#fff",
+                        color: claim.ruling === "DESTROYED" ? "#a3a3a3" : "#fff",
                         fontWeight: 700,
                       }}
                     >
@@ -595,7 +595,7 @@ export function StateProfile({ slug }: { slug: string }) {
                       style={{
                         fontFamily: "var(--font-mono)",
                         fontSize: "11px",
-                        color: "#525252",
+                        color: "#a3a3a3",
                         letterSpacing: "0.15em",
                       }}
                     >
@@ -608,7 +608,7 @@ export function StateProfile({ slug }: { slug: string }) {
                       fontFamily: "var(--font-body)",
                       fontSize: "18px",
                       fontWeight: 600,
-                      color: claim.ruling === "DESTROYED" ? "#737373" : "#e5e5e5",
+                      color: claim.ruling === "DESTROYED" ? "#b3b3b3" : "#e5e5e5",
                       lineHeight: "1.8",
                       textDecoration:
                         claim.ruling === "DESTROYED" ? "line-through" : "none",
@@ -628,9 +628,9 @@ export function StateProfile({ slug }: { slug: string }) {
           <p
             style={{
               fontFamily: "var(--font-body)",
-              fontSize: "17px",
+              fontSize: "18px",
               fontWeight: 600,
-              color: "#a3a3a3",
+              color: "#d4d4d4",
               lineHeight: "1.9",
               fontStyle: "italic",
             }}
@@ -692,7 +692,7 @@ export function StateProfile({ slug }: { slug: string }) {
               fontFamily: "var(--font-body)",
               fontSize: "18px",
               fontWeight: 600,
-              color: "#404040",
+              color: "#8a8a8a",
               fontStyle: "italic",
             }}
           >
@@ -752,7 +752,7 @@ export function StateProfile({ slug }: { slug: string }) {
             style={{
               fontFamily: "var(--font-serif)",
               fontSize: "24px",
-              color: "#525252",
+              color: "#a3a3a3",
               letterSpacing: "0.15em",
             }}
           >
@@ -767,7 +767,7 @@ export function StateProfile({ slug }: { slug: string }) {
               fontFamily: "var(--font-body)",
               fontSize: "18px",
               fontWeight: 600,
-              color: "#404040",
+              color: "#8a8a8a",
               fontStyle: "italic",
             }}
           >
@@ -790,7 +790,7 @@ export function StateProfile({ slug }: { slug: string }) {
                     style={{
                       fontFamily: "var(--font-mono)",
                       fontSize: "12px",
-                      color: "#404040",
+                      color: "#8a8a8a",
                       fontWeight: 700,
                       letterSpacing: "0.1em",
                     }}
@@ -805,7 +805,7 @@ export function StateProfile({ slug }: { slug: string }) {
                     fontFamily: "var(--font-body)",
                     fontSize: "17px",
                     fontWeight: 600,
-                    color: "#737373",
+                    color: "#b3b3b3",
                     lineHeight: "1.8",
                     textDecoration: "line-through",
                     textDecorationColor: "#dc262640",
@@ -818,7 +818,7 @@ export function StateProfile({ slug }: { slug: string }) {
                     fontFamily: "var(--font-body)",
                     fontSize: "15px",
                     fontWeight: 600,
-                    color: "#404040",
+                    color: "#8a8a8a",
                     lineHeight: "1.8",
                     fontStyle: "italic",
                   }}
