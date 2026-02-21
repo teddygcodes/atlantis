@@ -144,7 +144,7 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
 
       <div className="relative z-10 flex flex-col items-center justify-between px-6" style={{ minHeight: "100vh" }}>
         {/* Top: Logo pushed toward upper portion */}
-        <div className="flex flex-1 items-end pb-4 pt-12 hero-fade-in">
+        <div className="flex flex-1 items-end pb-4 pt-12 hero-wave-logo">
           <Image
             src="/images/hero-emblem.png"
             alt="Atlantis logo"
@@ -160,32 +160,32 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
         {/* Middle: Wordmark + three lines */}
         <div className="flex flex-col items-center">
           <h1
-            className="hero-fade-in-delay-1 text-center tracking-[0.3em] text-foreground"
+            className="hero-wave-title text-center tracking-[0.3em] text-foreground"
             style={{ fontFamily: "var(--font-cinzel)", fontSize: "clamp(48px, 8vw, 72px)" }}
           >
             ATLANTIS
           </h1>
 
           <div
-            className="hero-fade-in-delay-2 mt-6 mb-6 h-px w-20"
+            className="hero-wave-divider mt-6 mb-6 h-px"
             style={{ backgroundColor: "rgba(220, 38, 38, 0.5)" }}
           />
 
-          <div className="hero-fade-in-delay-2 flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-2">
             <p
-              className="text-center"
+              className="hero-wave-line-1 text-center"
               style={{ fontFamily: "var(--font-cormorant)", fontSize: "22px", fontWeight: 600, color: "#d4d4d4" }}
             >
               Claims are made.
             </p>
             <p
-              className="text-center"
+              className="hero-wave-line-2 text-center"
               style={{ fontFamily: "var(--font-cormorant)", fontSize: "22px", fontWeight: 600, color: "#d4d4d4" }}
             >
               Challenges are issued.
             </p>
             <p
-              className="text-center"
+              className="hero-wave-line-3 text-center"
               style={{ fontFamily: "var(--font-cormorant)", fontSize: "22px", fontWeight: 600, color: "#d4d4d4" }}
             >
               Only validated knowledge survives.
@@ -197,7 +197,7 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
         <div className="flex flex-1 items-start pt-6 pb-16">
           <button
             onClick={onEnter}
-            className="hero-fade-in-delay-3 group flex flex-col items-center gap-2 transition-opacity hover:opacity-70"
+            className="hero-wave-scroll group flex flex-col items-center gap-2 transition-opacity hover:opacity-70"
             aria-label="Enter Atlantis"
           >
             <span

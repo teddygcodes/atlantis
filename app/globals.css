@@ -57,35 +57,143 @@ body {
   scrollbar-width: none;
 }
 
-/* Hero animations - staggered fade in */
-@keyframes hero-fade-in {
-  from {
+/* Wave rise animation - content surges up like a tide */
+@keyframes wave-rise {
+  0% {
     opacity: 0;
-    transform: translateY(30px);
+    transform: translateY(80px) scale(0.95);
+    filter: blur(6px);
   }
-  to {
+  40% {
+    opacity: 0.6;
+    filter: blur(2px);
+  }
+  70% {
+    transform: translateY(-8px) scale(1.01);
+    filter: blur(0px);
+  }
+  85% {
+    transform: translateY(3px) scale(1);
+  }
+  100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
   }
 }
 
+/* Wave crest - a subtler variant for text elements */
+@keyframes wave-crest {
+  0% {
+    opacity: 0;
+    transform: translateY(50px) rotateX(15deg);
+    filter: blur(4px);
+  }
+  50% {
+    opacity: 0.8;
+    filter: blur(0px);
+  }
+  75% {
+    transform: translateY(-4px) rotateX(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotateX(0deg);
+    filter: blur(0px);
+  }
+}
+
+/* Wave shimmer for the divider line */
+@keyframes wave-shimmer {
+  0% {
+    opacity: 0;
+    width: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    width: 80px;
+  }
+}
+
+/* Splash ripple for the scroll prompt */
+@keyframes wave-splash {
+  0% {
+    opacity: 0;
+    transform: translateY(30px) scale(0.8);
+  }
+  60% {
+    opacity: 0.7;
+    transform: translateY(-2px) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Hero wave classes with staggered delays */
+.hero-wave-logo {
+  animation: wave-rise 1.6s cubic-bezier(0.22, 1, 0.36, 1) 0.2s forwards;
+  opacity: 0;
+}
+
+.hero-wave-title {
+  animation: wave-rise 1.4s cubic-bezier(0.22, 1, 0.36, 1) 0.7s forwards;
+  opacity: 0;
+}
+
+.hero-wave-divider {
+  animation: wave-shimmer 1s cubic-bezier(0.22, 1, 0.36, 1) 1.1s forwards;
+  opacity: 0;
+}
+
+.hero-wave-lines {
+  animation: wave-crest 1.2s cubic-bezier(0.22, 1, 0.36, 1) 1.3s forwards;
+  opacity: 0;
+  perspective: 400px;
+}
+
+.hero-wave-line-1 {
+  animation: wave-crest 1s cubic-bezier(0.22, 1, 0.36, 1) 1.4s forwards;
+  opacity: 0;
+}
+
+.hero-wave-line-2 {
+  animation: wave-crest 1s cubic-bezier(0.22, 1, 0.36, 1) 1.6s forwards;
+  opacity: 0;
+}
+
+.hero-wave-line-3 {
+  animation: wave-crest 1s cubic-bezier(0.22, 1, 0.36, 1) 1.8s forwards;
+  opacity: 0;
+}
+
+.hero-wave-scroll {
+  animation: wave-splash 0.8s cubic-bezier(0.22, 1, 0.36, 1) 2.2s forwards;
+  opacity: 0;
+}
+
+/* Legacy hero classes - keep for backwards compat */
 .hero-fade-in {
-  animation: hero-fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: wave-rise 1.6s cubic-bezier(0.22, 1, 0.36, 1) 0.2s forwards;
   opacity: 0;
 }
 
 .hero-fade-in-delay-1 {
-  animation: hero-fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+  animation: wave-rise 1.4s cubic-bezier(0.22, 1, 0.36, 1) 0.7s forwards;
   opacity: 0;
 }
 
 .hero-fade-in-delay-2 {
-  animation: hero-fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
+  animation: wave-crest 1.2s cubic-bezier(0.22, 1, 0.36, 1) 1.1s forwards;
   opacity: 0;
 }
 
 .hero-fade-in-delay-3 {
-  animation: hero-fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) 0.9s forwards;
+  animation: wave-splash 0.8s cubic-bezier(0.22, 1, 0.36, 1) 2.2s forwards;
   opacity: 0;
 }
 
