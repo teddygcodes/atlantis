@@ -170,10 +170,10 @@ function MatchCard({ claim }: { claim: Claim }) {
           </div>
         </div>
 
-        {/* Step 1+: Challenge from left */}
+        {/* Step 1+: Challenge */}
         {step >= 1 && (
-          <div className="mt-6 flex justify-start debate-animate-in">
-            <div className="max-w-[80%] rounded-lg rounded-bl-none border border-border/40 bg-background px-5 py-4">
+          <div className="mt-6 flex justify-center debate-animate-in">
+            <div className="max-w-[80%] rounded-lg border border-border/40 bg-background px-5 py-4 text-center">
               <span
                 className="mb-2 block text-[9px] uppercase tracking-[0.2em] text-red-400"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
@@ -190,10 +190,10 @@ function MatchCard({ claim }: { claim: Claim }) {
           </div>
         )}
 
-        {/* Step 2+: Rebuttal from right */}
+        {/* Step 2+: Rebuttal */}
         {step >= 2 && (
-          <div className="mt-4 flex justify-end debate-animate-in">
-            <div className="max-w-[80%] rounded-lg rounded-br-none border border-border/40 bg-background px-5 py-4">
+          <div className="mt-4 flex justify-center debate-animate-in">
+            <div className="max-w-[80%] rounded-lg border border-border/40 bg-background px-5 py-4 text-center">
               <span
                 className="mb-2 block text-[9px] uppercase tracking-[0.2em] text-emerald-500"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
