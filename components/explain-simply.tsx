@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 
-const cache = new Map<string, string>();
+const explanationCache = new Map<string, string>();
 
 export function ExplainSimply({
   text,
@@ -16,8 +16,9 @@ export function ExplainSimply({
   const [open, setOpen] = useState(false);
 
   const handleClick = useCallback(
-    async (e: React.MouseEvent) => {
+    async (e: React.MouseEvent | React.KeyboardEvent) => {
       e.stopPropagation();
+      e.preventDefault();
 
       if (open) {
         setOpen(false);
@@ -26,10 +27,9 @@ export function ExplainSimply({
 
       setOpen(true);
 
-      // Use cache if available
       const cacheKey = `${type}::${text}`;
-      if (cache.has(cacheKey)) {
-        setExplanation(cache.get(cacheKey)!);
+      if (explanationCache.has(cacheKey)) {
+        setExplanation(explanationCache.get(cacheKey)!);
         return;
       }
 
@@ -40,17 +40,12 @@ export function ExplainSimply({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, type }),
         });
-        if (!res.ok) {
-          throw new Error(`API returned ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`${res.status}`);
         const data = await res.json();
-        if (!data.explanation) {
-          throw new Error("No explanation in response");
-        }
-        cache.set(cacheKey, data.explanation);
+        if (!data.explanation) throw new Error("empty");
+        explanationCache.set(cacheKey, data.explanation);
         setExplanation(data.explanation);
-      } catch (err) {
-        console.error("[v0] ExplainSimply error:", err);
+      } catch {
         setExplanation("Unable to generate explanation. Please try again.");
       } finally {
         setLoading(false);
@@ -64,12 +59,16 @@ export function ExplainSimply({
       style={{ textAlign: "left", width: "100%" }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Trigger - uses span instead of button to avoid nested <button> hydration errors */}
+      {/* Uses span to avoid nested button hydration errors */}
       <span
         role="button"
         tabIndex={0}
         onClick={handleClick}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(e as unknown as React.MouseEvent); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            handleClick(e);
+          }
+        }}
         style={{
           fontFamily: "var(--font-ibm-plex-mono)",
           fontSize: "10px",
@@ -81,7 +80,7 @@ export function ExplainSimply({
           padding: "4px 0",
           marginTop: "8px",
           display: "inline-block",
-          transition: "all 0.2s",
+          transition: "opacity 0.2s, text-decoration 0.2s",
           textDecoration: "none",
           opacity: 0.8,
         }}
@@ -97,7 +96,6 @@ export function ExplainSimply({
         {open ? "HIDE EXPLANATION" : "WHAT DOES THIS MEAN?"}
       </span>
 
-      {/* Explanation card */}
       {open && (
         <div
           style={{
@@ -107,7 +105,6 @@ export function ExplainSimply({
             border: "1px solid #1c1c1c",
             borderLeft: "4px solid #dc2626",
             borderRadius: "4px",
-            transition: "all 0.3s ease",
           }}
         >
           <span
