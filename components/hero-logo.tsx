@@ -142,8 +142,9 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
     >
       <ParticleField />
 
-      <div className="relative z-10 flex flex-col items-center px-6">
-        <div className="hero-fade-in">
+      <div className="relative z-10 flex flex-col items-center justify-between px-6" style={{ minHeight: "100vh" }}>
+        {/* Top: Logo pushed toward upper portion */}
+        <div className="flex flex-1 items-end pb-4 pt-12 hero-fade-in">
           <Image
             src="/images/hero-emblem.png"
             alt="Atlantis logo"
@@ -156,50 +157,63 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
           />
         </div>
 
-        <h1
-          className="hero-fade-in-delay-1 -mt-16 mb-2 text-center text-4xl tracking-[0.4em] text-foreground md:-mt-24 md:text-5xl"
-          style={{ fontFamily: "var(--font-cinzel)" }}
-        >
-          ATLANTIS
-        </h1>
-
-        <div
-          className="hero-fade-in-delay-2 mb-2 h-px w-20"
-          style={{ backgroundColor: "rgba(220, 38, 38, 0.5)" }}
-        />
-
-        <p
-          className="hero-fade-in-delay-2 mb-6 whitespace-nowrap text-center text-lg leading-relaxed text-muted sm:text-xl md:text-2xl"
-          style={{ fontFamily: "var(--font-cormorant)" }}
-        >
-          Only validated knowledge survives.
-        </p>
-
-        <button
-          onClick={onEnter}
-          className="hero-fade-in-delay-3 group flex flex-col items-center gap-2 transition-opacity hover:opacity-70"
-          aria-label="Enter Atlantis"
-        >
-          <span
-            className="text-[10px] uppercase tracking-[0.3em] text-muted/60"
-            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        {/* Middle: Wordmark + description */}
+        <div className="flex flex-col items-center py-2">
+          <h1
+            className="hero-fade-in-delay-1 mb-3 text-center text-4xl tracking-[0.4em] text-foreground md:text-5xl"
+            style={{ fontFamily: "var(--font-cinzel)" }}
           >
-            Scroll to enter
-          </span>
-          <svg
-            width="16"
-            height="24"
-            viewBox="0 0 16 24"
-            fill="none"
-            className="animate-gentle-bounce text-muted/40"
+            ATLANTIS
+          </h1>
+
+          <div
+            className="hero-fade-in-delay-2 mb-4 h-px w-20"
+            style={{ backgroundColor: "rgba(220, 38, 38, 0.5)" }}
+          />
+
+          <p
+            className="hero-fade-in-delay-2 max-w-lg text-center text-lg italic leading-[1.8]"
+            style={{
+              fontFamily: "var(--font-cormorant)",
+              color: "#a3a3a3",
+              fontSize: "18px",
+            }}
           >
-            <path
-              d="M8 0v20m0 0l-6-6m6 6l6-6"
-              stroke="currentColor"
-              strokeWidth="1"
-            />
-          </svg>
-        </button>
+            A living knowledge engine where ideas are tested through structured
+            adversarial debate. Claims are made. Challenges are issued. Only
+            validated knowledge survives.
+          </p>
+        </div>
+
+        {/* Bottom: Scroll prompt */}
+        <div className="flex flex-1 items-start pt-6 pb-16">
+          <button
+            onClick={onEnter}
+            className="hero-fade-in-delay-3 group flex flex-col items-center gap-2 transition-opacity hover:opacity-70"
+            aria-label="Enter Atlantis"
+          >
+            <span
+              className="text-[10px] uppercase tracking-[0.3em]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "rgba(163,163,163,0.5)" }}
+            >
+              Scroll to enter
+            </span>
+            <svg
+              width="16"
+              height="24"
+              viewBox="0 0 16 24"
+              fill="none"
+              className="animate-gentle-bounce"
+              style={{ color: "rgba(163,163,163,0.35)" }}
+            >
+              <path
+                d="M8 0v20m0 0l-6-6m6 6l6-6"
+                stroke="currentColor"
+                strokeWidth="1"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
     </section>
   );
