@@ -28,6 +28,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 4px;
