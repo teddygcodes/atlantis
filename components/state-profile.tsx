@@ -321,7 +321,7 @@ export function StateProfile({ slug }: { slug: string }) {
 
   return (
     <div style={{ textAlign: "center" }}>
-    <section ref={containerRef} className="state-profile-centered">
+    <section ref={containerRef} style={{ textAlign: "center" }}>
       {/* ── HERO ZONE ── */}
       <div className="scroll-reveal mb-6 text-center">
         <Link
@@ -339,14 +339,15 @@ export function StateProfile({ slug }: { slug: string }) {
       </div>
 
       {/* State identity */}
-      <div className="scroll-reveal mb-6 text-center">
+      <div className="scroll-reveal mb-6" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <div
-          className="mb-4"
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: "11px",
             color: "#dc2626",
             letterSpacing: "0.3em",
+            marginBottom: "16px",
+            textAlign: "center",
           }}
         >
           {state.domain.toUpperCase()}
@@ -359,6 +360,8 @@ export function StateProfile({ slug }: { slug: string }) {
             color: "#f5f5f5",
             letterSpacing: "0.12em",
             lineHeight: 1.1,
+            textAlign: "center",
+            width: "100%",
           }}
         >
           {state.name.replace("_", " ")}
@@ -366,9 +369,8 @@ export function StateProfile({ slug }: { slug: string }) {
       </div>
 
       {/* Approach quote */}
-      <div className="scroll-reveal mb-8 text-center">
+      <div className="scroll-reveal mb-8" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <p
-          className="mx-auto max-w-xl"
           style={{
             fontFamily: "var(--font-body)",
             fontSize: "20px",
@@ -377,6 +379,7 @@ export function StateProfile({ slug }: { slug: string }) {
             color: "#a3a3a3",
             lineHeight: "1.8",
             textAlign: "center",
+            maxWidth: "36rem",
           }}
         >
           &ldquo;{state.approach}&rdquo;
@@ -464,27 +467,32 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── CURRENT RESEARCH ── */}
-      <div className="scroll-reveal mb-0 text-center">
+      <div className="scroll-reveal mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <SectionLabel>CURRENT FOCUS</SectionLabel>
         <h2
-          className="mb-6"
           style={{
             fontFamily: "var(--font-serif)",
             fontSize: "24px",
             color: "#f5f5f5",
             letterSpacing: "0.15em",
+            marginBottom: "24px",
+            textAlign: "center",
           }}
         >
           Active Research
         </h2>
         <div
-          className="mx-auto max-w-2xl rounded-xl px-8 py-8 text-center md:px-12"
           style={{
             backgroundColor: "#0e0e0e",
             border: "1px solid #dc262625",
+            borderRadius: "12px",
+            padding: "32px",
+            maxWidth: "42rem",
+            width: "100%",
+            textAlign: "center",
           }}
         >
-          <div className="mb-3 flex items-center justify-center gap-3">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "12px", marginBottom: "12px" }}>
             <span
               style={{
                 fontFamily: "var(--font-mono)",
@@ -525,15 +533,16 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── KNOWLEDGE GRAPH ── */}
-      <div className="scroll-reveal mb-0 text-center">
+      <div className="scroll-reveal mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <SectionLabel>NETWORK</SectionLabel>
         <h2
-          className="mb-8"
           style={{
             fontFamily: "var(--font-serif)",
             fontSize: "24px",
             color: "#f5f5f5",
             letterSpacing: "0.15em",
+            marginBottom: "32px",
+            textAlign: "center",
           }}
         >
           Knowledge Graph
@@ -544,15 +553,16 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── LEARNING ARC ── */}
-      <div className="scroll-reveal mb-0 text-center">
+      <div className="scroll-reveal mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <SectionLabel>EVOLUTION</SectionLabel>
         <h2
-          className="mb-10"
           style={{
             fontFamily: "var(--font-serif)",
             fontSize: "24px",
             color: "#f5f5f5",
             letterSpacing: "0.15em",
+            marginBottom: "40px",
+            textAlign: "center",
           }}
         >
           Learning Arc
@@ -651,16 +661,17 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── DEBATES ── */}
-      <div className="mb-0 text-center">
-        <div className="scroll-reveal">
+      <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div className="scroll-reveal" style={{ textAlign: "center", width: "100%" }}>
           <SectionLabel>ADVERSARIAL RECORD</SectionLabel>
           <h2
-            className="mb-10"
             style={{
               fontFamily: "var(--font-serif)",
               fontSize: "24px",
               color: "#f5f5f5",
               letterSpacing: "0.15em",
+              marginBottom: "40px",
+              textAlign: "center",
             }}
           >
             Debates
@@ -677,16 +688,17 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── SURVIVING KNOWLEDGE ── */}
-      <div className="mb-0 text-center">
-        <div className="scroll-reveal">
+      <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div className="scroll-reveal" style={{ textAlign: "center", width: "100%" }}>
           <SectionLabel>VAULT</SectionLabel>
           <h2
-            className="mb-10"
             style={{
               fontFamily: "var(--font-serif)",
               fontSize: "24px",
               color: "#f5f5f5",
               letterSpacing: "0.15em",
+              marginBottom: "40px",
+              textAlign: "center",
             }}
           >
             Surviving Knowledge
@@ -753,13 +765,14 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── GRAVEYARD ── */}
-      <div className="mb-0 text-center">
-        <div className="scroll-reveal">
+      <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div className="scroll-reveal" style={{ textAlign: "center", width: "100%" }}>
           <SectionLabel>FALLEN</SectionLabel>
           <h2
-            className="mb-10"
             style={{
               fontFamily: "var(--font-serif)",
+              marginBottom: "40px",
+              textAlign: "center",
               fontSize: "24px",
               color: "#a3a3a3",
               letterSpacing: "0.15em",
