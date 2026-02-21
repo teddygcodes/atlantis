@@ -63,7 +63,7 @@ export function Debates() {
       <div style={{ height: "48px" }} />
 
       {/* Cycle selector */}
-      <div className="scroll-reveal mx-auto mb-16 flex max-w-[900px] items-center gap-1">
+      <div className="scroll-reveal mx-auto mb-16 flex max-w-[900px] items-center justify-center gap-1">
         {CYCLE_FILTERS.map((cycle) => (
           <button
             key={cycle}
