@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { CLAIMS, type Claim } from "@/lib/data";
 
 interface GraphNode {
@@ -8,176 +8,140 @@ interface GraphNode {
   claim: Claim;
   x: number;
   y: number;
-  vx: number;
-  vy: number;
   radius: number;
-  isLocal: boolean; // belongs to this state
+  isLocal: boolean;
 }
 
 interface GraphEdge {
   source: string;
   target: string;
+  isLocal: boolean;
 }
 
 /**
- * Build citation edges: claims in the same domain across different cycles
- * cite each other (evolving arguments). Claims from the same state in
- * sequential cycles have strong connections. Cross-state same-domain claims
- * have weaker connections (adversarial references).
+ * Build graph data from state claims and related domain claims.
+ * Run force layout synchronously to produce a stable, non-shaking result.
  */
-function buildGraph(
+function buildAndLayoutGraph(
   stateName: string,
-  stateClaims: Claim[]
+  stateClaims: Claim[],
+  width: number,
+  height: number
 ): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  if (stateClaims.length === 0) return { nodes: [], edges: [] };
+  if (stateClaims.length === 0 || width === 0 || height === 0)
+    return { nodes: [], edges: [] };
 
   const domain = stateClaims[0].domain;
-  // All claims in the same domain
-  const domainClaims = CLAIMS.filter((c) => c.domain === domain);
-  // Other-state claims in the same domain
-  const otherClaims = domainClaims.filter((c) => c.state !== stateName);
-
+  const otherClaims = CLAIMS.filter(
+    (c) => c.domain === domain && c.state !== stateName
+  );
   const allClaims = [...stateClaims, ...otherClaims];
-  const nodes: GraphNode[] = allClaims.map((claim, i) => ({
-    id: claim.id,
-    claim,
-    x: 0,
-    y: 0,
-    vx: 0,
-    vy: 0,
-    radius: claim.state === stateName ? 24 : 16,
-    isLocal: claim.state === stateName,
-  }));
 
+  // Build edges
   const edges: GraphEdge[] = [];
 
-  // Same-state sequential cycle connections (strong evolution links)
+  // Same-state sequential cycle connections
   for (let i = 0; i < stateClaims.length; i++) {
     for (let j = i + 1; j < stateClaims.length; j++) {
       if (Math.abs(stateClaims[i].cycle - stateClaims[j].cycle) === 1) {
-        edges.push({ source: stateClaims[i].id, target: stateClaims[j].id });
+        edges.push({
+          source: stateClaims[i].id,
+          target: stateClaims[j].id,
+          isLocal: true,
+        });
       }
     }
   }
 
-  // Cross-state same-cycle connections (adversarial references)
+  // Cross-state same-cycle connections
   for (const local of stateClaims) {
     for (const other of otherClaims) {
       if (local.cycle === other.cycle) {
-        edges.push({ source: local.id, target: other.id });
+        edges.push({ source: local.id, target: other.id, isLocal: false });
       }
     }
   }
 
-  // Cross-state adjacent-cycle references
-  for (const local of stateClaims) {
-    for (const other of otherClaims) {
-      if (Math.abs(local.cycle - other.cycle) === 1) {
-        edges.push({ source: local.id, target: other.id });
+  // Initialize positions in a circle
+  const cx = width / 2;
+  const cy = height / 2;
+  const r = Math.min(width, height) * 0.28;
+
+  const nodes: GraphNode[] = allClaims.map((claim, i) => ({
+    id: claim.id,
+    claim,
+    x:
+      cx +
+      r * Math.cos((2 * Math.PI * i) / allClaims.length) +
+      (Math.random() - 0.5) * 20,
+    y:
+      cy +
+      r * Math.sin((2 * Math.PI * i) / allClaims.length) +
+      (Math.random() - 0.5) * 20,
+    radius: claim.state === stateName ? 26 : 16,
+    isLocal: claim.state === stateName,
+  }));
+
+  // Run force simulation synchronously to completion
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const iterations = 300;
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const alpha = 1 - iter / iterations;
+    const decay = alpha * alpha; // quadratic decay for fast settling
+
+    // Repulsion
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[j].x - nodes[i].x;
+        const dy = nodes[j].y - nodes[i].y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const minDist = nodes[i].radius + nodes[j].radius + 40;
+        if (dist < minDist) {
+          const force = ((minDist - dist) / dist) * 0.5 * decay;
+          const fx = dx * force;
+          const fy = dy * force;
+          nodes[i].x -= fx;
+          nodes[i].y -= fy;
+          nodes[j].x += fx;
+          nodes[j].y += fy;
+        }
       }
     }
+
+    // Attraction along edges
+    for (const edge of edges) {
+      const s = nodeMap.get(edge.source);
+      const t = nodeMap.get(edge.target);
+      if (!s || !t) continue;
+      const dx = t.x - s.x;
+      const dy = t.y - s.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const idealDist = edge.isLocal ? 100 : 150;
+      const force = (dist - idealDist) * 0.02 * decay;
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+      s.x += fx;
+      s.y += fy;
+      t.x -= fx;
+      t.y -= fy;
+    }
+
+    // Center gravity
+    for (const node of nodes) {
+      node.x += (cx - node.x) * 0.02 * decay;
+      node.y += (cy - node.y) * 0.02 * decay;
+    }
+  }
+
+  // Clamp to bounds
+  const pad = 40;
+  for (const node of nodes) {
+    node.x = Math.max(pad + node.radius, Math.min(width - pad - node.radius, node.x));
+    node.y = Math.max(pad + node.radius, Math.min(height - pad - node.radius, node.y));
   }
 
   return { nodes, edges };
-}
-
-function useForceSimulation(
-  initialNodes: GraphNode[],
-  edges: GraphEdge[],
-  width: number,
-  height: number
-) {
-  const nodesRef = useRef<GraphNode[]>([]);
-  const [tick, setTick] = useState(0);
-  const animRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (width === 0 || height === 0) return;
-
-    // Initialize positions in a circle
-    const cx = width / 2;
-    const cy = height / 2;
-    const r = Math.min(width, height) * 0.3;
-    nodesRef.current = initialNodes.map((n, i) => ({
-      ...n,
-      x: cx + r * Math.cos((2 * Math.PI * i) / initialNodes.length + Math.random() * 0.3),
-      y: cy + r * Math.sin((2 * Math.PI * i) / initialNodes.length + Math.random() * 0.3),
-      vx: 0,
-      vy: 0,
-    }));
-
-    let iterations = 0;
-    const maxIterations = 200;
-
-    function simulate() {
-      const nodes = nodesRef.current;
-      const alpha = Math.max(0.001, 1 - iterations / maxIterations);
-
-      // Repulsion between all nodes
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dx = nodes[j].x - nodes[i].x;
-          const dy = nodes[j].y - nodes[i].y;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const force = (800 * alpha) / (dist * dist);
-          const fx = (dx / dist) * force;
-          const fy = (dy / dist) * force;
-          nodes[i].vx -= fx;
-          nodes[i].vy -= fy;
-          nodes[j].vx += fx;
-          nodes[j].vy += fy;
-        }
-      }
-
-      // Attraction along edges
-      const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-      for (const edge of edges) {
-        const s = nodeMap.get(edge.source);
-        const t = nodeMap.get(edge.target);
-        if (!s || !t) continue;
-        const dx = t.x - s.x;
-        const dy = t.y - s.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const idealDist = s.isLocal && t.isLocal ? 100 : 140;
-        const force = (dist - idealDist) * 0.03 * alpha;
-        const fx = (dx / dist) * force;
-        const fy = (dy / dist) * force;
-        s.vx += fx;
-        s.vy += fy;
-        t.vx -= fx;
-        t.vy -= fy;
-      }
-
-      // Center gravity
-      for (const node of nodes) {
-        node.vx += (cx - node.x) * 0.01 * alpha;
-        node.vy += (cy - node.y) * 0.01 * alpha;
-      }
-
-      // Apply velocities with damping
-      for (const node of nodes) {
-        node.vx *= 0.6;
-        node.vy *= 0.6;
-        node.x += node.vx;
-        node.y += node.vy;
-        // Clamp to bounds
-        node.x = Math.max(node.radius + 10, Math.min(width - node.radius - 10, node.x));
-        node.y = Math.max(node.radius + 10, Math.min(height - node.radius - 10, node.y));
-      }
-
-      iterations++;
-      setTick((t) => t + 1);
-
-      if (iterations < maxIterations) {
-        animRef.current = requestAnimationFrame(simulate);
-      }
-    }
-
-    animRef.current = requestAnimationFrame(simulate);
-    return () => cancelAnimationFrame(animRef.current);
-  }, [initialNodes, edges, width, height]);
-
-  return { nodes: nodesRef.current, tick };
 }
 
 export function KnowledgeGraph({
@@ -188,49 +152,29 @@ export function KnowledgeGraph({
   stateClaims: Claim[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [width, setWidth] = useState(0);
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
+  const graphHeight = 420;
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const obs = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setDimensions({
-          width: entry.contentRect.width,
-          height: 400,
-        });
+        setWidth(entry.contentRect.width);
       }
     });
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
 
-  const { nodes: graphNodes, edges: graphEdges } = buildGraph(
-    stateName,
-    stateClaims
+  const { nodes, edges } = useMemo(
+    () => buildAndLayoutGraph(stateName, stateClaims, width, graphHeight),
+    [stateName, stateClaims, width]
   );
 
-  const hasCitations = graphEdges.length > 0;
-
-  const { nodes } = useForceSimulation(
-    graphNodes,
-    graphEdges,
-    dimensions.width,
-    dimensions.height
-  );
-
+  const hasCitations = edges.length > 0;
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-
-  const nodeColor = useCallback((node: GraphNode) => {
-    if (!node.isLocal) return "#404040";
-    return node.claim.ruling === "DESTROYED" ? "#525252" : "#dc2626";
-  }, []);
-
-  const nodeStroke = useCallback((node: GraphNode) => {
-    if (!node.isLocal) return "#2a2a2a";
-    return node.claim.ruling === "DESTROYED" ? "#404040" : "#991b1b";
-  }, []);
 
   return (
     <div ref={containerRef} className="w-full">
@@ -241,7 +185,7 @@ export function KnowledgeGraph({
           borderRadius: "12px",
           overflow: "hidden",
           position: "relative",
-          height: "400px",
+          height: `${graphHeight}px`,
         }}
       >
         {!hasCitations ? (
@@ -250,9 +194,9 @@ export function KnowledgeGraph({
               className="max-w-md text-center"
               style={{
                 fontFamily: "var(--font-body)",
-                fontSize: "16px",
+                fontSize: "17px",
                 fontWeight: 600,
-                color: "#525252",
+                color: "#737373",
                 fontStyle: "italic",
                 lineHeight: "1.8",
               }}
@@ -261,18 +205,17 @@ export function KnowledgeGraph({
               referencing each other across cycles.
             </p>
           </div>
-        ) : (
+        ) : width > 0 ? (
           <svg
-            width={dimensions.width}
-            height={dimensions.height}
+            width={width}
+            height={graphHeight}
             style={{ display: "block" }}
           >
             {/* Edges */}
-            {graphEdges.map((edge, i) => {
+            {edges.map((edge, i) => {
               const s = nodeMap.get(edge.source);
               const t = nodeMap.get(edge.target);
               if (!s || !t) return null;
-              const isLocal = s.isLocal && t.isLocal;
               return (
                 <line
                   key={`edge-${i}`}
@@ -280,75 +223,89 @@ export function KnowledgeGraph({
                   y1={s.y}
                   x2={t.x}
                   y2={t.y}
-                  stroke={isLocal ? "#dc2626" : "#2a2a2a"}
-                  strokeWidth={isLocal ? 1.5 : 0.8}
-                  strokeOpacity={isLocal ? 0.5 : 0.3}
+                  stroke={edge.isLocal ? "#dc2626" : "#333"}
+                  strokeWidth={edge.isLocal ? 2 : 1}
+                  strokeOpacity={edge.isLocal ? 0.6 : 0.25}
                 />
               );
             })}
 
             {/* Nodes */}
-            {nodes.map((node) => (
-              <g
-                key={node.id}
-                onMouseEnter={() => setHoveredNode(node)}
-                onMouseLeave={() => setHoveredNode(null)}
-                style={{ cursor: "pointer" }}
-              >
-                {/* Glow for local nodes */}
-                {node.isLocal && node.claim.ruling !== "DESTROYED" && (
+            {nodes.map((node) => {
+              const color =
+                !node.isLocal
+                  ? "#404040"
+                  : node.claim.ruling === "DESTROYED"
+                    ? "#525252"
+                    : "#dc2626";
+              const strokeColor =
+                !node.isLocal
+                  ? "#2a2a2a"
+                  : node.claim.ruling === "DESTROYED"
+                    ? "#404040"
+                    : "#991b1b";
+              const isHovered = hoveredNode?.id === node.id;
+
+              return (
+                <g
+                  key={node.id}
+                  onMouseEnter={() => setHoveredNode(node)}
+                  onMouseLeave={() => setHoveredNode(null)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {/* Glow for local surviving nodes */}
+                  {node.isLocal && node.claim.ruling !== "DESTROYED" && (
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r={node.radius + 8}
+                      fill="none"
+                      stroke="#dc2626"
+                      strokeWidth={isHovered ? 2 : 1}
+                      strokeOpacity={isHovered ? 0.4 : 0.15}
+                    />
+                  )}
                   <circle
                     cx={node.x}
                     cy={node.y}
-                    r={node.radius + 6}
-                    fill="none"
-                    stroke="#dc2626"
-                    strokeWidth={1}
-                    strokeOpacity={0.15}
+                    r={isHovered ? node.radius + 3 : node.radius}
+                    fill={color}
+                    stroke={strokeColor}
+                    strokeWidth={2}
+                    opacity={node.isLocal ? 1 : 0.5}
+                    style={{ transition: "r 0.15s ease" }}
                   />
-                )}
-                <circle
-                  cx={node.x}
-                  cy={node.y}
-                  r={node.radius}
-                  fill={nodeColor(node)}
-                  stroke={nodeStroke(node)}
-                  strokeWidth={1.5}
-                  opacity={node.isLocal ? 1 : 0.5}
-                />
-                <text
-                  x={node.x}
-                  y={node.y}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill={node.isLocal ? "#f5f5f5" : "#737373"}
-                  fontSize={node.isLocal ? "10px" : "8px"}
-                  fontFamily="var(--font-mono)"
-                  fontWeight={600}
-                  letterSpacing="0.05em"
-                >
-                  {node.claim.id}
-                </text>
-              </g>
-            ))}
+                  <text
+                    x={node.x}
+                    y={node.y}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill={node.isLocal ? "#f5f5f5" : "#737373"}
+                    fontSize={node.isLocal ? "11px" : "9px"}
+                    fontFamily="var(--font-mono)"
+                    fontWeight={700}
+                    letterSpacing="0.05em"
+                  >
+                    {node.claim.id}
+                  </text>
+                </g>
+              );
+            })}
           </svg>
-        )}
+        ) : null}
 
         {/* Tooltip */}
         {hoveredNode && (
           <div
             style={{
               position: "absolute",
-              left: Math.min(
-                hoveredNode.x + 20,
-                dimensions.width - 280
-              ),
-              top: Math.min(hoveredNode.y - 10, dimensions.height - 120),
+              left: `${Math.min(hoveredNode.x + 20, (width || 400) - 290)}px`,
+              top: `${Math.min(hoveredNode.y - 10, graphHeight - 130)}px`,
               backgroundColor: "#171717",
               border: "1px solid #2a2a2a",
               borderRadius: "8px",
-              padding: "12px 16px",
-              maxWidth: "260px",
+              padding: "14px 18px",
+              maxWidth: "270px",
               pointerEvents: "none",
               zIndex: 10,
             }}
@@ -357,7 +314,7 @@ export function KnowledgeGraph({
               <span
                 style={{
                   fontFamily: "var(--font-mono)",
-                  fontSize: "10px",
+                  fontSize: "11px",
                   color: "#dc2626",
                   letterSpacing: "0.1em",
                   fontWeight: 700,
@@ -368,8 +325,11 @@ export function KnowledgeGraph({
               <span
                 style={{
                   fontFamily: "var(--font-mono)",
-                  fontSize: "9px",
-                  color: hoveredNode.claim.ruling === "DESTROYED" ? "#dc2626" : "#a3a3a3",
+                  fontSize: "10px",
+                  color:
+                    hoveredNode.claim.ruling === "DESTROYED"
+                      ? "#dc2626"
+                      : "#d4d4d4",
                   letterSpacing: "0.1em",
                 }}
               >
@@ -378,8 +338,8 @@ export function KnowledgeGraph({
               <span
                 style={{
                   fontFamily: "var(--font-mono)",
-                  fontSize: "9px",
-                  color: "#525252",
+                  fontSize: "10px",
+                  color: "#737373",
                   letterSpacing: "0.1em",
                 }}
               >
@@ -389,9 +349,9 @@ export function KnowledgeGraph({
             <p
               style={{
                 fontFamily: "var(--font-body)",
-                fontSize: "13px",
+                fontSize: "14px",
                 fontWeight: 600,
-                color: "#d4d4d4",
+                color: "#e5e5e5",
                 lineHeight: "1.6",
               }}
             >
@@ -403,8 +363,8 @@ export function KnowledgeGraph({
               <span
                 style={{
                   fontFamily: "var(--font-mono)",
-                  fontSize: "9px",
-                  color: "#525252",
+                  fontSize: "10px",
+                  color: "#737373",
                   marginTop: "6px",
                   display: "block",
                 }}
@@ -419,74 +379,40 @@ export function KnowledgeGraph({
         <div
           style={{
             position: "absolute",
-            bottom: "12px",
-            left: "16px",
+            bottom: "14px",
+            left: "18px",
             display: "flex",
-            gap: "16px",
+            gap: "18px",
             alignItems: "center",
           }}
         >
-          <div className="flex items-center gap-2">
-            <div
-              style={{
-                width: "10px",
-                height: "10px",
-                borderRadius: "50%",
-                backgroundColor: "#dc2626",
-              }}
-            />
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "9px",
-                color: "#525252",
-                letterSpacing: "0.1em",
-              }}
-            >
-              SURVIVING
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              style={{
-                width: "10px",
-                height: "10px",
-                borderRadius: "50%",
-                backgroundColor: "#525252",
-              }}
-            />
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "9px",
-                color: "#525252",
-                letterSpacing: "0.1em",
-              }}
-            >
-              DESTROYED
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              style={{
-                width: "8px",
-                height: "8px",
-                borderRadius: "50%",
-                backgroundColor: "#404040",
-                opacity: 0.5,
-              }}
-            />
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "9px",
-                color: "#525252",
-                letterSpacing: "0.1em",
-              }}
-            >
-              OTHER STATE
-            </span>
-          </div>
+          {[
+            { color: "#dc2626", label: "SURVIVING" },
+            { color: "#525252", label: "DESTROYED" },
+            { color: "#404040", label: "OTHER STATE", size: 8, opacity: 0.5 },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-2">
+              <div
+                style={{
+                  width: `${item.size || 10}px`,
+                  height: `${item.size || 10}px`,
+                  borderRadius: "50%",
+                  backgroundColor: item.color,
+                  opacity: item.opacity || 1,
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                  color: "#737373",
+                  letterSpacing: "0.1em",
+                }}
+              >
+                {item.label}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </div>

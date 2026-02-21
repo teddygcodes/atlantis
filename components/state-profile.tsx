@@ -27,12 +27,12 @@ function useScrollReveal() {
 }
 
 function rulingColor(ruling: string): string {
-  return ruling === "DESTROYED" ? "#dc2626" : "#a3a3a3";
+  return ruling === "DESTROYED" ? "#dc2626" : "#d4d4d4";
 }
 
 function SectionHeading({ title }: { title: string }) {
   return (
-    <div className="scroll-reveal mb-8">
+    <div className="scroll-reveal mb-8 text-center">
       <h3
         className="mb-3"
         style={{
@@ -44,12 +44,11 @@ function SectionHeading({ title }: { title: string }) {
       >
         {title}
       </h3>
-      <div className="h-px w-12" style={{ backgroundColor: "#dc2626", opacity: 0.5 }} />
+      <div className="mx-auto h-px w-12" style={{ backgroundColor: "#dc2626", opacity: 0.5 }} />
     </div>
   );
 }
 
-/* Dark card wrapper used everywhere */
 function DarkCard({
   children,
   className = "",
@@ -66,8 +65,8 @@ function DarkCard({
         backgroundColor: dimmed ? "#0a0a0a" : "#0e0e0e",
         border: "1px solid #1c1c1c",
         borderRadius: "12px",
-        padding: "24px",
-        opacity: dimmed ? 0.7 : 1,
+        padding: "28px",
+        opacity: dimmed ? 0.8 : 1,
       }}
     >
       {children}
@@ -79,40 +78,37 @@ function DebateCard({ claim }: { claim: Claim }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <DarkCard
-      className="scroll-reveal"
-      dimmed={claim.ruling === "DESTROYED"}
-    >
-      {/* Top row: claim id + cycle + ruling */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              color: "#525252",
-              letterSpacing: "0.1em",
-            }}
-          >
-            {claim.id}
-          </span>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              color: "#525252",
-              letterSpacing: "0.1em",
-            }}
-          >
-            CYCLE {claim.cycle}
-          </span>
-        </div>
+    <DarkCard className="scroll-reveal" dimmed={claim.ruling === "DESTROYED"}>
+      {/* Top row */}
+      <div className="mb-4 flex flex-wrap items-center justify-center gap-4">
         <span
           style={{
             fontFamily: "var(--font-mono)",
-            fontSize: "10px",
+            fontSize: "12px",
+            color: "#d4d4d4",
+            letterSpacing: "0.1em",
+            fontWeight: 600,
+          }}
+        >
+          {claim.id}
+        </span>
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "12px",
+            color: "#a3a3a3",
+            letterSpacing: "0.1em",
+          }}
+        >
+          CYCLE {claim.cycle}
+        </span>
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "12px",
             letterSpacing: "0.1em",
             color: rulingColor(claim.ruling),
+            fontWeight: 600,
           }}
         >
           {claim.ruling}
@@ -121,12 +117,13 @@ function DebateCard({ claim }: { claim: Claim }) {
 
       {/* Position text */}
       <p
-        className="mb-4"
+        className="mb-5 text-center"
         style={{
           fontFamily: "var(--font-body)",
-          fontSize: "16px",
-          color: claim.ruling === "DESTROYED" ? "#737373" : "#a3a3a3",
-          lineHeight: "1.7",
+          fontSize: "17px",
+          fontWeight: 600,
+          color: claim.ruling === "DESTROYED" ? "#a3a3a3" : "#e5e5e5",
+          lineHeight: "1.8",
           fontStyle: claim.ruling === "DESTROYED" ? "italic" : "normal",
         }}
       >
@@ -134,35 +131,37 @@ function DebateCard({ claim }: { claim: Claim }) {
       </p>
 
       {/* Expand toggle */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2"
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: "10px",
-          color: expanded ? "#dc2626" : "#525252",
-          textTransform: "uppercase" as const,
-          letterSpacing: "0.2em",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          transition: "color 0.2s",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.color = "#dc2626";
-        }}
-        onMouseLeave={(e) => {
-          if (!expanded) e.currentTarget.style.color = "#525252";
-        }}
-      >
-        {expanded ? "COLLAPSE" : "VIEW DEBATE"}
-        <span
-          className="inline-block transition-transform duration-300"
-          style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
+      <div className="text-center">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="inline-flex items-center gap-2"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            color: expanded ? "#dc2626" : "#a3a3a3",
+            textTransform: "uppercase" as const,
+            letterSpacing: "0.2em",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            transition: "color 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "#dc2626";
+          }}
+          onMouseLeave={(e) => {
+            if (!expanded) e.currentTarget.style.color = "#a3a3a3";
+          }}
         >
-          &#8595;
-        </span>
-      </button>
+          {expanded ? "COLLAPSE" : "VIEW DEBATE"}
+          <span
+            className="inline-block transition-transform duration-300"
+            style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
+          >
+            &#8595;
+          </span>
+        </button>
+      </div>
 
       {/* Expanded debate */}
       <div
@@ -177,13 +176,13 @@ function DebateCard({ claim }: { claim: Claim }) {
             <div className="mb-5 h-px" style={{ backgroundColor: "#1c1c1c" }} />
 
             {/* Challenge */}
-            <div className="mb-5">
+            <div className="mb-5 text-center">
               <span
                 className="mb-2 block"
                 style={{
                   fontFamily: "var(--font-mono)",
-                  fontSize: "9px",
-                  color: "#a3a3a3",
+                  fontSize: "11px",
+                  color: "#d4d4d4",
                   letterSpacing: "0.25em",
                   textTransform: "uppercase" as const,
                 }}
@@ -193,10 +192,10 @@ function DebateCard({ claim }: { claim: Claim }) {
               <p
                 style={{
                   fontFamily: "var(--font-body)",
-          fontSize: "16px",
-          fontWeight: 600,
-          color: "#d4d4d4",
-          lineHeight: "1.8",
+                  fontSize: "16px",
+                  fontWeight: 600,
+                  color: "#e5e5e5",
+                  lineHeight: "1.8",
                 }}
               >
                 {claim.challenge}
@@ -204,13 +203,13 @@ function DebateCard({ claim }: { claim: Claim }) {
             </div>
 
             {/* Rebuttal */}
-            <div className="mb-5">
+            <div className="mb-5 text-center">
               <span
                 className="mb-2 block"
                 style={{
                   fontFamily: "var(--font-mono)",
-                  fontSize: "9px",
-                  color: "#a3a3a3",
+                  fontSize: "11px",
+                  color: "#d4d4d4",
                   letterSpacing: "0.25em",
                   textTransform: "uppercase" as const,
                 }}
@@ -220,10 +219,10 @@ function DebateCard({ claim }: { claim: Claim }) {
               <p
                 style={{
                   fontFamily: "var(--font-body)",
-          fontSize: "16px",
-          fontWeight: 600,
-          color: "#d4d4d4",
-          lineHeight: "1.8",
+                  fontSize: "16px",
+                  fontWeight: 600,
+                  color: "#e5e5e5",
+                  lineHeight: "1.8",
                 }}
               >
                 {claim.rebuttal}
@@ -231,13 +230,13 @@ function DebateCard({ claim }: { claim: Claim }) {
             </div>
 
             {/* Verdict */}
-            <div>
+            <div className="text-center">
               <span
                 className="mb-2 block"
                 style={{
                   fontFamily: "var(--font-mono)",
-                  fontSize: "9px",
-                  color: "#a3a3a3",
+                  fontSize: "11px",
+                  color: "#d4d4d4",
                   letterSpacing: "0.25em",
                   textTransform: "uppercase" as const,
                 }}
@@ -250,7 +249,8 @@ function DebateCard({ claim }: { claim: Claim }) {
               <p
                 style={{
                   fontFamily: "var(--font-body)",
-                  fontSize: "15px",
+                  fontSize: "16px",
+                  fontWeight: 600,
                   color: "#f5f5f5",
                   lineHeight: "1.8",
                 }}
@@ -275,7 +275,7 @@ export function StateProfile({ slug }: { slug: string }) {
   if (!state) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p style={{ fontFamily: "var(--font-body)", fontSize: "20px", color: "#737373" }}>
+        <p style={{ fontFamily: "var(--font-body)", fontSize: "20px", color: "#a3a3a3" }}>
           State not found.
         </p>
       </div>
@@ -308,13 +308,13 @@ export function StateProfile({ slug }: { slug: string }) {
   return (
     <section ref={containerRef}>
       {/* Back breadcrumb */}
-      <div className="scroll-reveal mb-10">
+      <div className="scroll-reveal mb-10 text-center">
         <Link
           href="/states"
           className="inline-flex items-center gap-2 transition-colors duration-200 hover:opacity-70"
           style={{
             fontFamily: "var(--font-mono)",
-            fontSize: "11px",
+            fontSize: "12px",
             color: "#dc2626",
             letterSpacing: "0.15em",
           }}
@@ -323,8 +323,8 @@ export function StateProfile({ slug }: { slug: string }) {
         </Link>
       </div>
 
-      {/* Header */}
-      <div className="scroll-reveal mb-16">
+      {/* Header - centered */}
+      <div className="scroll-reveal mb-16 text-center">
         <h1
           className="mb-3"
           style={{
@@ -341,7 +341,7 @@ export function StateProfile({ slug }: { slug: string }) {
           className="mb-5 inline-block"
           style={{
             fontFamily: "var(--font-mono)",
-            fontSize: "10px",
+            fontSize: "12px",
             color: "#dc2626",
             letterSpacing: "0.2em",
             textTransform: "uppercase" as const,
@@ -351,39 +351,40 @@ export function StateProfile({ slug }: { slug: string }) {
         </span>
 
         <p
-          className="mb-6 max-w-2xl"
+          className="mx-auto mb-6 max-w-2xl"
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "18px",
+            fontSize: "19px",
+            fontWeight: 600,
             fontStyle: "italic",
-            color: "#a3a3a3",
+            color: "#d4d4d4",
             lineHeight: "1.8",
           }}
         >
           &ldquo;{state.approach}&rdquo;
         </p>
 
-        {/* Stats row */}
-        <div className="flex flex-wrap items-center gap-8">
+        {/* Stats row - centered */}
+        <div className="flex flex-wrap items-center justify-center gap-8">
           <div
             className="flex items-center gap-1.5"
-            style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}
+            style={{ fontFamily: "var(--font-mono)", fontSize: "14px" }}
           >
-            <span style={{ color: "#a3a3a3" }}>W</span>
-            <span style={{ color: "#f5f5f5" }}>{state.wins}</span>
+            <span style={{ color: "#d4d4d4" }}>W</span>
+            <span style={{ color: "#f5f5f5", fontWeight: 700 }}>{state.wins}</span>
             <span style={{ color: "#2a2a2a" }}>/</span>
-            <span style={{ color: "#a3a3a3" }}>P</span>
-            <span style={{ color: "#f5f5f5" }}>{state.partials}</span>
+            <span style={{ color: "#d4d4d4" }}>P</span>
+            <span style={{ color: "#f5f5f5", fontWeight: 700 }}>{state.partials}</span>
             <span style={{ color: "#2a2a2a" }}>/</span>
-            <span style={{ color: "#a3a3a3" }}>L</span>
-            <span style={{ color: "#f5f5f5" }}>{state.losses}</span>
+            <span style={{ color: "#d4d4d4" }}>L</span>
+            <span style={{ color: "#f5f5f5", fontWeight: 700 }}>{state.losses}</span>
           </div>
           <span
             style={{
               fontFamily: "var(--font-mono)",
-              fontSize: "13px",
+              fontSize: "14px",
               color: "#dc2626",
-              fontWeight: 500,
+              fontWeight: 700,
             }}
           >
             {survivalPct}% survival
@@ -391,11 +392,11 @@ export function StateProfile({ slug }: { slug: string }) {
           <span
             style={{
               fontFamily: "var(--font-mono)",
-              fontSize: "10px",
+              fontSize: "11px",
               letterSpacing: "0.15em",
-              color: "#a3a3a3",
-              border: "1px solid #1c1c1c",
-              padding: "3px 10px",
+              color: "#d4d4d4",
+              border: "1px solid #333",
+              padding: "4px 12px",
               borderRadius: "4px",
             }}
           >
@@ -405,7 +406,7 @@ export function StateProfile({ slug }: { slug: string }) {
       </div>
 
       {/* Divider */}
-      <div className="mb-16 h-px" style={{ backgroundColor: "#1c1c1c" }} />
+      <div className="mx-auto mb-16 h-px max-w-xs" style={{ backgroundColor: "#1c1c1c" }} />
 
       {/* 1. LEARNING ARC */}
       <div className="mb-20">
@@ -416,13 +417,13 @@ export function StateProfile({ slug }: { slug: string }) {
               if (cycleClaims.length === 0) return null;
               const claim = cycleClaims[0];
               return (
-                <div key={idx}>
-                  <div className="mb-2 flex items-center gap-4">
+                <div key={idx} className="text-center">
+                  <div className="mb-2 flex items-center justify-center gap-4">
                     <span
                       style={{
                         fontFamily: "var(--font-mono)",
-                        fontSize: "10px",
-                        color: "#a3a3a3",
+                        fontSize: "12px",
+                        color: "#d4d4d4",
                         letterSpacing: "0.2em",
                       }}
                     >
@@ -431,9 +432,10 @@ export function StateProfile({ slug }: { slug: string }) {
                     <span
                       style={{
                         fontFamily: "var(--font-mono)",
-                        fontSize: "10px",
+                        fontSize: "12px",
                         letterSpacing: "0.1em",
                         color: rulingColor(claim.ruling),
+                        fontWeight: 600,
                       }}
                     >
                       {claim.ruling}
@@ -442,8 +444,9 @@ export function StateProfile({ slug }: { slug: string }) {
                   <p
                     style={{
                       fontFamily: "var(--font-body)",
-                      fontSize: "16px",
-                      color: "#a3a3a3",
+                      fontSize: "17px",
+                      fontWeight: 600,
+                      color: "#e5e5e5",
                       lineHeight: "1.8",
                     }}
                   >
@@ -451,8 +454,8 @@ export function StateProfile({ slug }: { slug: string }) {
                   </p>
                   {idx < claimsByCycle.filter((c) => c.length > 0).length - 1 && (
                     <div
-                      className="mt-6"
-                      style={{ height: "1px", backgroundColor: "#1c1c1c" }}
+                      className="mx-auto mt-6"
+                      style={{ height: "1px", maxWidth: "120px", backgroundColor: "#1c1c1c" }}
                     />
                   )}
                 </div>
@@ -461,13 +464,13 @@ export function StateProfile({ slug }: { slug: string }) {
           </div>
 
           {/* Narrative */}
-          <div className="mt-8 pt-6" style={{ borderTop: "1px solid #1c1c1c" }}>
+          <div className="mt-8 pt-6 text-center" style={{ borderTop: "1px solid #1c1c1c" }}>
             <span
               className="mb-3 block"
               style={{
                 fontFamily: "var(--font-mono)",
-                fontSize: "9px",
-                color: "#a3a3a3",
+                fontSize: "11px",
+                color: "#d4d4d4",
                 letterSpacing: "0.25em",
                 textTransform: "uppercase" as const,
               }}
@@ -477,8 +480,9 @@ export function StateProfile({ slug }: { slug: string }) {
             <p
               style={{
                 fontFamily: "var(--font-body)",
-                fontSize: "16px",
-                color: "#a3a3a3",
+                fontSize: "17px",
+                fontWeight: 600,
+                color: "#e5e5e5",
                 lineHeight: "1.9",
               }}
             >
@@ -491,12 +495,12 @@ export function StateProfile({ slug }: { slug: string }) {
       {/* 2. ACTIVE RESEARCH */}
       <div className="mb-20">
         <SectionHeading title="ACTIVE RESEARCH" />
-        <DarkCard className="scroll-reveal">
-          <div className="mb-3 flex items-center gap-3">
+        <DarkCard className="scroll-reveal text-center">
+          <div className="mb-3 flex items-center justify-center gap-3">
             <span
               style={{
                 fontFamily: "var(--font-mono)",
-                fontSize: "10px",
+                fontSize: "12px",
                 color: "#dc2626",
                 letterSpacing: "0.15em",
                 textTransform: "uppercase" as const,
@@ -507,8 +511,8 @@ export function StateProfile({ slug }: { slug: string }) {
             <span
               style={{
                 fontFamily: "var(--font-mono)",
-                fontSize: "10px",
-                color: "#525252",
+                fontSize: "12px",
+                color: "#a3a3a3",
               }}
             >
               {latestClaim.id} &middot; Cycle {latestClaim.cycle}
@@ -517,7 +521,8 @@ export function StateProfile({ slug }: { slug: string }) {
           <p
             style={{
               fontFamily: "var(--font-body)",
-              fontSize: "17px",
+              fontSize: "18px",
+              fontWeight: 600,
               color: "#f5f5f5",
               lineHeight: "1.8",
             }}
@@ -544,11 +549,11 @@ export function StateProfile({ slug }: { slug: string }) {
             return (
               <div key={cycleIdx}>
                 <span
-                  className="scroll-reveal mb-4 block"
+                  className="scroll-reveal mb-4 block text-center"
                   style={{
                     fontFamily: "var(--font-mono)",
-                    fontSize: "10px",
-                    color: "#a3a3a3",
+                    fontSize: "12px",
+                    color: "#d4d4d4",
                     letterSpacing: "0.2em",
                   }}
                 >
@@ -565,16 +570,17 @@ export function StateProfile({ slug }: { slug: string }) {
         </div>
       </div>
 
-      {/* 4. KNOWLEDGE (surviving claims) */}
+      {/* 5. KNOWLEDGE (surviving claims) */}
       <div className="mb-20">
         <SectionHeading title="KNOWLEDGE" />
         {survivingClaims.length === 0 ? (
           <p
-            className="scroll-reveal"
+            className="scroll-reveal text-center"
             style={{
               fontFamily: "var(--font-body)",
-              fontSize: "16px",
-              color: "#525252",
+              fontSize: "17px",
+              fontWeight: 600,
+              color: "#737373",
               fontStyle: "italic",
             }}
           >
@@ -583,14 +589,15 @@ export function StateProfile({ slug }: { slug: string }) {
         ) : (
           <div className="flex flex-col gap-4">
             {survivingClaims.map((claim) => (
-              <DarkCard key={claim.id} className="scroll-reveal">
-                <div className="mb-3 flex items-center gap-3">
+              <DarkCard key={claim.id} className="scroll-reveal text-center">
+                <div className="mb-3 flex items-center justify-center gap-3">
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
-                      fontSize: "10px",
-                      color: "#525252",
+                      fontSize: "12px",
+                      color: "#d4d4d4",
                       letterSpacing: "0.1em",
+                      fontWeight: 600,
                     }}
                   >
                     {claim.id}
@@ -598,8 +605,8 @@ export function StateProfile({ slug }: { slug: string }) {
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
-                      fontSize: "10px",
-                      color: "#525252",
+                      fontSize: "12px",
+                      color: "#a3a3a3",
                       letterSpacing: "0.1em",
                     }}
                   >
@@ -608,9 +615,9 @@ export function StateProfile({ slug }: { slug: string }) {
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
-                      fontSize: "10px",
+                      fontSize: "12px",
                       letterSpacing: "0.1em",
-                      color: "#a3a3a3",
+                      color: "#d4d4d4",
                     }}
                   >
                     {claim.ruling}
@@ -619,8 +626,9 @@ export function StateProfile({ slug }: { slug: string }) {
                 <p
                   style={{
                     fontFamily: "var(--font-body)",
-                    fontSize: "16px",
-                    color: "#a3a3a3",
+                    fontSize: "17px",
+                    fontWeight: 600,
+                    color: "#e5e5e5",
                     lineHeight: "1.8",
                   }}
                 >
@@ -632,16 +640,17 @@ export function StateProfile({ slug }: { slug: string }) {
         )}
       </div>
 
-      {/* 5. GRAVEYARD (destroyed claims) */}
+      {/* 6. GRAVEYARD (destroyed claims) */}
       <div className="mb-20">
         <SectionHeading title="GRAVEYARD" />
         {destroyedClaims.length === 0 ? (
           <p
-            className="scroll-reveal"
+            className="scroll-reveal text-center"
             style={{
               fontFamily: "var(--font-body)",
-              fontSize: "16px",
-              color: "#525252",
+              fontSize: "17px",
+              fontWeight: 600,
+              color: "#737373",
               fontStyle: "italic",
             }}
           >
@@ -650,14 +659,15 @@ export function StateProfile({ slug }: { slug: string }) {
         ) : (
           <div className="flex flex-col gap-4">
             {destroyedClaims.map((claim) => (
-              <DarkCard key={claim.id} className="scroll-reveal" dimmed>
-                <div className="mb-3 flex items-center gap-3">
+              <DarkCard key={claim.id} className="scroll-reveal text-center" dimmed>
+                <div className="mb-3 flex items-center justify-center gap-3">
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
-                      fontSize: "10px",
-                      color: "#525252",
+                      fontSize: "12px",
+                      color: "#a3a3a3",
                       letterSpacing: "0.1em",
+                      fontWeight: 600,
                     }}
                   >
                     {claim.id}
@@ -665,8 +675,8 @@ export function StateProfile({ slug }: { slug: string }) {
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
-                      fontSize: "10px",
-                      color: "#525252",
+                      fontSize: "12px",
+                      color: "#a3a3a3",
                       letterSpacing: "0.1em",
                     }}
                   >
@@ -675,9 +685,10 @@ export function StateProfile({ slug }: { slug: string }) {
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
-                      fontSize: "10px",
+                      fontSize: "12px",
                       letterSpacing: "0.1em",
                       color: "#dc2626",
+                      fontWeight: 600,
                     }}
                   >
                     DESTROYED
@@ -687,9 +698,10 @@ export function StateProfile({ slug }: { slug: string }) {
                   className="mb-4"
                   style={{
                     fontFamily: "var(--font-body)",
-                    fontSize: "16px",
-                    color: "#737373",
-                    lineHeight: "1.7",
+                    fontSize: "17px",
+                    fontWeight: 600,
+                    color: "#a3a3a3",
+                    lineHeight: "1.8",
                   }}
                 >
                   {claim.position}
@@ -697,9 +709,10 @@ export function StateProfile({ slug }: { slug: string }) {
                 <p
                   style={{
                     fontFamily: "var(--font-body)",
-                    fontSize: "15px",
-                    color: "#525252",
-                    lineHeight: "1.7",
+                    fontSize: "16px",
+                    fontWeight: 600,
+                    color: "#737373",
+                    lineHeight: "1.8",
                     fontStyle: "italic",
                   }}
                 >
@@ -711,17 +724,17 @@ export function StateProfile({ slug }: { slug: string }) {
         )}
       </div>
 
-      {/* 6. CITIES & TOWNS */}
+      {/* 7. CITIES & TOWNS */}
       <div className="mb-20">
         <SectionHeading title="CITIES & TOWNS" />
         <div className="scroll-reveal flex flex-col gap-6 md:flex-row">
-          <DarkCard className="flex-1">
+          <DarkCard className="flex-1 text-center">
             <span
               className="mb-3 block"
               style={{
                 fontFamily: "var(--font-mono)",
-                fontSize: "10px",
-                color: "#525252",
+                fontSize: "11px",
+                color: "#a3a3a3",
                 letterSpacing: "0.2em",
                 textTransform: "uppercase" as const,
               }}
@@ -731,21 +744,22 @@ export function StateProfile({ slug }: { slug: string }) {
             <p
               style={{
                 fontFamily: "var(--font-body)",
-                fontSize: "16px",
-                color: "#525252",
+                fontSize: "17px",
+                fontWeight: 600,
+                color: "#737373",
                 fontStyle: "italic",
               }}
             >
               No cities formed yet.
             </p>
           </DarkCard>
-          <DarkCard className="flex-1">
+          <DarkCard className="flex-1 text-center">
             <span
               className="mb-3 block"
               style={{
                 fontFamily: "var(--font-mono)",
-                fontSize: "10px",
-                color: "#525252",
+                fontSize: "11px",
+                color: "#a3a3a3",
                 letterSpacing: "0.2em",
                 textTransform: "uppercase" as const,
               }}
@@ -755,8 +769,9 @@ export function StateProfile({ slug }: { slug: string }) {
             <p
               style={{
                 fontFamily: "var(--font-body)",
-                fontSize: "16px",
-                color: "#525252",
+                fontSize: "17px",
+                fontWeight: 600,
+                color: "#737373",
                 fontStyle: "italic",
               }}
             >
