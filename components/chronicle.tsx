@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { CHRONICLE_ENTRIES, CLAIMS } from "@/lib/data";
+import { CHRONICLE_ENTRIES, HYPOTHESES } from "@/lib/data";
 
 function useScrollReveal() {
   const ref = useRef<HTMLDivElement>(null);
@@ -25,10 +25,10 @@ function useScrollReveal() {
 }
 
 function getCycleStats(cycle: number) {
-  const cycleClaims = CLAIMS.filter((c) => c.cycle === cycle);
-  const destroyed = cycleClaims.filter((c) => c.ruling === "DESTROYED").length;
-  const survived = cycleClaims.length - destroyed;
-  return { total: cycleClaims.length, destroyed, survived };
+  const cycleHypotheses = HYPOTHESES.filter((c) => c.cycle === cycle);
+  const refuted = cycleHypotheses.filter((c) => c.ruling === "DESTROYED").length;
+  const validated = cycleHypotheses.length - refuted;
+  return { total: cycleHypotheses.length, refuted, validated };
 }
 
 export function Chronicle() {
@@ -64,7 +64,7 @@ export function Chronicle() {
   };
 
   return (
-    <section ref={containerRef} className="scroll-reveal">
+    <section ref={containerRef}>
       {/* Page header - centered */}
       <div className="mx-auto mb-12 text-center" style={{ paddingTop: "64px" }}>
         <h2
@@ -76,16 +76,17 @@ export function Chronicle() {
             letterSpacing: "0.25em",
           }}
         >
-          THE CHRONICLE
+          RESEARCH TIMELINE
         </h2>
         <p
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "16px",
-            color: "#a3a3a3",
+            fontSize: "18px",
+            fontWeight: 600,
+            color: "#d4d4d4",
           }}
         >
-          Three cycles. Eighteen claims. A civilization learning what holds up
+          Three cycles. Eighteen hypotheses. A civilization learning what holds up
           under pressure.
         </p>
       </div>
@@ -112,7 +113,7 @@ export function Chronicle() {
         />
 
         {/* Scroll controls */}
-        <div           className="mx-auto mb-6 flex max-w-[900px] items-center justify-end gap-2 px-6">
+        <div className="mx-auto mb-6 flex max-w-[900px] items-center justify-center gap-2 px-6">
           <button
             onClick={() => scroll("left")}
             disabled={!canScrollLeft}
@@ -168,7 +169,7 @@ export function Chronicle() {
 
                 {/* Narrative */}
                 <p
-                  className="mb-8 flex-1 text-lg leading-[1.9] text-muted"
+                  className="mb-8 flex-1 text-lg font-semibold leading-[1.9] text-foreground/90"
                   style={{ fontFamily: "var(--font-cormorant)" }}
                 >
                   {entry.narrative}
@@ -184,10 +185,10 @@ export function Chronicle() {
                       {stats.total}
                     </span>
                     <span
-                      className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
+                      className="text-[9px] uppercase tracking-[0.2em] text-foreground/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
-                      Claims
+                      Hypotheses
                     </span>
                   </div>
                   <div className="flex flex-col">
@@ -195,13 +196,13 @@ export function Chronicle() {
                       className="text-2xl text-accent"
                       style={{ fontFamily: "var(--font-cinzel)" }}
                     >
-                      {stats.destroyed}
+                      {stats.refuted}
                     </span>
                     <span
-                      className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
+                      className="text-[9px] uppercase tracking-[0.2em] text-foreground/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
-                      Destroyed
+                      Refuted
                     </span>
                   </div>
                   <div className="flex flex-col">
@@ -209,13 +210,13 @@ export function Chronicle() {
                       className="text-2xl text-emerald-500"
                       style={{ fontFamily: "var(--font-cinzel)" }}
                     >
-                      {stats.survived}
+                      {stats.validated}
                     </span>
                     <span
-                      className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
+                      className="text-[9px] uppercase tracking-[0.2em] text-foreground/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
-                      Survived
+                      Validated
                     </span>
                   </div>
                   <div className="ml-auto flex flex-col items-end">
@@ -225,13 +226,13 @@ export function Chronicle() {
                     >
                       {stats.total > 0
                         ? Math.round(
-                            (stats.destroyed / stats.total) * 100
+                            (stats.refuted / stats.total) * 100
                           )
                         : 0}
                       %
                     </span>
                     <span
-                      className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
+                      className="text-[9px] uppercase tracking-[0.2em] text-foreground/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
                       Kill Rate

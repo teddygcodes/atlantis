@@ -25,7 +25,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "ATLANTIS \u2014 Where Ideas Are Tested",
   description:
-    "A living intellectual publication where claims are challenged through structured debate. Only validated knowledge survives.",
+    "A living research platform where hypotheses are challenged through structured adversarial review. Only validated knowledge survives.",
 };
 
 export const viewport: Viewport = {
@@ -44,6 +44,18 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
+        <footer
+          style={{
+            textAlign: "center",
+            padding: "40px 0 32px",
+            fontFamily: "var(--font-ibm-plex-mono)",
+            fontSize: "11px",
+            letterSpacing: "0.2em",
+            color: "#525252",
+          }}
+        >
+          ATLANTIS v2.1
+        </footer>
       </body>
     </html>
   );

@@ -58,8 +58,9 @@ export function States() {
         <p
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "16px",
-            color: "#a3a3a3",
+            fontSize: "18px",
+            fontWeight: 600,
+            color: "#d4d4d4",
           }}
         >
           Six entities. Three domains. Each one learning from its failures.
@@ -138,102 +139,79 @@ function StateCard({ state, index }: { state: StateEntity; index: number }) {
         e.currentTarget.style.boxShadow = "none";
       }}
     >
-      {/* Animated red left border */}
-      <div
-        className="absolute left-0 top-0 w-[2px] transition-all duration-300 ease-out"
-        style={{
-          backgroundColor: "#dc2626",
-          height: "0%",
-          borderRadius: "1px",
-        }}
-        ref={(el) => {
-          if (!el) return;
-          const parent = el.parentElement;
-          if (!parent) return;
-          parent.addEventListener("mouseenter", () => {
-            el.style.height = "100%";
-          });
-          parent.addEventListener("mouseleave", () => {
-            el.style.height = "0%";
-          });
-        }}
-      />
-
-      {/* Top row: name/domain left, record/survival right */}
-      <div className="flex items-start justify-between">
-        {/* Left side */}
-        <div>
-          <h3
-            className="mb-1.5 transition-transform duration-300 group-hover:translate-x-1"
-            style={{
-              fontFamily: "var(--font-serif)",
-              fontSize: "24px",
-              color: "#e5e5e5",
-              letterSpacing: "0.04em",
-            }}
-          >
-            {state.name.replace("_", " ")}
-          </h3>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              color: "#dc2626",
-              textTransform: "uppercase" as const,
-              letterSpacing: "0.15em",
-            }}
-          >
-            {state.domain}
-          </span>
-        </div>
-
-        {/* Right side: record + survival */}
-        <div className="flex flex-col items-end gap-2 pt-1">
-          <div className="flex items-center gap-1.5" style={{ fontFamily: "var(--font-mono)", fontSize: "12px" }}>
-            <span style={{ color: "#525252" }}>W</span>
-            <span style={{ color: "#22c55e" }}>{state.wins}</span>
-            <span style={{ color: "#2a2a2a" }}>/</span>
-            <span style={{ color: "#525252" }}>P</span>
-            <span style={{ color: "#f59e0b" }}>{state.partials}</span>
-            <span style={{ color: "#2a2a2a" }}>/</span>
-            <span style={{ color: "#525252" }}>L</span>
-            <span style={{ color: "#737373" }}>{state.losses}</span>
-          </div>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "13px",
-              color: "#dc2626",
-              fontWeight: 500,
-            }}
-          >
-            {survivalPct}% survival
-          </span>
-        </div>
+      {/* State name */}
+      <div className="text-center">
+        <h3
+          className="mb-2"
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontSize: "24px",
+            color: "#e5e5e5",
+            letterSpacing: "0.04em",
+          }}
+        >
+          {state.name.replace("_", " ")}
+        </h3>
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            color: "#dc2626",
+            textTransform: "uppercase" as const,
+            letterSpacing: "0.15em",
+          }}
+        >
+          {state.domain}
+        </span>
       </div>
 
-      {/* Approach quote */}
+      {/* Record + survival - centered */}
+      <div className="mt-5 flex flex-col items-center gap-2">
+        <div className="flex items-center gap-2" style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}>
+          <span style={{ color: "#a3a3a3" }}>W</span>
+          <span style={{ color: "#22c55e" }}>{state.wins}</span>
+          <span style={{ color: "#4a4a4a" }}>/</span>
+          <span style={{ color: "#a3a3a3" }}>P</span>
+          <span style={{ color: "#f59e0b" }}>{state.partials}</span>
+          <span style={{ color: "#4a4a4a" }}>/</span>
+          <span style={{ color: "#a3a3a3" }}>L</span>
+          <span style={{ color: "#b3b3b3" }}>{state.losses}</span>
+        </div>
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "14px",
+            color: "#dc2626",
+            fontWeight: 500,
+          }}
+        >
+          {survivalPct}% survival
+        </span>
+      </div>
+
+      {/* Approach quote - centered */}
       <p
-        className="mt-5 mb-6"
+        className="mt-5 mb-6 text-center"
         style={{
           fontFamily: "var(--font-body)",
-          fontSize: "16px",
+          fontSize: "17px",
+          fontWeight: 600,
           fontStyle: "italic",
-          color: "#a3a3a3",
+          color: "#d4d4d4",
           lineHeight: "1.7",
         }}
       >
         &ldquo;{state.approach}&rdquo;
       </p>
 
-      {/* View State link - bottom right */}
-      <div className="flex justify-end">
+      {/* View State link - centered */}
+      <div className="flex justify-center">
         <span
           className="inline-flex items-center gap-2 transition-colors duration-200 group-hover:text-red-500"
           style={{
             fontFamily: "var(--font-mono)",
-            fontSize: "10px",
-            color: "#525252",
+            fontSize: "11px",
+            color: "#a3a3a3",
             textTransform: "uppercase" as const,
             letterSpacing: "0.2em",
           }}

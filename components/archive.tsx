@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { CLAIMS, type Claim } from "@/lib/data";
+import { HYPOTHESES, type Hypothesis } from "@/lib/data";
 
-function useScrollReveal() {
+function useScrollReveal(deps: unknown[] = []) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -20,7 +20,8 @@ function useScrollReveal() {
       observer.observe(child)
     );
     return () => observer.disconnect();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
   return ref;
 }
 
@@ -33,16 +34,16 @@ const DOMAIN_FILTERS = [
 type DomainFilter = (typeof DOMAIN_FILTERS)[number];
 
 export function Archive() {
-  const containerRef = useScrollReveal();
   const [filter, setFilter] = useState<DomainFilter>("All");
+  const containerRef = useScrollReveal([filter]);
 
-  const survivingClaims = CLAIMS.filter(
+  const validatedHypotheses = HYPOTHESES.filter(
     (c) => c.ruling === "REVISE" || c.ruling === "PARTIAL"
   );
-  const filteredClaims =
+  const filteredHypotheses =
     filter === "All"
-      ? survivingClaims
-      : survivingClaims.filter((c) => c.domain === filter);
+      ? validatedHypotheses
+      : validatedHypotheses.filter((c) => c.domain === filter);
 
   return (
     <section ref={containerRef}>
@@ -57,17 +58,18 @@ export function Archive() {
             letterSpacing: "0.25em",
           }}
         >
-          THE ARCHIVE
+          KNOWLEDGE BASE
         </h2>
         <p
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "16px",
-            color: "#a3a3a3",
+            fontSize: "18px",
+            color: "#d4d4d4",
+            fontWeight: 600,
           }}
         >
-          The surviving claims. Each one has withstood adversarial challenge and
-          earned its place in the vault.
+          The validated hypotheses. Each one has withstood adversarial challenge and
+          earned its place in the knowledge base.
         </p>
       </div>
 
@@ -75,7 +77,7 @@ export function Archive() {
       <div style={{ height: "48px" }} />
 
       {/* Domain filter */}
-      <div className="scroll-reveal mx-auto mb-12 flex max-w-[900px] items-center gap-1">
+      <div className="scroll-reveal mx-auto mb-12 flex max-w-[900px] items-center justify-center gap-1">
         {DOMAIN_FILTERS.map((d) => (
           <button
             key={d}
@@ -94,30 +96,31 @@ export function Archive() {
 
       {/* Vault entries */}
       <div className="mx-auto flex max-w-[900px] flex-col gap-4">
-        {filteredClaims.map((claim) => (
-          <VaultEntry key={claim.id} claim={claim} />
+        {filteredHypotheses.map((hypothesis) => (
+          <VaultEntry key={hypothesis.id} hypothesis={hypothesis} />
         ))}
       </div>
 
-      {filteredClaims.length === 0 && (
+      {filteredHypotheses.length === 0 && (
         <p
           className="mx-auto max-w-[900px] py-20 text-center text-lg text-muted/40"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
-          No surviving claims in this domain.
+          No validated hypotheses in this domain.
         </p>
       )}
     </section>
   );
 }
 
-function VaultEntry({ claim }: { claim: Claim }) {
+function VaultEntry({ hypothesis }: { hypothesis: Hypothesis }) {
   const [unlocked, setUnlocked] = useState(false);
+  const claim = hypothesis;
   const isSurviving = claim.ruling === "REVISE" || claim.ruling === "PARTIAL";
 
   return (
     <article
-      className="scroll-reveal group overflow-hidden rounded border border-border/60 transition-all duration-500 hover:border-border"
+      className="group overflow-hidden rounded border border-border/60 transition-all duration-500 hover:border-border"
       style={{
         boxShadow: isSurviving
           ? "0 0 0 0 rgba(220, 38, 38, 0)"
@@ -181,7 +184,7 @@ function VaultEntry({ claim }: { claim: Claim }) {
             </span>
           </div>
           <p
-            className="text-lg leading-relaxed text-foreground/80"
+            className="text-lg font-semibold leading-relaxed text-foreground/90"
             style={{ fontFamily: "var(--font-cormorant)" }}
           >
             {claim.position}
@@ -220,7 +223,7 @@ function VaultEntry({ claim }: { claim: Claim }) {
                 Verdict
               </span>
               <p
-                className="text-lg leading-relaxed text-foreground/80"
+                className="text-lg font-semibold leading-relaxed text-foreground/90"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {claim.verdict}
@@ -256,7 +259,7 @@ function DebateStep({
           {label}
         </span>
         <p
-          className="text-base leading-[1.8] text-muted"
+          className="text-base font-semibold leading-[1.8] text-foreground/80"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
           {text}

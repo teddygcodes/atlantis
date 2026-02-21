@@ -11,33 +11,33 @@ const SECTIONS: {
   href: string;
 }[] = [
   {
-    id: "Chronicle",
-    title: "Chronicle",
-    description: "what happened when ideas went to war",
+    id: "Research Timeline",
+    title: "Research Timeline",
+    description: "what happened when ideas were put to the test",
     href: "/chronicle",
   },
   {
     id: "States",
     title: "States",
-    description: "meet the minds that survived",
+    description: "meet the minds that were validated",
     href: "/states",
   },
   {
-    id: "Archive",
-    title: "Archive",
+    id: "Knowledge Base",
+    title: "Knowledge Base",
     description: "the knowledge that earned its place",
     href: "/archive",
   },
   {
     id: "Debates",
     title: "Debates",
-    description: "watch them fight",
+    description: "watch the adversarial review process",
     href: "/debates",
   },
   {
-    id: "Graveyard",
-    title: "Graveyard",
-    description: "not everyone makes it",
+    id: "Refuted",
+    title: "Refuted",
+    description: "not every hypothesis holds up",
     href: "/graveyard",
   },
 ];
@@ -70,10 +70,10 @@ export function SectionGrid() {
   return (
     <section className="mx-auto max-w-5xl px-6 py-28 md:py-40">
       <p
-        className="mb-20 text-center text-[11px] uppercase tracking-[0.35em]"
+        className="mb-20 text-center text-[11px] uppercase tracking-[0.35em] animate-fade-in-up"
         style={{
           fontFamily: "var(--font-ibm-plex-mono)",
-          color: "#404040",
+          color: "#737373",
         }}
       >
         Explore the world

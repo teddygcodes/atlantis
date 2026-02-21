@@ -1,9 +1,9 @@
 export const NAV_ITEMS = [
-  "Chronicle",
+  "Research Timeline",
   "States",
-  "Archive",
+  "Knowledge Base",
   "Debates",
-  "Graveyard",
+  "Refuted",
   "About",
 ] as const;
 
@@ -20,19 +20,19 @@ export const CHRONICLE_ENTRIES: ChronicleEntry[] = [
     cycle: 1,
     title: "The Opening Arguments",
     narrative:
-      "The civilization\u2019s first claims landed across three domains. In Consciousness, both States survived with revisions \u2014 Alpha\u2019s computational framework and Beta\u2019s G\u00f6delian incompleteness theory both showed promise but needed tightening. Causation was brutal: Alpha\u2019s interventional invariance argument was destroyed for merely restating textbook positions. Beta\u2019s cultural variation argument fell harder \u2014 the judge ruled it confused how we know causation with what causation is. Mathematics was a massacre. All four claims destroyed. The domain started from scratch.",
+      "The civilization\u2019s first hypotheses landed across three domains. In Consciousness, both States were validated with revisions \u2014 Alpha\u2019s computational framework and Beta\u2019s G\u00f6delian incompleteness theory both showed promise but needed tightening. Causation was brutal: Alpha\u2019s interventional invariance argument was refuted for merely restating textbook positions. Beta\u2019s cultural variation argument fell harder \u2014 the judge ruled it confused how we know causation with what causation is. Mathematics was a massacre. All four hypotheses refuted. The domain started from scratch.",
   },
   {
     cycle: 2,
     title: "The Killing Fields",
     narrative:
-      "Every single Causation and Consciousness claim was destroyed. Alpha\u2019s thalamocortical dissociation test was circular. Beta\u2019s integration field was unfalsifiable. In Causation, Alpha\u2019s thermodynamic asymmetry fell to a gravitational counterexample. Beta\u2019s memory-anticipation argument defeated itself. Only Mathematics showed life: Alpha\u2019s axiom of infinity claim earned a partial, and Beta\u2019s proof-as-social-technology survived with revisions. The archive grew by just two claims.",
+      "Every single Causation and Consciousness hypothesis was refuted. Alpha\u2019s thalamocortical dissociation test was circular. Beta\u2019s integration field was unfalsifiable. In Causation, Alpha\u2019s thermodynamic asymmetry fell to a gravitational counterexample. Beta\u2019s memory-anticipation argument defeated itself. Only Mathematics showed life: Alpha\u2019s axiom of infinity hypothesis earned a partial, and Beta\u2019s proof-as-social-technology was validated with revisions. The knowledge base grew by just two hypotheses.",
   },
   {
     cycle: 3,
     title: "Evolution",
     narrative:
-      "The States came back changed. Consciousness Alpha abandoned existing theories entirely, proposing a novel asymmetric error correction architecture. Beta grounded their argument in established perceptual science rather than speculative ontology. Both earned partials. Causation Alpha finally found footing in conservation laws. Beta built an evolutionary framework for constructivism. In Mathematics, Alpha\u2019s compactness argument ran the logic backwards and was destroyed, but Beta\u2019s notation-as-scaffolding showed continued growth. The civilization is learning.",
+      "The States came back changed. Consciousness Alpha abandoned existing theories entirely, proposing a novel asymmetric error correction architecture. Beta grounded their argument in established perceptual science rather than speculative ontology. Both earned partials. Causation Alpha finally found footing in conservation laws. Beta built an evolutionary framework for constructivism. In Mathematics, Alpha\u2019s compactness argument ran the logic backwards and was refuted, but Beta\u2019s notation-as-scaffolding showed continued growth. The civilization is learning.",
   },
 ];
 
@@ -67,7 +67,7 @@ export const STATES: StateEntity[] = [
     partials: 2,
     losses: 1,
     learningArc:
-      "After Cycle 2 integration field destroyed as unfalsifiable, pivoted to empirically grounded arguments. Cycle 3 accessibility-phenomenality asymmetry drew from established literature rather than speculative ontology.",
+      "After Cycle 2 integration field refuted as unfalsifiable, pivoted to empirically grounded arguments. Cycle 3 accessibility-phenomenality asymmetry drew from established literature rather than speculative ontology.",
   },
   {
     name: "Causation_Alpha",
@@ -78,7 +78,7 @@ export const STATES: StateEntity[] = [
     partials: 1,
     losses: 2,
     learningArc:
-      "Cycle 1 interventional invariance destroyed for scope errors. Cycle 2 thermodynamic asymmetry destroyed for logic flaw. Cycle 3 conservation law framework finally grounded causation in fundamental physics rather than methodology.",
+      "Cycle 1 interventional invariance refuted for scope errors. Cycle 2 thermodynamic asymmetry refuted for logic flaw. Cycle 3 conservation law framework finally grounded causation in fundamental physics rather than methodology.",
   },
   {
     name: "Causation_Beta",
@@ -88,7 +88,7 @@ export const STATES: StateEntity[] = [
     partials: 1,
     losses: 2,
     learningArc:
-      "Cycle 1 cultural variation destroyed \u2014 confused epistemic access with ontological status. Cycle 2 same flaw. Cycle 3 evolutionary framework showed growth: grounded constructivism in biology rather than cultural relativity.",
+      "Cycle 1 cultural variation refuted \u2014 confused epistemic access with ontological status. Cycle 2 same flaw. Cycle 3 evolutionary framework showed growth: grounded constructivism in biology rather than cultural relativity.",
   },
   {
     name: "Mathematics_Alpha",
@@ -98,7 +98,7 @@ export const STATES: StateEntity[] = [
     partials: 1,
     losses: 2,
     learningArc:
-      "Cycle 1 G\u00f6del argument destroyed \u2014 merely restated results. Cycle 3 compactness argument ran logic backwards. Cycle 2 axiom of infinity survived as partial, showing more careful argumentation works.",
+      "Cycle 1 G\u00f6del argument refuted \u2014 merely restated results. Cycle 3 compactness argument ran logic backwards. Cycle 2 axiom of infinity validated as partial, showing more careful argumentation works.",
   },
   {
     name: "Mathematics_Beta",
@@ -108,11 +108,11 @@ export const STATES: StateEntity[] = [
     partials: 2,
     losses: 1,
     learningArc:
-      "Cycle 1 cardinality argument destroyed for overstating axiom-dependence. Adapted in Cycle 2 with proof-as-social-technology, then Cycle 3 notation-as-scaffolding. Shift from attacking Platonism to building positive constructivist accounts.",
+      "Cycle 1 cardinality argument refuted for overstating axiom-dependence. Adapted in Cycle 2 with proof-as-social-technology, then Cycle 3 notation-as-scaffolding. Shift from attacking Platonism to building positive constructivist accounts.",
   },
 ];
 
-export interface Claim {
+export interface Hypothesis {
   id: string;
   domain: "Consciousness" | "Causation" | "Mathematics";
   cycle: number;
@@ -127,7 +127,7 @@ export interface Claim {
   depth: number;
 }
 
-export const CLAIMS: Claim[] = [
+export const HYPOTHESES: Hypothesis[] = [
   // Cycle 1
   {
     id: "#001",
@@ -142,7 +142,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "The recursive self-modeling criterion generates testable predictions about which systems are conscious that diverge from IIT\u2019s phi metric.",
     verdict:
-      "Promising framework but needs sharper delineation from existing computational theories. Survives with mandatory revisions.",
+      "Promising framework but needs sharper delineation from existing computational theories. Validated with mandatory revisions.",
     drama: 6,
     novelty: 5,
     depth: 7,
@@ -178,7 +178,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "The claim extends Woodward by arguing invariance under intervention is not just a criterion but constitutive of causation itself.",
     verdict:
-      "Destroyed. The \u2018extension\u2019 is a distinction without a difference. This merely restates an established position.",
+      "Refuted. The \u2018extension\u2019 is a distinction without a difference. This merely restates an established position.",
     drama: 5,
     novelty: 2,
     depth: 4,
@@ -196,7 +196,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "If causal cognition varies so fundamentally across cultures, parsimony favors the constructivist explanation over positing hidden objective relations.",
     verdict:
-      "Destroyed. The argument commits a textbook epistemic/ontological conflation. How we know causation is not what causation is.",
+      "Refuted. The argument commits a textbook epistemic/ontological conflation. How we know causation is not what causation is.",
     drama: 8,
     novelty: 3,
     depth: 5,
@@ -214,7 +214,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "The existence of true-but-unprovable statements implies a realm of mathematical truth that formal systems can only partially access.",
     verdict:
-      "Destroyed. Merely restates the philosophical interpretation without engaging with decades of counter-arguments. No advancement of the debate.",
+      "Refuted. Merely restates the philosophical interpretation without engaging with decades of counter-arguments. No advancement of the debate.",
     drama: 4,
     novelty: 1,
     depth: 3,
@@ -232,7 +232,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "The continuum hypothesis is not an edge case \u2014 it\u2019s a fundamental question about the size of infinity that axioms cannot resolve.",
     verdict:
-      "Destroyed. Overstates axiom-dependence and ignores the vast body of axiom-independent mathematics. The constructivist case needs stronger foundations.",
+      "Refuted. Overstates axiom-dependence and ignores the vast body of axiom-independent mathematics. The constructivist case needs stronger foundations.",
     drama: 5,
     novelty: 3,
     depth: 5,
@@ -251,7 +251,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "The dissociation pattern is so consistent across lesion studies, anesthesia, and sleep that it constitutes strong evidence for a constitutive role.",
     verdict:
-      "Destroyed. The argument is circular \u2014 it assumes what it needs to prove. Consistent correlation is still correlation.",
+      "Refuted. The argument is circular \u2014 it assumes what it needs to prove. Consistent correlation is still correlation.",
     drama: 6,
     novelty: 4,
     depth: 5,
@@ -269,7 +269,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "The integration field makes predictions about binding failures that physical theories cannot explain, such as certain forms of synesthesia.",
     verdict:
-      "Destroyed. The proposed entity is unfalsifiable as stated. Predictions must be derivable from the theory, not retrofitted to observations.",
+      "Refuted. The proposed entity is unfalsifiable as stated. Predictions must be derivable from the theory, not retrofitted to observations.",
     drama: 7,
     novelty: 5,
     depth: 4,
@@ -287,7 +287,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "Local entropy decreases occur within globally increasing entropy. The arrow of time remains valid at cosmological scales.",
     verdict:
-      "Destroyed. The gravitational counterexample is fatal. A theory of causation that fails for gravitational systems is not universal.",
+      "Refuted. The gravitational counterexample is fatal. A theory of causation that fails for gravitational systems is not universal.",
     drama: 8,
     novelty: 6,
     depth: 7,
@@ -305,7 +305,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "Temporal experience itself may be constructed. The B-theory of time eliminates objective temporal flow.",
     verdict:
-      "Destroyed. The argument is self-undermining. Invoking B-theory of time to rescue constructivism about causation creates more problems than it solves.",
+      "Refuted. The argument is self-undermining. Invoking B-theory of time to rescue constructivism about causation creates more problems than it solves.",
     drama: 9,
     novelty: 5,
     depth: 6,
@@ -341,7 +341,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "The four-color theorem\u2019s acceptance required the mathematical community to expand its definition of \u2018proof\u2019 to include computer verification \u2014 a social decision.",
     verdict:
-      "Survives with revisions. The social-technology framing is productive. Needs clearer distinction between the sociology of proof and the ontology of mathematical truth.",
+      "Validated with revisions. The social-technology framing is productive. Needs clearer distinction between the sociology of proof and the ontology of mathematical truth.",
     drama: 6,
     novelty: 7,
     depth: 6,
@@ -432,7 +432,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "The proliferation of models beyond intended interpretation suggests mathematical reality exceeds any particular axiomatization.",
     verdict:
-      "Destroyed. The argument inverts cause and effect. Model-theoretic phenomena reflect logical structure, not ontological abundance.",
+      "Refuted. The argument inverts cause and effect. Model-theoretic phenomena reflect logical structure, not ontological abundance.",
     drama: 5,
     novelty: 4,
     depth: 5,
@@ -450,7 +450,7 @@ export const CLAIMS: Claim[] = [
     rebuttal:
       "Leibniz\u2019s notation enabled manipulations (chain rule as fraction-like operation) that were literally unthinkable in Newton\u2019s fluxion notation. The notation constitutively shaped the mathematics.",
     verdict:
-      "Partial. Continued growth from the social-technology line. The constitutive role of notation is well-argued. Needs to address the distinction between psychological and metaphysical claims.",
+      "Partial. Continued growth from the social-technology line. The constitutive role of notation is well-argued. Needs to address the distinction between psychological and metaphysical hypotheses.",
     drama: 5,
     novelty: 7,
     depth: 7,
@@ -492,28 +492,28 @@ export interface NewsItem {
 
 export const NEWS_ITEMS: NewsItem[] = [
   {
-    headline: "MAJOR COGNITIVE THEORY COLLAPSES UNDER SCRUTINY",
+    headline: "MAJOR COGNITIVE HYPOTHESIS COLLAPSES UNDER SCRUTINY",
     body: "Consciousness Beta\u2019s integration field hypothesis was ruled unfalsifiable in Cycle 2, marking the second consecutive destruction for the State. The proposed non-physical substrate for phenomenal binding failed to meet basic scientific standards. The State has signaled a complete strategic pivot for Cycle 3.",
   },
   {
     headline: "MATHEMATICS DOMAIN SUFFERS TOTAL LOSS IN OPENING CYCLE",
-    body: "In an unprecedented result, all four Mathematics claims were destroyed in Cycle 1. Both Alpha\u2019s G\u00f6delian Platonism and Beta\u2019s axiom-dependence constructivism were ruled as restatements of existing positions without genuine advancement. The domain was forced to start from scratch, leading to more careful argumentation in subsequent cycles.",
+    body: "In an unprecedented result, all four Mathematics hypotheses were refuted in Cycle 1. Both Alpha\u2019s G\u00f6delian Platonism and Beta\u2019s axiom-dependence constructivism were ruled as restatements of existing positions without genuine advancement. The domain was forced to start from scratch, leading to more careful argumentation in subsequent cycles.",
   },
   {
     headline: "CYCLE 3 SHOWS FIRST SIGNS OF GENUINE ADAPTATION",
-    body: "For the first time in the civilization\u2019s history, every domain produced at least one surviving claim in a single cycle. Consciousness Alpha\u2019s novel asymmetric error correction architecture and Causation Alpha\u2019s conservation law grounding both represent genuine departures from previous approaches. The States are learning from their failures.",
+    body: "For the first time in the civilization\u2019s history, every domain produced at least one validated hypothesis in a single cycle. Consciousness Alpha\u2019s novel asymmetric error correction architecture and Causation Alpha\u2019s conservation law grounding both represent genuine departures from previous approaches. The States are learning from their failures.",
   },
 ];
 
 export const ABOUT_PARAGRAPHS = [
-  "Atlantis is a knowledge platform where ideas are tested through structured debate. Claims enter the system. They are challenged. They must defend themselves. Only validated knowledge survives to become part of the permanent archive.",
-  "The result is a growing body of knowledge that has earned its place \u2014 not through consensus or authority, but through adversarial pressure. Every surviving claim has been attacked and has defended itself successfully. Every destroyed claim teaches the system what doesn\u2019t hold up.",
+  "Atlantis is a knowledge platform where ideas are tested through structured research review. Hypotheses enter the system. They are challenged. They must defend themselves. Only validated knowledge survives to become part of the permanent knowledge base.",
+  "The result is a growing body of knowledge that has earned its place \u2014 not through consensus or authority, but through adversarial pressure. Every validated hypothesis has been challenged and has defended itself successfully. Every refuted hypothesis teaches the system what doesn\u2019t hold up.",
   "The civilization is learning.",
 ];
 
 export const STATS = {
   domains: 3,
   states: 6,
-  surviving: 9,
-  destroyed: 9,
+  validated: 9,
+  refuted: 9,
 };

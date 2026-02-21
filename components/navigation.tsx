@@ -6,11 +6,11 @@ import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/data";
 
 const ROUTE_MAP: Record<string, string> = {
-  Chronicle: "/chronicle",
+  "Research Timeline": "/chronicle",
   States: "/states",
-  Archive: "/archive",
+  "Knowledge Base": "/archive",
   Debates: "/debates",
-  Graveyard: "/graveyard",
+  Refuted: "/graveyard",
   About: "/about",
 };
 
@@ -39,10 +39,10 @@ export function Navigation() {
           <Image
             src="/images/logo.png"
             alt="Atlantis logo"
-            width={40}
-            height={40}
+            width={56}
+            height={56}
             className="object-contain"
-            style={{ width: "auto", height: "auto", maxWidth: "40px", maxHeight: "40px" }}
+            style={{ width: "56px", height: "56px" }}
           />
         </Link>
 
