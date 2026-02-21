@@ -28,7 +28,8 @@
       "Bash(./node_modules/.bin/tsc:*)",
       "Bash(git reset:*)",
       "Bash(npm run build:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(git pull:*)"
     ]
   }
 }

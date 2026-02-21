@@ -71,6 +71,12 @@ DEMO_ELECTRICAL_CONFIG = {
     "governance_cycles": 3,
 }
 
+DEMO_10_DOMAINS_CONFIG = {
+    **PRODUCTION_CONFIG,
+    "founding_era_target_pairs": 10,
+    "governance_cycles": 3,  # Keep low for testing
+}
+
 # ═══════════════════════════════════════
 # MODEL ALLOCATION
 # ═══════════════════════════════════════

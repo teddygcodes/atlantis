@@ -27,7 +27,7 @@ from typing import List, Optional
 
 from config.settings import (
     SYSTEM_NAME, VERSION,
-    MOCK_CONFIG, PRODUCTION_CONFIG, DEMO_ELECTRICAL_CONFIG,
+    MOCK_CONFIG, PRODUCTION_CONFIG, DEMO_ELECTRICAL_CONFIG, DEMO_10_DOMAINS_CONFIG,
     V1_DATA_PATHS, OUTPUT_DIRS,
     MODEL_ALLOCATION,
     SENATE_PAIR_SUPERMAJORITY,
@@ -59,6 +59,7 @@ class AtlantisEngine:
         verbose: bool = False,
         api_key: Optional[str] = None,
         demo_electrical: bool = False,
+        demo_10_domains: bool = False,
     ):
         self._check_v1_data(force_clean)
         self.constitution_text = self._load_constitution()
@@ -68,6 +69,7 @@ class AtlantisEngine:
         self.dry_run = dry_run
         self.verbose = verbose
         self.demo_electrical = demo_electrical
+        self.demo_10_domains = demo_10_domains
         self.output_dir = Path("output")
         self._initialize_run_folder()
         self._prepare_output_workspace()
@@ -222,6 +224,178 @@ class AtlantisEngine:
 
         return state_manager
 
+    def _run_demo_10_domains_founding_era(self) -> StateManager:
+        """
+        Phase 1 demo mode: skip Senate votes and seed 10 diverse research domain rival pairs.
+        Covers STEM, social sciences, and humanities.
+        """
+        state_manager = StateManager(self.db, self.models)
+        budget = self.config["initial_token_budget"]
+
+        demo_pairs = [
+            {
+                "domain": "Mathematics",
+                "domain_type": "formal",
+                "approach_a": (
+                    "Formalist mathematics: knowledge derives from axioms, proofs, and pure "
+                    "logical structure. Emphasizes rigor, consistency, and formal systems."
+                ),
+                "approach_b": (
+                    "Applied mathematics: knowledge serves real-world modeling, computation, "
+                    "and problem-solving. Emphasizes practical utility and numerical methods."
+                ),
+            },
+            {
+                "domain": "Physics",
+                "domain_type": "empirical",
+                "approach_a": (
+                    "Theoretical physics: knowledge advances through equations, mathematical "
+                    "predictions, and unification of fundamental forces."
+                ),
+                "approach_b": (
+                    "Experimental physics: knowledge derives from observation, measurement, "
+                    "falsification, and data-driven validation of theories."
+                ),
+            },
+            {
+                "domain": "Biology",
+                "domain_type": "empirical",
+                "approach_a": (
+                    "Molecular biology: understanding life through genes, proteins, cellular "
+                    "mechanisms, and biochemical pathways."
+                ),
+                "approach_b": (
+                    "Systems biology: understanding life through ecosystems, evolution, emergent "
+                    "behavior, and organism-environment interactions."
+                ),
+            },
+            {
+                "domain": "Finance",
+                "domain_type": "applied",
+                "approach_a": (
+                    "Quantitative finance: markets governed by algorithms, risk models, statistical "
+                    "arbitrage, and mathematical optimization."
+                ),
+                "approach_b": (
+                    "Behavioral finance: markets driven by psychology, sentiment cycles, cognitive "
+                    "biases, and irrational actors."
+                ),
+            },
+            {
+                "domain": "Technology",
+                "domain_type": "applied",
+                "approach_a": (
+                    "Systems architecture: progress through design patterns, infrastructure "
+                    "scalability, distributed systems, and software engineering principles."
+                ),
+                "approach_b": (
+                    "Artificial intelligence: progress through machine learning, automation, "
+                    "neural networks, and adaptive algorithms."
+                ),
+            },
+            {
+                "domain": "Medicine",
+                "domain_type": "empirical",
+                "approach_a": (
+                    "Clinical medicine: health improved through treatments, randomized trials, "
+                    "patient outcomes, and evidence-based interventions."
+                ),
+                "approach_b": (
+                    "Preventive medicine: health improved through public health policy, "
+                    "epidemiology, population-level interventions, and disease prevention."
+                ),
+            },
+            {
+                "domain": "Geography",
+                "domain_type": "empirical",
+                "approach_a": (
+                    "Physical geography: spatial patterns explained by climate systems, geological "
+                    "processes, natural resources, and environmental factors."
+                ),
+                "approach_b": (
+                    "Human geography: spatial patterns explained by demographics, urbanization, "
+                    "migration, and human-environment interactions."
+                ),
+            },
+            {
+                "domain": "History",
+                "domain_type": "interpretive",
+                "approach_a": (
+                    "Analytical history: past understood through patterns, causation, structural "
+                    "cycles, and quantitative analysis of long-term trends."
+                ),
+                "approach_b": (
+                    "Narrative history: past understood through culture, identity, collective "
+                    "memory, and contextualized human experiences."
+                ),
+            },
+            {
+                "domain": "Economics",
+                "domain_type": "social_science",
+                "approach_a": (
+                    "Macroeconomics: economies governed by policy, trade systems, monetary theory, "
+                    "and aggregate indicators."
+                ),
+                "approach_b": (
+                    "Microeconomics: economies emerge from individual incentives, market behavior, "
+                    "game theory, and rational choice."
+                ),
+            },
+            {
+                "domain": "Philosophy",
+                "domain_type": "philosophical",
+                "approach_a": (
+                    "Empiricism: knowledge derives from sensory evidence, logical analysis, "
+                    "scientific method, and verifiable observation."
+                ),
+                "approach_b": (
+                    "Rationalism: knowledge derives from reason, innate principles, ethics, "
+                    "meaning, and the nature of consciousness."
+                ),
+            },
+        ]
+
+        for cycle, pair_data in enumerate(demo_pairs, start=1):
+            domain = pair_data["domain"]
+            approach_a = pair_data["approach_a"]
+            approach_b = pair_data["approach_b"]
+
+            name_a = self._generate_state_name(domain, "Alpha", cycle - 1)
+            name_b = self._generate_state_name(domain, "Beta", cycle - 1)
+
+            state_a = State(
+                name=name_a,
+                domain=domain,
+                approach=approach_a,
+                budget=budget,
+                db=self.db,
+                models=self.models,
+                cycle_formed=cycle,
+            )
+            state_b = State(
+                name=name_b,
+                domain=domain,
+                approach=approach_b,
+                budget=budget,
+                db=self.db,
+                models=self.models,
+                cycle_formed=cycle,
+            )
+
+            pair = RivalPair(
+                domain=domain,
+                state_a=state_a,
+                state_b=state_b,
+                pair_id=str(uuid.uuid4()),
+                cycle_formed=cycle,
+                warmup_remaining=0,
+                domain_type=pair_data["domain_type"],
+            )
+            state_manager.add_pair(pair)
+            print(f"    DEMO PAIR FORMED: {state_a.name} vs {state_b.name} in '{domain}'")
+
+        return state_manager
+
     def _run_founding_era(self, founder_profiles: List[FounderProfile]) -> StateManager:
         """
         Phase 1: Founders propose rival pairs (domain + two approaches).
@@ -230,6 +404,8 @@ class AtlantisEngine:
         """
         if self.demo_electrical:
             return self._run_demo_electrical_founding_era()
+        if self.demo_10_domains:
+            return self._run_demo_10_domains_founding_era()
 
         state_manager = StateManager(self.db, self.models)
         target = self.config["founding_era_target_pairs"]
@@ -801,6 +977,7 @@ def main(argv=None):
             "  python -m atlantis --force-clean       # Remove V1 data first\n"
             "  python -m atlantis --dry-run           # Print prompts, skip API calls\n"
             "  python -m atlantis --demo-electrical   # Electrical-domain empirical demo\n"
+            "  python -m atlantis --demo-10-domains   # 10 diverse domains demo (STEM + social sciences + humanities)\n"
         ),
     )
     parser.add_argument(
@@ -823,12 +1000,18 @@ def main(argv=None):
         "--demo-electrical", action="store_true",
         help="Use electrical-domain demo pairs (empirical) and skip Senate voting in Phase 1"
     )
+    parser.add_argument(
+        "--demo-10-domains", action="store_true",
+        help="Use 10-domain demo pairs (STEM + social sciences + humanities) and skip Senate voting in Phase 1"
+    )
     args = parser.parse_args(argv)
 
     if args.mock:
         config = MOCK_CONFIG
     elif args.demo_electrical:
         config = DEMO_ELECTRICAL_CONFIG
+    elif args.demo_10_domains:
+        config = DEMO_10_DOMAINS_CONFIG
     else:
         config = PRODUCTION_CONFIG
 
@@ -839,5 +1022,6 @@ def main(argv=None):
         force_clean=args.force_clean,
         verbose=args.verbose,
         demo_electrical=args.demo_electrical,
+        demo_10_domains=args.demo_10_domains,
     )
     engine.run()
