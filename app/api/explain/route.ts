@@ -1,4 +1,5 @@
 import { generateText } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
 
 export async function POST(req: Request) {
   try {
@@ -10,24 +11,16 @@ export async function POST(req: Request) {
 
     const label = type || "academic text";
 
-    console.log("[v0] Explain API called with:", { textLength: text.length, type: label });
-
     const result = await generateText({
-      model: "anthropic/claude-sonnet-4-20250514",
+      model: anthropic("claude-sonnet-4-20250514"),
       system: `You explain complex academic ${label} in simple everyday English that a high schooler would understand. Keep it to 2-3 sentences. No jargon. Be clear and direct.`,
       prompt: text,
     });
 
-    const explanation = result.text;
-    console.log("[v0] Explain API result:", { explanationLength: explanation?.length });
-
-    return Response.json({ explanation });
+    return Response.json({ explanation: result.text });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[v0] Explain API error:", msg);
-    return Response.json(
-      { error: msg },
-      { status: 500 }
-    );
+    return Response.json({ error: msg }, { status: 500 });
   }
 }
