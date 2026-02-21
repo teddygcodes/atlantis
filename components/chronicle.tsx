@@ -27,8 +27,8 @@ function useScrollReveal() {
 function getCycleStats(cycle: number) {
   const cycleClaims = CLAIMS.filter((c) => c.cycle === cycle);
   const destroyed = cycleClaims.filter((c) => c.ruling === "DESTROYED").length;
-  const survived = cycleClaims.length - destroyed;
-  return { total: cycleClaims.length, destroyed, survived };
+  const validated = cycleClaims.length - destroyed;
+  return { total: cycleClaims.length, destroyed, validated };
 }
 
 export function Chronicle() {
@@ -76,7 +76,7 @@ export function Chronicle() {
             letterSpacing: "0.25em",
           }}
         >
-          THE CHRONICLE
+          THE RESEARCH TIMELINE
         </h2>
         <p
           style={{
@@ -85,7 +85,7 @@ export function Chronicle() {
             color: "#a3a3a3",
           }}
         >
-          Three cycles. Eighteen claims. A civilization learning what holds up
+          Three cycles. Eighteen hypotheses. A civilization learning what holds up
           under pressure.
         </p>
       </div>
@@ -187,7 +187,7 @@ export function Chronicle() {
                       className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
-                      Claims
+                      Hypotheses
                     </span>
                   </div>
                   <div className="flex flex-col">
@@ -201,7 +201,7 @@ export function Chronicle() {
                       className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
-                      Destroyed
+                      Refuted
                     </span>
                   </div>
                   <div className="flex flex-col">
@@ -209,13 +209,13 @@ export function Chronicle() {
                       className="text-2xl text-emerald-500"
                       style={{ fontFamily: "var(--font-cinzel)" }}
                     >
-                      {stats.survived}
+                      {stats.validated}
                     </span>
                     <span
                       className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
-                      Survived
+                      Validated
                     </span>
                   </div>
                   <div className="ml-auto flex flex-col items-end">
@@ -234,7 +234,7 @@ export function Chronicle() {
                       className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
-                      Kill Rate
+                      Refutation Rate
                     </span>
                   </div>
                 </div>

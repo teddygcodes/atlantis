@@ -176,13 +176,13 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
               className="text-center"
               style={{ fontFamily: "var(--font-cormorant)", fontSize: "20px", color: "#a3a3a3" }}
             >
-              Claims are made.
+              Hypotheses are proposed.
             </p>
             <p
               className="text-center"
               style={{ fontFamily: "var(--font-cormorant)", fontSize: "20px", color: "#a3a3a3" }}
             >
-              Challenges are issued.
+              Peer review is conducted.
             </p>
             <p
               className="text-center"

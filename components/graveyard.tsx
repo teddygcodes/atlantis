@@ -46,7 +46,7 @@ export function Graveyard() {
             letterSpacing: "0.25em",
           }}
         >
-          THE GRAVEYARD
+          THE REFUTED
         </h2>
         <p
           style={{
@@ -55,7 +55,7 @@ export function Graveyard() {
             color: "#a3a3a3",
           }}
         >
-          The fallen. Every destroyed claim is preserved here as a monument to
+          The fallen. Every refuted hypothesis is preserved here as a monument to
           what the system will not accept.
         </p>
       </div>
@@ -85,7 +85,7 @@ export function Graveyard() {
                 </svg>
               </div>
 
-              {/* Claim ID */}
+              {/* Hypothesis ID */}
               <span
                 className="mb-4 block text-sm tracking-[0.2em] text-destroyed/60"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
@@ -137,5 +137,5 @@ export function Graveyard() {
 function getEpitaph(verdict: string): string {
   // Extract the first sentence as the epitaph
   const firstSentence = verdict.split(". ")[0];
-  return firstSentence.replace(/^Destroyed\.\s*/i, "").trim();
+  return firstSentence.replace(/^Refuted\.\s*/i, "").trim();
 }

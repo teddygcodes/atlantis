@@ -54,7 +54,7 @@ export function Debates() {
             color: "#a3a3a3",
           }}
         >
-          Every claim. Every challenge. Every verdict. Watch the adversarial
+          Every hypothesis. Every peer review. Every ruling. Watch the adversarial
           process unfold.
         </p>
       </div>
@@ -149,9 +149,9 @@ function MatchCard({ claim }: { claim: Claim }) {
             advanceStep();
           }
         }}
-        aria-label="Advance debate step"
+        aria-label="Advance peer review step"
       >
-        {/* Step 0: The claim */}
+        {/* Step 0: The hypothesis */}
         <div
           className="transition-all duration-500"
           style={{ opacity: step >= 0 ? 1 : 0 }}
@@ -161,7 +161,7 @@ function MatchCard({ claim }: { claim: Claim }) {
               className="mb-3 block text-[9px] uppercase tracking-[0.25em] text-muted/40"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              The Claim
+              The Hypothesis
             </span>
             <p
               className="mx-auto max-w-2xl text-xl leading-[1.8] text-foreground"
@@ -172,7 +172,7 @@ function MatchCard({ claim }: { claim: Claim }) {
           </div>
         </div>
 
-        {/* Step 1+: Challenge from left */}
+        {/* Step 1+: Peer Review from left */}
         {step >= 1 && (
           <div className="mt-6 flex justify-start debate-animate-in">
             <div className="max-w-[80%] rounded-lg rounded-bl-none border border-border/40 bg-background px-5 py-4">
@@ -180,7 +180,7 @@ function MatchCard({ claim }: { claim: Claim }) {
                 className="mb-2 block text-[9px] uppercase tracking-[0.2em] text-red-400"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
-                Challenge
+                Peer Review
               </span>
               <p
                 className="text-base leading-[1.8] text-muted"
@@ -192,7 +192,7 @@ function MatchCard({ claim }: { claim: Claim }) {
           </div>
         )}
 
-        {/* Step 2+: Rebuttal from right */}
+        {/* Step 2+: Defense from right */}
         {step >= 2 && (
           <div className="mt-4 flex justify-end debate-animate-in">
             <div className="max-w-[80%] rounded-lg rounded-br-none border border-border/40 bg-background px-5 py-4">
@@ -200,7 +200,7 @@ function MatchCard({ claim }: { claim: Claim }) {
                 className="mb-2 block text-[9px] uppercase tracking-[0.2em] text-emerald-500"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
-                Rebuttal
+                Defense
               </span>
               <p
                 className="text-base leading-[1.8] text-muted"
@@ -212,7 +212,7 @@ function MatchCard({ claim }: { claim: Claim }) {
           </div>
         )}
 
-        {/* Step 3: Verdict drops center */}
+        {/* Step 3: Ruling drops center */}
         {step >= 3 && (
           <div className="mt-8 flex justify-center debate-animate-in">
             <div
@@ -233,13 +233,13 @@ function MatchCard({ claim }: { claim: Claim }) {
                   color: isAlive ? "#dc2626" : "#525252",
                 }}
               >
-                Verdict
+                Ruling
               </span>
               <p
                 className="text-lg leading-[1.8] text-foreground/90"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
-                {claim.verdict}
+                {claim.ruling}
               </p>
             </div>
           </div>
@@ -252,7 +252,7 @@ function MatchCard({ claim }: { claim: Claim }) {
               className="text-[9px] uppercase tracking-[0.2em] text-muted/30"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              Click to {step === 0 ? "challenge" : step === 1 ? "rebut" : "judge"}
+              Click to {step === 0 ? "peer review" : step === 1 ? "defend" : "judge"}
             </span>
           </div>
         )}

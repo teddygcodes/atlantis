@@ -80,8 +80,8 @@ export function About() {
           {[
             { label: "DOMAINS", value: STATS.domains },
             { label: "STATES", value: STATS.states },
-            { label: "SURVIVING", value: STATS.surviving },
-            { label: "DESTROYED", value: STATS.destroyed },
+            { label: "VALIDATED", value: STATS.surviving },
+            { label: "REFUTED", value: STATS.destroyed },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <div

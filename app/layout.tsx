@@ -25,7 +25,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "ATLANTIS \u2014 Where Ideas Are Tested",
   description:
-    "A living intellectual publication where claims are challenged through structured debate. Only validated knowledge survives.",
+    "A living intellectual publication where hypotheses are challenged through structured peer review. Only validated knowledge survives.",
 };
 
 export const viewport: Viewport = {

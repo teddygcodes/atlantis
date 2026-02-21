@@ -28,7 +28,7 @@ export function Dispatches() {
           className="text-xl leading-relaxed text-muted"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
-          Long-form analysis of what the debates reveal about knowledge,
+          Long-form analysis of what peer review reveals about knowledge,
           argumentation, and the structure of ideas.
         </p>
       </header>

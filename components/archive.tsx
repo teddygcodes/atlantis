@@ -57,7 +57,7 @@ export function Archive() {
             letterSpacing: "0.25em",
           }}
         >
-          THE ARCHIVE
+          THE KNOWLEDGE BASE
         </h2>
         <p
           style={{
@@ -66,8 +66,8 @@ export function Archive() {
             color: "#a3a3a3",
           }}
         >
-          The surviving claims. Each one has withstood adversarial challenge and
-          earned its place in the vault.
+          The validated hypotheses. Each one has withstood adversarial peer review and
+          earned its place in the knowledge base.
         </p>
       </div>
 
@@ -104,7 +104,7 @@ export function Archive() {
           className="mx-auto max-w-[900px] py-20 text-center text-lg text-muted/40"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
-          No surviving claims in this domain.
+          No validated hypotheses in this domain.
         </p>
       )}
     </section>
@@ -171,7 +171,7 @@ function VaultEntry({ claim }: { claim: Claim }) {
               }`}
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              {claim.ruling}
+              {claim.verdict}
             </span>
             <span
               className="text-[10px] text-muted/40"
@@ -210,14 +210,14 @@ function VaultEntry({ claim }: { claim: Claim }) {
       >
         <div className="overflow-hidden">
           <div className="flex flex-col gap-4 border-t border-border/40 px-6 py-8">
-            <DebateStep label="Challenge" text={claim.challenge} side="left" />
-            <DebateStep label="Rebuttal" text={claim.rebuttal} side="right" />
+            <DebateStep label="Peer Review" text={claim.challenge} side="left" />
+            <DebateStep label="Defense" text={claim.rebuttal} side="right" />
             <div className="mx-auto mt-4 max-w-lg rounded border border-accent/10 bg-accent/5 px-6 py-5 text-center">
               <span
                 className="mb-2 block text-[9px] uppercase tracking-[0.25em] text-accent"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
-                Verdict
+                Ruling
               </span>
               <p
                 className="text-lg leading-relaxed text-foreground/80"

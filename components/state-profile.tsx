@@ -175,7 +175,7 @@ function DebateCard({ claim }: { claim: Claim }) {
           <div style={{ paddingTop: "20px" }}>
             <div className="mb-5 h-px" style={{ backgroundColor: "#1c1c1c" }} />
 
-            {/* Challenge */}
+            {/* Peer Review */}
             <div className="mb-5">
               <span
                 className="mb-2 block"
@@ -187,7 +187,7 @@ function DebateCard({ claim }: { claim: Claim }) {
                   textTransform: "uppercase" as const,
                 }}
               >
-                Challenge
+                Peer Review
               </span>
               <p
                 style={{
@@ -201,7 +201,7 @@ function DebateCard({ claim }: { claim: Claim }) {
               </p>
             </div>
 
-            {/* Rebuttal */}
+            {/* Defense */}
             <div className="mb-5">
               <span
                 className="mb-2 block"
@@ -213,7 +213,7 @@ function DebateCard({ claim }: { claim: Claim }) {
                   textTransform: "uppercase" as const,
                 }}
               >
-                Rebuttal
+                Defense
               </span>
               <p
                 style={{
@@ -227,7 +227,7 @@ function DebateCard({ claim }: { claim: Claim }) {
               </p>
             </div>
 
-            {/* Verdict */}
+            {/* Ruling */}
             <div>
               <span
                 className="mb-2 block"
@@ -239,7 +239,7 @@ function DebateCard({ claim }: { claim: Claim }) {
                   textTransform: "uppercase" as const,
                 }}
               >
-                Verdict &middot;{" "}
+                Ruling &middot;{" "}
                 <span style={{ color: rulingColor(claim.ruling) }}>
                   {claim.ruling}
                 </span>
@@ -252,7 +252,7 @@ function DebateCard({ claim }: { claim: Claim }) {
                   lineHeight: "1.8",
                 }}
               >
-                {claim.verdict}
+                {claim.ruling}
               </p>
             </div>
           </div>
@@ -554,7 +554,7 @@ export function StateProfile({ slug }: { slug: string }) {
         </div>
       </div>
 
-      {/* 4. KNOWLEDGE (surviving claims) */}
+      {/* 4. KNOWLEDGE (validated hypotheses) */}
       <div className="mb-20">
         <SectionHeading title="KNOWLEDGE" />
         {survivingClaims.length === 0 ? (
@@ -567,7 +567,7 @@ export function StateProfile({ slug }: { slug: string }) {
               fontStyle: "italic",
             }}
           >
-            No surviving claims yet.
+            No validated hypotheses yet.
           </p>
         ) : (
           <div className="flex flex-col gap-4">
@@ -621,9 +621,9 @@ export function StateProfile({ slug }: { slug: string }) {
         )}
       </div>
 
-      {/* 5. GRAVEYARD (destroyed claims) */}
+      {/* 5. REFUTED (refuted hypotheses) */}
       <div className="mb-20">
-        <SectionHeading title="GRAVEYARD" />
+        <SectionHeading title="REFUTED" />
         {destroyedClaims.length === 0 ? (
           <p
             className="scroll-reveal"
@@ -634,7 +634,7 @@ export function StateProfile({ slug }: { slug: string }) {
               fontStyle: "italic",
             }}
           >
-            No destroyed claims.
+            No refuted hypotheses.
           </p>
         ) : (
           <div className="flex flex-col gap-4">
@@ -669,7 +669,7 @@ export function StateProfile({ slug }: { slug: string }) {
                       color: "#dc2626",
                     }}
                   >
-                    DESTROYED
+                    REFUTED
                   </span>
                 </div>
                 <p

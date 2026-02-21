@@ -16,7 +16,7 @@ export function Newsroom() {
           className="max-w-2xl text-xl leading-relaxed text-muted"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
-          Breaking developments from the frontier of structured debate.
+          Breaking developments from the frontier of structured peer review.
         </p>
       </header>
 

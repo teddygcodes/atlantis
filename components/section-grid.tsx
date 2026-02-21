@@ -11,33 +11,33 @@ const SECTIONS: {
   href: string;
 }[] = [
   {
-    id: "Chronicle",
-    title: "Chronicle",
-    description: "what happened when ideas went to war",
+    id: "Research Timeline",
+    title: "Research Timeline",
+    description: "what happened when hypotheses went to war",
     href: "/chronicle",
   },
   {
     id: "States",
     title: "States",
-    description: "meet the minds that survived",
+    description: "meet the minds that validated",
     href: "/states",
   },
   {
-    id: "Archive",
-    title: "Archive",
-    description: "the knowledge that earned its place",
+    id: "Knowledge Base",
+    title: "Knowledge Base",
+    description: "the research that earned its place",
     href: "/archive",
   },
   {
-    id: "Debates",
-    title: "Debates",
-    description: "watch them fight",
+    id: "Peer Review",
+    title: "Peer Review",
+    description: "watch them defend their work",
     href: "/debates",
   },
   {
-    id: "Graveyard",
-    title: "Graveyard",
-    description: "not everyone makes it",
+    id: "Refuted",
+    title: "Refuted",
+    description: "not every hypothesis makes it",
     href: "/graveyard",
   },
 ];
