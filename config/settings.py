@@ -284,8 +284,16 @@ DEBATE_MATCHUPS = {
 # API CONFIGURATION
 # ═══════════════════════════════════════
 API_CONFIG = {
+    # Generic defaults (used as fallbacks in core/llm.py)
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 4096,
+    "temperature": 0.7,
+
+    # Rate limiting
     "rate_limit_seconds": 0.1,
     "rate_limit_enabled": True,
+
+    # Task-specific temperatures
     "temperature_research": 0.7,
     "temperature_judge": 0.2,        # Lower temp for consistent judging
     "temperature_content": 0.8,      # Higher temp for creative content

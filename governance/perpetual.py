@@ -1514,10 +1514,17 @@ class PerpetualEngine:
             amount = TOKEN_VALUES.get("rival_narrowed_by_critic", 800)
             challenger_state.earn_tokens(amount)
             return amount
+        elif out == "retracted":
+            # Retracted is partial success for challenger
+            amount = TOKEN_VALUES.get("rival_narrowed_by_critic", 800)
+            challenger_state.earn_tokens(amount)
+            return amount
         elif out in ("survived", "founding"):
             amount = TOKEN_VALUES.get("challenge_failed", -1000)
             challenger_state.deduct_tokens(abs(amount))
             return amount
+        else:
+            log(f"[WARNING] Unknown outcome in _apply_challenge_tokens: {out}")
         return 0
 
     # ─── STABILITY & DOMAIN HEALTH ────────────────────────────────
@@ -2260,7 +2267,9 @@ class PerpetualEngine:
             raw = claim.get("raw_claim_text", "")
             position = ""
             for line in raw.splitlines():
-                if line.strip().upper().startswith("POSITION:"):
+                line_upper = line.strip().upper()
+                # Extract either POSITION (old format) or HYPOTHESIS (new format)
+                if line_upper.startswith("POSITION:") or line_upper.startswith("HYPOTHESIS:"):
                     position = line.strip()
                     break
             if not position:

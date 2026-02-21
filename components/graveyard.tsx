@@ -111,7 +111,7 @@ function Tombstone({
           </svg>
         </div>
 
-        {/* Claim ID */}
+        {/* Hypothesis ID */}
         <span
           className="mb-4 block text-sm tracking-[0.2em] text-accent"
           style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
@@ -180,7 +180,7 @@ function Tombstone({
               className="text-lg font-semibold leading-[1.8] text-foreground/90"
               style={{ fontFamily: "var(--font-cormorant)" }}
             >
-              {claim.position}
+              {claim.hypothesis || claim.position}
             </p>
           </div>
 

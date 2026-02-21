@@ -108,7 +108,19 @@ def compute_states(claims: list) -> list:
 
         # Track learning events
         cycle = c.get("cycle_created", 0)
-        position = truncate(c.get("position", ""), 150)
+
+        # Fallback chain: hypothesis → position → parse from raw
+        position_raw = c.get("hypothesis", "") or c.get("position", "")
+        if not position_raw and c.get("raw_claim_text"):
+            # Parse from raw text as last resort
+            raw = c["raw_claim_text"]
+            for line in raw.splitlines():
+                line_upper = line.strip().upper()
+                if line_upper.startswith("POSITION:") or line_upper.startswith("HYPOTHESIS:"):
+                    position_raw = line.strip().split(":", 1)[1].strip() if ":" in line else ""
+                    break
+
+        position = truncate(position_raw, 150)
         if outcome == "destroyed" or status == "destroyed" or "REJECT" in ruling:
             sd["learning_events"].append(f"Cycle {cycle}: destroyed — {position}")
         elif status == "partial" or outcome == "partial":
@@ -120,7 +132,7 @@ def compute_states(claims: list) -> list:
         if not sd["approach"] or cycle >= max(
             (cl.get("cycle_created", 0) for cl in sd["claims"]), default=0
         ):
-            sd["approach"] = truncate(c.get("position", ""), 200)
+            sd["approach"] = truncate(position_raw, 200)
 
     states = []
     for name, sd in sorted(state_data.items()):
@@ -249,13 +261,27 @@ def compute_debates(claims: list) -> list:
         else:
             ruling = "PENDING"
 
+        # Fallback chain: hypothesis → position → parse from raw
+        position_raw = c.get("hypothesis", "") or c.get("position", "")
+        if not position_raw and c.get("raw_claim_text"):
+            # Parse from raw text as last resort
+            raw = c["raw_claim_text"]
+            for line in raw.splitlines():
+                line_upper = line.strip().upper()
+                if line_upper.startswith("POSITION:") or line_upper.startswith("HYPOTHESIS:"):
+                    position_raw = line.strip().split(":", 1)[1].strip() if ":" in line else ""
+                    break
+
         debates.append({
             "id": c.get("display_id", ""),
             "domain": get_domain(c.get("source_state", "")),
             "cycle": c.get("cycle_created", 0),
             "state": c.get("source_state", ""),
             "ruling": ruling,
-            "position": truncate(c.get("position", ""), 300),
+            "position": truncate(position_raw, 300),
+            "hypothesis": truncate(c.get("hypothesis", ""), 300),
+            "operational_def": truncate(c.get("operational_def", ""), 200),
+            "prediction": truncate(c.get("prediction", ""), 200),
             "challenge": truncate(c.get("raw_challenge_text", ""), 500),
             "rebuttal": truncate(c.get("raw_rebuttal_text", ""), 500),
             "verdict": truncate(c.get("outcome_reasoning", ""), 500),

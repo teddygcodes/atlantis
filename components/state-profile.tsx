@@ -298,9 +298,21 @@ export function StateProfile({ slug }: { slug: string }) {
 
   const stateHypotheses = HYPOTHESES.filter((c) => c.state === state.name);
   const validatedHypotheses = stateHypotheses.filter(
-    (c) => c.ruling === "REVISE" || c.ruling === "PARTIAL"
+    (c) => c.ruling === "SURVIVED" || c.ruling === "REVISE" || c.ruling === "PARTIAL"
   );
   const refutedHypotheses = stateHypotheses.filter((c) => c.ruling === "DESTROYED");
+
+  // Early return if no hypotheses
+  if (stateHypotheses.length === 0) {
+    return (
+      <div className="p-6 border border-border/50 rounded-lg bg-muted/30">
+        <p className="text-sm text-muted-foreground text-center">
+          No hypotheses submitted yet. Check back after the next governance cycle.
+        </p>
+      </div>
+    );
+  }
+
   const latestHypothesis = stateHypotheses.reduce(
     (a, b) => (a.cycle > b.cycle ? a : b),
     stateHypotheses[0]

@@ -38,7 +38,7 @@ export function Archive() {
   const containerRef = useScrollReveal([filter]);
 
   const validatedHypotheses = HYPOTHESES.filter(
-    (c) => c.ruling === "REVISE" || c.ruling === "PARTIAL"
+    (c) => c.ruling === "SURVIVED" || c.ruling === "REVISE" || c.ruling === "PARTIAL"
   );
   const filteredHypotheses =
     filter === "All"
@@ -187,7 +187,7 @@ function VaultEntry({ hypothesis }: { hypothesis: Hypothesis }) {
             className="text-lg font-semibold leading-relaxed text-foreground/90"
             style={{ fontFamily: "var(--font-cormorant)" }}
           >
-            {claim.position}
+            {claim.hypothesis || claim.position}
           </p>
         </div>
 

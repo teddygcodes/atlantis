@@ -122,6 +122,9 @@ export interface Debate {
   state: string;
   ruling: string;
   position: string;
+  hypothesis?: string;
+  operational_def?: string;
+  prediction?: string;
   challenge: string;
   rebuttal: string;
   verdict: string;

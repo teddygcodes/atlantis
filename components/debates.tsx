@@ -143,7 +143,7 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
         }}
         aria-label="Advance debate step"
       >
-        {/* Step 0: The claim */}
+        {/* Step 0: The hypothesis */}
         <div
           className="transition-all duration-500"
           style={{ opacity: step >= 0 ? 1 : 0 }}
@@ -159,7 +159,7 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
               className="text-2xl font-bold leading-[1.8] text-foreground"
               style={{ fontFamily: "var(--font-cormorant)" }}
             >
-              {claim.position}
+              {claim.hypothesis || claim.position}
             </p>
           </div>
         </div>

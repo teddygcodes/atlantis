@@ -448,9 +448,14 @@ def autofill_discovery_gap(claim_text: str, models: ModelRouter) -> Tuple[str, b
     if not needs_discovery_gap_autofill(claim_text):
         return claim_text, False
 
+    # Try POSITION first (old format), then HYPOTHESIS (new format)
     position_match = re.search(r"^\s*POSITION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+    hypothesis_match = re.search(r"^\s*HYPOTHESIS\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
     conclusion_match = re.search(r"^\s*CONCLUSION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
-    position = position_match.group(1).strip() if position_match else ""
+
+    # Use whichever format is present
+    main_statement_match = position_match or hypothesis_match
+    position = main_statement_match.group(1).strip() if main_statement_match else ""
     conclusion = conclusion_match.group(1).strip() if conclusion_match else ""
 
     response = models.complete(
@@ -460,7 +465,7 @@ def autofill_discovery_gap(claim_text: str, models: ModelRouter) -> Tuple[str, b
             "Respond with only the GAP ADDRESSED text, nothing else."
         ),
         user_prompt=(
-            f"POSITION:\n{position}\n\n"
+            f"MAIN STATEMENT:\n{position}\n\n"
             f"CONCLUSION:\n{conclusion}"
         ),
         max_tokens=180,
@@ -622,22 +627,27 @@ def validate_claim(
     }
 
     if claim_type == "discovery":
+        # Accept either POSITION (old format) or HYPOTHESIS (new format)
         position_match = re.search(r"^\s*POSITION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
-        if not position_match:
-            msg = "Discovery claims should include POSITION with an operational definition"
+        hypothesis_match = re.search(r"^\s*HYPOTHESIS\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+
+        if not position_match and not hypothesis_match:
+            msg = "Discovery claims should include POSITION or HYPOTHESIS with an operational definition"
             if strict_empirical:
                 errors.append(msg)
             else:
                 warnings.append(msg)
         else:
-            position_text = position_match.group(1)
+            # Use whichever format is present
+            main_statement_match = position_match or hypothesis_match
+            main_statement_text = main_statement_match.group(1)
             has_operational_definition = bool(re.search(
                 r"\b(defined as|operational(?:ly)?|measured by|quantified by|observed as|when\s+measured|by\s+tracking)\b",
-                position_text,
+                main_statement_text,
                 re.IGNORECASE,
             ))
             if not has_operational_definition:
-                msg = "Discovery POSITION should include an operational definition"
+                msg = "Discovery POSITION/HYPOTHESIS should include an operational definition"
                 if strict_empirical:
                     errors.append(msg)
                 else:
@@ -731,16 +741,31 @@ def extract_validation_rejection_types(claim_text: str, errors: List[str]) -> Li
         rejection_types.append("missing_challenge_target")
 
     # Soft discovery checks are counted even when they are warnings in non-empirical domains.
+    # Check both old and new format for operational definitions
     position_match = re.search(r"^\s*POSITION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
-    if not position_match:
+    hypothesis_match = re.search(r"^\s*HYPOTHESIS\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+    operational_def_match = re.search(r"^\s*OPERATIONAL\s+DEF\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
+
+    # Missing if none of these headers present
+    if not position_match and not hypothesis_match and not operational_def_match:
         rejection_types.append("missing_operational_definition")
     else:
-        position_text = position_match.group(1)
-        has_operational_definition = bool(re.search(
-            r"\b(defined as|operational(?:ly)?|measured by|quantified by|observed as|when\s+measured|by\s+tracking)\b",
-            position_text,
-            re.IGNORECASE,
-        ))
+        # Check if explicit OPERATIONAL DEF field exists (new format) - if so, operational def is present
+        if operational_def_match:
+            has_operational_definition = True
+        else:
+            # Otherwise check POSITION or HYPOTHESIS text for operational definition phrases
+            main_statement_match = position_match or hypothesis_match
+            if main_statement_match:
+                main_statement_text = main_statement_match.group(1)
+                has_operational_definition = bool(re.search(
+                    r"\b(defined as|operational(?:ly)?|measured by|quantified by|observed as|when\s+measured|by\s+tracking)\b",
+                    main_statement_text,
+                    re.IGNORECASE,
+                ))
+            else:
+                has_operational_definition = False
+
         if not has_operational_definition:
             rejection_types.append("missing_operational_definition")
 
@@ -793,20 +818,28 @@ def normalize_claim(claim_text: str, models: ModelRouter) -> dict:
             "Return valid JSON only, no other text."
         ),
         user_prompt=(
-            f"CLAIM TEXT:\n{claim_text}\n\n"
-            f"Extract and return JSON:\n"
+            f"Extract and return JSON from the claim text:\n\n"
             f'{{"claim_type": "foundation|discovery|challenge",\n'
-            f' "position": "one sentence",\n'
+            f' "position": "extract from POSITION field if present, else empty string",\n'
+            f' "hypothesis": "extract from HYPOTHESIS field if present, else empty string",\n'
+            f' "operational_def": "extract from OPERATIONAL DEF field if present, else empty string",\n'
+            f' "prediction": "extract from PREDICTION field if present, else empty string",\n'
             f' "reasoning_chain": ["step1", "step2", ...],\n'
             f' "conclusion": "one sentence",\n'
             f' "citations": ["#ID", ...],\n'
-            f' "keywords": ["term1", "term2", "term3"]}}'
+            f' "keywords": ["term1", "term2", "term3"]}}\n\n'
+            f'CLAIM TEXT:\n{claim_text}\n\n'
+            f'Extract all fields that are present. Use empty strings for fields not found.\n'
+            f'Both old format (POSITION) and new format (HYPOTHESIS/PREDICTION/OPERATIONAL DEF) are valid.'
         ),
         max_tokens=600,
     )
     parsed = _parse_json_response(response.content, default={
         "claim_type": "discovery",
         "position": "",
+        "hypothesis": "",
+        "operational_def": "",
+        "prediction": "",
         "reasoning_chain": [],
         "conclusion": "",
         "citations": [],
@@ -1143,9 +1176,9 @@ def determine_outcome(
     ruling_to_outcome = {
         "REJECT_FACT": "destroyed",
         "REJECT_LOGIC": "destroyed",
-        "REJECT_SCOPE": "retracted",
-        "REJECT_CITATION": "retracted",
-        "REJECT_CLARITY": "retracted",
+        "REJECT_SCOPE": "destroyed",
+        "REJECT_CITATION": "destroyed",
+        "REJECT_CLARITY": "destroyed",
         "REVISE": "partial",
         "SURVIVED": "survived",
     }
