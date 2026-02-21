@@ -145,7 +145,7 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
       <div className="relative z-10 flex flex-col items-center px-6">
         <div className="hero-fade-in mb-14">
           <Image
-            src="/images/logo.png"
+            src="/images/hero-emblem.png"
             alt="Atlantis logo"
             width={420}
             height={420}
