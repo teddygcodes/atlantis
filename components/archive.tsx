@@ -188,7 +188,7 @@ function VaultEntry({ hypothesis }: { hypothesis: Hypothesis }) {
             className="text-lg font-semibold leading-relaxed text-foreground/90"
             style={{ fontFamily: "var(--font-cormorant)" }}
           >
-            {claim.hypothesis || claim.position}
+            {claim.hypothesis ?? claim.position}
           </p>
         </div>
 
@@ -205,7 +205,7 @@ function VaultEntry({ hypothesis }: { hypothesis: Hypothesis }) {
       </button>
 
       <div className="px-6 pb-2">
-        <ExplainSimply text={claim.hypothesis || claim.position} type="hypothesis" />
+        <ExplainSimply text={claim.hypothesis ?? claim.position} type="hypothesis" />
       </div>
 
       {/* Expanded debate content */}
