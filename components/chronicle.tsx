@@ -81,8 +81,9 @@ export function Chronicle() {
         <p
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "16px",
-            color: "#e5e5e5",
+            fontSize: "18px",
+            fontWeight: 600,
+            color: "#d4d4d4",
           }}
         >
           Three cycles. Eighteen claims. A civilization learning what holds up
@@ -168,7 +169,7 @@ export function Chronicle() {
 
                 {/* Narrative */}
                 <p
-                  className="mb-8 flex-1 text-lg leading-[1.9] text-foreground/80"
+                  className="mb-8 flex-1 text-lg font-semibold leading-[1.9] text-foreground/90"
                   style={{ fontFamily: "var(--font-cormorant)" }}
                 >
                   {entry.narrative}

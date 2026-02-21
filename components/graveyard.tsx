@@ -46,8 +46,9 @@ export function Graveyard() {
         <p
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "16px",
-            color: "#e5e5e5",
+            fontSize: "18px",
+            fontWeight: 600,
+            color: "#d4d4d4",
           }}
         >
           The fallen. Every destroyed claim is preserved here as a monument to
@@ -120,7 +121,7 @@ function Tombstone({
 
         {/* Epitaph */}
         <p
-          className="mb-6 text-lg italic leading-relaxed text-foreground/80"
+          className="mb-6 text-lg font-semibold italic leading-relaxed text-foreground/90"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
           &ldquo;{getEpitaph(claim.verdict)}&rdquo;
@@ -176,7 +177,7 @@ function Tombstone({
               The Claim
             </span>
             <p
-              className="text-lg leading-[1.8] text-foreground/90"
+              className="text-lg font-semibold leading-[1.8] text-foreground/90"
               style={{ fontFamily: "var(--font-cormorant)" }}
             >
               {claim.position}
@@ -194,7 +195,7 @@ function Tombstone({
               Challenge
             </span>
             <p
-              className="text-base leading-[1.8] text-foreground/80"
+              className="text-base font-semibold leading-[1.8] text-foreground/90"
               style={{ fontFamily: "var(--font-cormorant)" }}
             >
               {claim.challenge}
@@ -212,7 +213,7 @@ function Tombstone({
               Rebuttal
             </span>
             <p
-              className="text-base leading-[1.8] text-foreground/80"
+              className="text-base font-semibold leading-[1.8] text-foreground/90"
               style={{ fontFamily: "var(--font-cormorant)" }}
             >
               {claim.rebuttal}
@@ -230,7 +231,7 @@ function Tombstone({
               Verdict
             </span>
             <p
-              className="text-base leading-[1.8] text-foreground/70"
+              className="text-base font-semibold leading-[1.8] text-foreground/80"
               style={{ fontFamily: "var(--font-cormorant)" }}
             >
               {claim.verdict}

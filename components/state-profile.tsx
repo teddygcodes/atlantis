@@ -192,9 +192,10 @@ function DebateCard({ claim }: { claim: Claim }) {
               <p
                 style={{
                   fontFamily: "var(--font-body)",
-                  fontSize: "15px",
-                  color: "#a3a3a3",
-                  lineHeight: "1.8",
+          fontSize: "16px",
+          fontWeight: 600,
+          color: "#d4d4d4",
+          lineHeight: "1.8",
                 }}
               >
                 {claim.challenge}
@@ -218,9 +219,10 @@ function DebateCard({ claim }: { claim: Claim }) {
               <p
                 style={{
                   fontFamily: "var(--font-body)",
-                  fontSize: "15px",
-                  color: "#a3a3a3",
-                  lineHeight: "1.8",
+          fontSize: "16px",
+          fontWeight: 600,
+          color: "#d4d4d4",
+          lineHeight: "1.8",
                 }}
               >
                 {claim.rebuttal}

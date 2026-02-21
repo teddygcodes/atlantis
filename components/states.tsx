@@ -58,8 +58,9 @@ export function States() {
         <p
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "16px",
-            color: "#a3a3a3",
+            fontSize: "18px",
+            fontWeight: 600,
+            color: "#d4d4d4",
           }}
         >
           Six entities. Three domains. Each one learning from its failures.

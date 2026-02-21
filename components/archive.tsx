@@ -62,8 +62,9 @@ export function Archive() {
         <p
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "16px",
-            color: "#a3a3a3",
+            fontSize: "18px",
+            color: "#d4d4d4",
+            fontWeight: 600,
           }}
         >
           The surviving claims. Each one has withstood adversarial challenge and
@@ -181,7 +182,7 @@ function VaultEntry({ claim }: { claim: Claim }) {
             </span>
           </div>
           <p
-            className="text-lg leading-relaxed text-foreground/80"
+            className="text-lg font-semibold leading-relaxed text-foreground/90"
             style={{ fontFamily: "var(--font-cormorant)" }}
           >
             {claim.position}
@@ -220,7 +221,7 @@ function VaultEntry({ claim }: { claim: Claim }) {
                 Verdict
               </span>
               <p
-                className="text-lg leading-relaxed text-foreground/80"
+                className="text-lg font-semibold leading-relaxed text-foreground/90"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {claim.verdict}
@@ -256,7 +257,7 @@ function DebateStep({
           {label}
         </span>
         <p
-          className="text-base leading-[1.8] text-muted"
+          className="text-base font-semibold leading-[1.8] text-foreground/80"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
           {text}

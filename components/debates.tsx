@@ -46,8 +46,9 @@ export function Debates() {
         <p
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "16px",
-            color: "#e5e5e5",
+            fontSize: "18px",
+            fontWeight: 600,
+            color: "#d4d4d4",
           }}
         >
           Every claim. Every challenge. Every verdict. Watch the adversarial
@@ -155,7 +156,7 @@ function MatchCard({ claim }: { claim: Claim }) {
               The Claim
             </span>
             <p
-              className="text-2xl leading-[1.8] text-foreground"
+              className="text-2xl font-bold leading-[1.8] text-foreground"
               style={{ fontFamily: "var(--font-cormorant)" }}
             >
               {claim.position}
@@ -174,7 +175,7 @@ function MatchCard({ claim }: { claim: Claim }) {
                 Challenge
               </span>
               <p
-                className="text-xl leading-[1.8] text-foreground/90"
+                className="text-xl font-semibold leading-[1.8] text-foreground/90"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {claim.challenge}
@@ -194,7 +195,7 @@ function MatchCard({ claim }: { claim: Claim }) {
                 Rebuttal
               </span>
               <p
-                className="text-xl leading-[1.8] text-foreground/90"
+                className="text-xl font-semibold leading-[1.8] text-foreground/90"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {claim.rebuttal}
@@ -227,7 +228,7 @@ function MatchCard({ claim }: { claim: Claim }) {
                 Verdict
               </span>
               <p
-                className="text-xl leading-[1.8] text-foreground/90"
+                className="text-xl font-semibold leading-[1.8] text-foreground/90"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {claim.verdict}

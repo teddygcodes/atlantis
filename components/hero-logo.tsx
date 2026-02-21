@@ -174,19 +174,19 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
           <div className="hero-fade-in-delay-2 flex flex-col items-center gap-2">
             <p
               className="text-center"
-              style={{ fontFamily: "var(--font-cormorant)", fontSize: "20px", color: "#a3a3a3" }}
+              style={{ fontFamily: "var(--font-cormorant)", fontSize: "22px", fontWeight: 600, color: "#d4d4d4" }}
             >
               Claims are made.
             </p>
             <p
               className="text-center"
-              style={{ fontFamily: "var(--font-cormorant)", fontSize: "20px", color: "#a3a3a3" }}
+              style={{ fontFamily: "var(--font-cormorant)", fontSize: "22px", fontWeight: 600, color: "#d4d4d4" }}
             >
               Challenges are issued.
             </p>
             <p
               className="text-center"
-              style={{ fontFamily: "var(--font-cormorant)", fontSize: "20px", color: "#a3a3a3" }}
+              style={{ fontFamily: "var(--font-cormorant)", fontSize: "22px", fontWeight: 600, color: "#d4d4d4" }}
             >
               Only validated knowledge survives.
             </p>

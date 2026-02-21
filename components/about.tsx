@@ -46,8 +46,9 @@ export function About() {
         <p
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "16px",
-            color: "#a3a3a3",
+            fontSize: "18px",
+            fontWeight: 600,
+            color: "#d4d4d4",
           }}
         >
           The civilization is learning.
@@ -62,10 +63,10 @@ export function About() {
         {ABOUT_PARAGRAPHS.map((paragraph, index) => (
           <p
             key={index}
-            className={`scroll-reveal text-center text-xl leading-[1.9] ${
+            className={`scroll-reveal text-center text-xl font-semibold leading-[1.9] ${
               index === ABOUT_PARAGRAPHS.length - 1
-                ? "font-semibold text-foreground"
-                : "text-muted"
+                ? "font-bold text-foreground"
+                : "text-foreground/80"
             }`}
             style={{ fontFamily: "var(--font-cormorant)" }}
           >
