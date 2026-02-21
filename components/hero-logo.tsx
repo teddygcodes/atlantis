@@ -143,14 +143,14 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
       <ParticleField />
 
       <div className="relative z-10 flex flex-col items-center px-6">
-        <div className="hero-fade-in mb-12">
+        <div className="hero-fade-in mb-14">
           <Image
             src="/images/logo.png"
             alt="Atlantis logo"
-            width={340}
-            height={340}
-            className="object-contain drop-shadow-[0_0_60px_rgba(220,38,38,0.2)]"
-            style={{ width: "340px", height: "auto" }}
+            width={420}
+            height={420}
+            className="object-contain drop-shadow-[0_0_80px_rgba(220,38,38,0.25)]"
+            style={{ width: "min(420px, 70vw)", height: "auto" }}
             priority
             crossOrigin="anonymous"
           />
