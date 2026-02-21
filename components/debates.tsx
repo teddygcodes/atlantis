@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { HYPOTHESES, type Hypothesis } from "@/lib/data";
+import { ExplainSimply } from "@/components/explain-simply";
 
 const CYCLE_FILTERS = [1, 2, 3] as const;
 
@@ -161,6 +162,7 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
             >
               {claim.hypothesis || claim.position}
             </p>
+            <ExplainSimply text={claim.hypothesis || claim.position} type="hypothesis" />
           </div>
         </div>
 
@@ -180,6 +182,7 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
               >
                 {claim.challenge}
               </p>
+              <ExplainSimply text={claim.challenge} type="peer review" />
             </div>
           </div>
         )}
@@ -200,6 +203,7 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
               >
                 {claim.rebuttal}
               </p>
+              <ExplainSimply text={claim.rebuttal} type="defense" />
             </div>
           </div>
         )}
@@ -233,6 +237,7 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
               >
                 {claim.verdict}
               </p>
+              <ExplainSimply text={claim.verdict} type="ruling" />
             </div>
           </div>
         )}
