@@ -142,7 +142,7 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
     >
       <ParticleField />
 
-      <div className="relative z-10 flex flex-col items-center justify-center gap-4 px-6" style={{ height: "100dvh" }}>
+      <div className="relative z-10 flex flex-col items-center justify-center gap-4 px-6" style={{ minHeight: "100dvh" }}>
         {/* Logo */}
         <div className="hero-wave-logo flex-shrink-0">
           <Image
