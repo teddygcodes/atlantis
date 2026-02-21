@@ -160,9 +160,9 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
               className="text-2xl font-bold leading-[1.8] text-foreground"
               style={{ fontFamily: "var(--font-cormorant)" }}
             >
-              {claim.hypothesis || claim.position}
+              {claim.hypothesis ?? claim.position}
             </p>
-            <ExplainSimply text={claim.hypothesis || claim.position} type="hypothesis" />
+            <ExplainSimply text={claim.hypothesis ?? claim.position} type="hypothesis" />
           </div>
         </div>
 

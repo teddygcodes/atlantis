@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 const cache = new Map<string, string>();
+const pendingRequests = new Map<string, Promise<string>>();
 
 export function ExplainSimply({
   text,
@@ -14,9 +15,16 @@ export function ExplainSimply({
   const [explanation, setExplanation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleClick = useCallback(
     async (e: React.MouseEvent | React.KeyboardEvent) => {
+      if (!mounted) return;
+
       e.stopPropagation();
       e.preventDefault();
 
@@ -35,25 +43,42 @@ export function ExplainSimply({
 
       setLoading(true);
       try {
-        const res = await fetch("/api/explain", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, type }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.explanation) {
-          throw new Error(data.error || "Failed");
+        const existingRequest = pendingRequests.get(cacheKey);
+        const request =
+          existingRequest ??
+          fetch("/api/explain", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, type }),
+          })
+            .then(async (res) => {
+              const data = await res.json();
+              if (!res.ok || !data.explanation) {
+                throw new Error(data.error || "Failed");
+              }
+              cache.set(cacheKey, data.explanation);
+              return data.explanation as string;
+            })
+            .finally(() => {
+              pendingRequests.delete(cacheKey);
+            });
+
+        if (!existingRequest) {
+          pendingRequests.set(cacheKey, request);
         }
-        cache.set(cacheKey, data.explanation);
-        setExplanation(data.explanation);
+
+        const result = await request;
+        setExplanation(result);
       } catch {
         setExplanation("Unable to generate explanation. Please try again.");
       } finally {
         setLoading(false);
       }
     },
-    [open, text, type]
+    [mounted, open, text, type]
   );
+
+  if (!mounted) return null;
 
   return (
     <div
@@ -118,44 +143,46 @@ export function ExplainSimply({
             IN PLAIN ENGLISH:
           </span>
 
-          {loading ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div
+          <div aria-live="polite">
+            {loading ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div
+                  style={{
+                    width: "12px",
+                    height: "12px",
+                    border: "1.5px solid #dc262640",
+                    borderTopColor: "#dc2626",
+                    borderRadius: "50%",
+                    animation: "spin 0.8s linear infinite",
+                  }}
+                />
+                <span
+                  style={{
+                    fontFamily: "var(--font-ibm-plex-mono)",
+                    fontSize: "10px",
+                    color: "#525252",
+                    letterSpacing: "0.1em",
+                  }}
+                >
+                  THINKING...
+                </span>
+              </div>
+            ) : (
+              <p
                 style={{
-                  width: "12px",
-                  height: "12px",
-                  border: "1.5px solid #dc262640",
-                  borderTopColor: "#dc2626",
-                  borderRadius: "50%",
-                  animation: "spin 0.8s linear infinite",
-                }}
-              />
-              <span
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  fontSize: "10px",
-                  color: "#525252",
-                  letterSpacing: "0.1em",
+                  fontFamily: "var(--font-body)",
+                  fontSize: "16px",
+                  fontStyle: "italic",
+                  color: "#a3a3a3",
+                  lineHeight: "1.7",
+                  margin: 0,
+                  fontWeight: 500,
                 }}
               >
-                THINKING...
-              </span>
-            </div>
-          ) : (
-            <p
-              style={{
-                fontFamily: "var(--font-body)",
-                fontSize: "16px",
-                fontStyle: "italic",
-                color: "#a3a3a3",
-                lineHeight: "1.7",
-                margin: 0,
-                fontWeight: 500,
-              }}
-            >
-              {explanation}
-            </p>
-          )}
+                {explanation}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>

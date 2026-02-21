@@ -1,3 +1,9 @@
+:root {
+  --font-cinzel: "Cinzel", serif;
+  --font-cormorant: "Cormorant Garamond", serif;
+  --font-ibm-plex-mono: "IBM Plex Mono", monospace;
+}
+
 @import "tailwindcss";
 
 @theme {
