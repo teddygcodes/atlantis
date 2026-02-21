@@ -119,7 +119,7 @@ function VaultEntry({ claim }: { claim: Claim }) {
 
   return (
     <article
-      className="scroll-reveal group overflow-hidden rounded border border-border/60 transition-all duration-500 hover:border-border"
+      className="group overflow-hidden rounded border border-border/60 transition-all duration-500 hover:border-border"
       style={{
         boxShadow: isSurviving
           ? "0 0 0 0 rgba(220, 38, 38, 0)"
