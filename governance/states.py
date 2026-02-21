@@ -214,13 +214,16 @@ class State:
         base += (
             f"{claim_type_hint}"
             "Use this structure:\n\n"
-            "CLAIM TYPE: [Foundation|Discovery|Challenge]\n"
-            "POSITION: [one sentence]\n"
-            "STEP 1: [reasoning]\n"
-            "STEP 2: [reasoning]\n"
+            "RESEARCH TYPE: [Hypothesis|Extension|Challenge]\n"
+            "HYPOTHESIS: [one sentence — testable prediction]\n"
+            "OPERATIONAL DEF: [key terms defined measurably]\n"
+            "STEP 1: [evidence/reasoning]\n"
+            "STEP 2: [evidence/reasoning]\n"
             "(add steps as needed)\n"
-            "CONCLUSION: [one sentence]\n"
-            "CITATIONS: [#ID, #ID] (if applicable)\n"
+            "PREDICTION: [what this predicts that can be verified]\n"
+            "CONCLUSION: [one sentence summary]\n"
+            "GAP ADDRESSED: [what new ground this covers]\n"
+            "CITATIONS: [#IDs from knowledge base, or real literature references]\n"
             "KEYWORDS: [3-5 terms]"
         )
         response = self.models.complete(
@@ -349,23 +352,56 @@ class State:
 
 
 def detect_claim_type(claim_text: str) -> str:
-    """Best-effort claim type detection from raw claim text."""
+    """
+    Best-effort claim type detection from raw claim text.
+    Accepts both old format (CLAIM TYPE: Foundation/Discovery/Challenge)
+    and new format (RESEARCH TYPE: Hypothesis/Extension/Challenge).
+    """
     text_upper = (claim_text or "").upper()
-    explicit_type_patterns = [
+
+    # Old format patterns
+    old_format_patterns = [
         r"\bCLAIM\s*TYPE\b\s*[:\-]?\s*(FOUNDATION|DISCOVERY|CHALLENGE)",
         r"\bTYPE\b\s*[:\-]?\s*(FOUNDATION|DISCOVERY|CHALLENGE)",
         r"\b(FOUNDATION|DISCOVERY|CHALLENGE)\s+CLAIM\b",
         r"^\s*(FOUNDATION|DISCOVERY|CHALLENGE)\b",
     ]
+
+    # New format patterns (Hypothesis/Extension/Challenge)
+    new_format_patterns = [
+        r"\bRESEARCH\s*TYPE\b\s*[:\-]?\s*(HYPOTHESIS|EXTENSION|CHALLENGE)",
+        r"\b(HYPOTHESIS|EXTENSION)\s+[:\-]",  # "HYPOTHESIS:" at start of line
+    ]
+
     explicit_types = {
         m.group(1).upper()
-        for p in explicit_type_patterns
+        for p in old_format_patterns
         for m in re.finditer(p, text_upper, re.IGNORECASE | re.MULTILINE)
     }
 
+    new_types = {
+        m.group(1).upper()
+        for p in new_format_patterns
+        for m in re.finditer(p, text_upper, re.IGNORECASE | re.MULTILINE)
+    }
+
+    # Map new types to old types
+    type_mapping = {
+        "HYPOTHESIS": "discovery",
+        "EXTENSION": "foundation",
+        "CHALLENGE": "challenge",
+    }
+
+    # If new format found, map to old type
+    if len(new_types) == 1:
+        new_type = next(iter(new_types))
+        return type_mapping.get(new_type, new_type.lower())
+
+    # If old format found, use it
     if len(explicit_types) == 1:
         return next(iter(explicit_types)).lower()
-    if len(explicit_types) > 1:
+
+    if len(explicit_types) > 1 or len(new_types) > 1:
         return ""
 
     implies_challenge = bool(re.search(
@@ -515,19 +551,28 @@ def validate_claim(
     text_upper = claim_text.upper()
     strict_empirical = (domain_type or "philosophical").strip().lower() == "empirical"
 
-    # Must declare or clearly imply a claim type.
-    explicit_type_patterns = [
+    # Must declare or clearly imply a type (accepts both old and new formats).
+    old_format_patterns = [
         r"\bCLAIM\s*TYPE\b\s*[:\-]?\s*(FOUNDATION|DISCOVERY|CHALLENGE)",
         r"\bTYPE\b\s*[:\-]?\s*(FOUNDATION|DISCOVERY|CHALLENGE)",
         r"\b(FOUNDATION|DISCOVERY|CHALLENGE)\s+CLAIM\b",
         r"^\s*(FOUNDATION|DISCOVERY|CHALLENGE)\b",
     ]
+    new_format_patterns = [
+        r"\bRESEARCH\s*TYPE\b\s*[:\-]?\s*(HYPOTHESIS|EXTENSION|CHALLENGE)",
+        r"\b(HYPOTHESIS|EXTENSION)\s+[:\-]",
+    ]
     explicit_types = {
         m.group(1).upper()
-        for p in explicit_type_patterns
+        for p in old_format_patterns
         for m in re.finditer(p, text_upper, re.IGNORECASE | re.MULTILINE)
     }
-    has_explicit_type = bool(explicit_types)
+    new_types = {
+        m.group(1).upper()
+        for p in new_format_patterns
+        for m in re.finditer(p, text_upper, re.IGNORECASE | re.MULTILINE)
+    }
+    has_explicit_type = bool(explicit_types) or bool(new_types)
     implies_challenge = bool(re.search(
         r"\b(reservation|concern|critic|reject|wrong|fails?|flaw|counter|dispute|challenge)\b",
         text_upper,
@@ -540,11 +585,11 @@ def validate_claim(
     ))
     has_type = has_explicit_type or implies_challenge or implies_discovery
     if not has_type:
-        errors.append("Missing CLAIM TYPE declaration (Foundation|Discovery|Challenge)")
+        errors.append("Missing CLAIM TYPE/RESEARCH TYPE declaration (Foundation/Hypothesis|Discovery/Extension|Challenge)")
 
     claim_type = detect_claim_type(claim_text)
-    if len(explicit_types) > 1:
-        errors.append("Ambiguous CLAIM TYPE: include exactly one of Foundation|Discovery|Challenge")
+    if len(explicit_types) > 1 or len(new_types) > 1 or (explicit_types and new_types):
+        errors.append("Ambiguous TYPE: include exactly one type declaration")
         claim_type = ""
 
     # Must have at least one reasoning step, explicit OR natural-language chain.
@@ -557,16 +602,17 @@ def validate_claim(
     if not has_step:
         errors.append("Missing at least one reasoning STEP")
 
-    # Must have a position or conclusion (templated field OR natural-language conclusion sentence).
+    # Must have a position/hypothesis or conclusion (accepts both old and new formats).
     has_position_header = bool(re.search(r'\bPOSITION\b\s*[:\-]', text_upper))
+    has_hypothesis_header = bool(re.search(r'\bHYPOTHESIS\b\s*[:\-]', text_upper))
     has_conclusion_header = bool(re.search(r'\b(CONCLUSION|THEREFORE|FINAL\s+CLAIM)\b\s*[:\-]?', text_upper))
     has_natural_conclusion = bool(re.search(
         r"\b(i\s+(propose|conclude|argue|identify)|we\s+(propose|conclude|argue|identify)|this\s+(implies|shows)|in\s+conclusion|key\s+findings?)\b",
         text_upper,
         re.IGNORECASE,
     ))
-    if claim_type in {"foundation", "discovery"} and not (has_position_header or has_conclusion_header or has_natural_conclusion):
-        errors.append("Missing POSITION or CONCLUSION statement")
+    if claim_type in {"foundation", "discovery"} and not (has_position_header or has_hypothesis_header or has_conclusion_header or has_natural_conclusion):
+        errors.append("Missing POSITION/HYPOTHESIS or CONCLUSION statement")
 
     surviving_claims = db.get_surviving_claims() if db else []
     main_ids = {
