@@ -3,10 +3,15 @@
 import { useState, useEffect, useRef } from "react";
 import { CLAIMS, type Claim } from "@/lib/data";
 
-function useScrollReveal() {
-  const ref = useRef<HTMLDivElement>(null);
+const CYCLE_FILTERS = [1, 2, 3] as const;
+
+export function Debates() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [activeCycle, setActiveCycle] = useState<number>(1);
+
+  // Re-observe .scroll-reveal elements whenever the cycle changes
   useEffect(() => {
-    const el = ref.current;
+    const el = containerRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
       (entries) => {
@@ -20,18 +25,9 @@ function useScrollReveal() {
       observer.observe(child)
     );
     return () => observer.disconnect();
-  }, []);
-  return ref;
-}
-
-const CYCLE_FILTERS = [1, 2, 3] as const;
-
-export function Debates() {
-  const containerRef = useScrollReveal();
-  const [activeCycle, setActiveCycle] = useState<number>(1);
+  }, [activeCycle]);
 
   const filteredClaims = CLAIMS.filter((c) => c.cycle === activeCycle);
-
   return (
     <section ref={containerRef} className="text-center">
       {/* Page header - centered */}
