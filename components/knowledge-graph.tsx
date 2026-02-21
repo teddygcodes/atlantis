@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { CLAIMS, type Claim } from "@/lib/data";
+import { HYPOTHESES, type Hypothesis } from "@/lib/data";
 
 interface GraphNode {
   id: string;
-  claim: Claim;
+  claim: Hypothesis;
   x: number;
   y: number;
   radius: number;
@@ -24,7 +24,7 @@ interface GraphEdge {
  */
 function buildAndLayoutGraph(
   stateName: string,
-  stateClaims: Claim[],
+  stateClaims: Hypothesis[],
   width: number,
   height: number
 ): { nodes: GraphNode[]; edges: GraphEdge[] } {
@@ -32,7 +32,7 @@ function buildAndLayoutGraph(
     return { nodes: [], edges: [] };
 
   const domain = stateClaims[0].domain;
-  const otherClaims = CLAIMS.filter(
+  const otherClaims = HYPOTHESES.filter(
     (c) => c.domain === domain && c.state !== stateName
   );
   const allClaims = [...stateClaims, ...otherClaims];
@@ -158,7 +158,7 @@ export function KnowledgeGraph({
   stateClaims,
 }: {
   stateName: string;
-  stateClaims: Claim[];
+  stateClaims: Hypothesis[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -396,8 +396,8 @@ export function KnowledgeGraph({
           }}
         >
           {[
-            { color: "#dc2626", label: "SURVIVING" },
-            { color: "#525252", label: "DESTROYED" },
+            { color: "#dc2626", label: "VALIDATED" },
+            { color: "#525252", label: "REFUTED" },
             { color: "#404040", label: "OTHER STATE", size: 8, opacity: 0.5 },
           ].map((item) => (
             <div key={item.label} className="flex items-center gap-2">

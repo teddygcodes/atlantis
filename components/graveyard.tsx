@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CLAIMS, type Claim } from "@/lib/data";
+import { HYPOTHESES, type Hypothesis } from "@/lib/data";
 
 export function Graveyard() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,7 +26,7 @@ export function Graveyard() {
     return () => observer.disconnect();
   }, []);
 
-  const destroyedClaims = CLAIMS.filter((c) => c.ruling === "DESTROYED");
+  const refutedHypotheses = HYPOTHESES.filter((c) => c.ruling === "DESTROYED");
 
   return (
     <section ref={containerRef}>
@@ -41,7 +41,7 @@ export function Graveyard() {
             letterSpacing: "0.25em",
           }}
         >
-          THE GRAVEYARD
+          REFUTED
         </h2>
         <p
           style={{
@@ -51,7 +51,7 @@ export function Graveyard() {
             color: "#d4d4d4",
           }}
         >
-          The fallen. Every destroyed claim is preserved here as a monument to
+          Every refuted hypothesis is preserved here as a record of
           what the system will not accept.
         </p>
       </div>
@@ -60,13 +60,13 @@ export function Graveyard() {
 
       {/* Tombstones */}
       <div className="mx-auto flex max-w-[900px] flex-col gap-12">
-        {destroyedClaims.map((claim) => (
+        {refutedHypotheses.map((hypothesis) => (
           <Tombstone
-            key={claim.id}
-            claim={claim}
-            isExpanded={expandedId === claim.id}
+            key={hypothesis.id}
+            claim={hypothesis}
+            isExpanded={expandedId === hypothesis.id}
             onToggle={() =>
-              setExpandedId(expandedId === claim.id ? null : claim.id)
+              setExpandedId(expandedId === hypothesis.id ? null : hypothesis.id)
             }
           />
         ))}
@@ -85,7 +85,7 @@ function Tombstone({
   isExpanded,
   onToggle,
 }: {
-  claim: Claim;
+  claim: Hypothesis;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
@@ -174,7 +174,7 @@ function Tombstone({
               className="mb-2 block text-xs uppercase tracking-[0.2em] text-foreground/40"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              The Claim
+              The Hypothesis
             </span>
             <p
               className="text-lg font-semibold leading-[1.8] text-foreground/90"
@@ -269,5 +269,5 @@ function Tombstone({
 
 function getEpitaph(verdict: string): string {
   const firstSentence = verdict.split(". ")[0];
-  return firstSentence.replace(/^Destroyed\.\s*/i, "").trim();
+  return firstSentence.replace(/^(Destroyed|Refuted)\.\s*/i, "").trim();
 }

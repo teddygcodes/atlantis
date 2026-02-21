@@ -176,7 +176,7 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
               className="hero-wave-line-1 text-center"
               style={{ fontFamily: "var(--font-cormorant)", fontSize: "22px", fontWeight: 600, color: "#d4d4d4" }}
             >
-              Claims are made.
+              Hypotheses are proposed.
             </p>
             <p
               className="hero-wave-line-2 text-center"

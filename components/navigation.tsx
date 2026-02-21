@@ -6,11 +6,11 @@ import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/data";
 
 const ROUTE_MAP: Record<string, string> = {
-  Chronicle: "/chronicle",
+  "Research Timeline": "/chronicle",
   States: "/states",
-  Archive: "/archive",
+  "Knowledge Base": "/archive",
   Debates: "/debates",
-  Graveyard: "/graveyard",
+  Refuted: "/graveyard",
   About: "/about",
 };
 

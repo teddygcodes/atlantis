@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { STATES, CLAIMS, type StateEntity, type Claim } from "@/lib/data";
+import { STATES, HYPOTHESES, type StateEntity, type Hypothesis } from "@/lib/data";
 import { KnowledgeGraph } from "@/components/knowledge-graph";
 
 function useScrollReveal() {
@@ -81,7 +81,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 /* ───────────── Debate Accordion ───────────── */
 
-function DebateCard({ claim, index }: { claim: Claim; index: number }) {
+function DebateCard({ claim, index }: { claim: Hypothesis; index: number }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -134,7 +134,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
           {rulingBadge(claim.ruling)}
         </div>
 
-        {/* Claim text */}
+        {/* Hypothesis text */}
         <p
           style={{
             fontFamily: "var(--font-body)",
@@ -296,14 +296,14 @@ export function StateProfile({ slug }: { slug: string }) {
     );
   }
 
-  const stateClaims = CLAIMS.filter((c) => c.state === state.name);
-  const survivingClaims = stateClaims.filter(
+  const stateHypotheses = HYPOTHESES.filter((c) => c.state === state.name);
+  const validatedHypotheses = stateHypotheses.filter(
     (c) => c.ruling === "REVISE" || c.ruling === "PARTIAL"
   );
-  const destroyedClaims = stateClaims.filter((c) => c.ruling === "DESTROYED");
-  const latestClaim = stateClaims.reduce(
+  const refutedHypotheses = stateHypotheses.filter((c) => c.ruling === "DESTROYED");
+  const latestHypothesis = stateHypotheses.reduce(
     (a, b) => (a.cycle > b.cycle ? a : b),
-    stateClaims[0]
+    stateHypotheses[0]
   );
 
   const total = state.wins + state.partials + state.losses;
@@ -315,8 +315,8 @@ export function StateProfile({ slug }: { slug: string }) {
   else if (survivalPct >= 60) tier = "SILVER";
   else if (survivalPct >= 40) tier = "BRONZE";
 
-  const claimsByCycle = [1, 2, 3].map((cycle) =>
-    stateClaims.filter((c) => c.cycle === cycle)
+  const hypothesesByCycle = [1, 2, 3].map((cycle) =>
+    stateHypotheses.filter((c) => c.cycle === cycle)
   );
 
   return (
@@ -502,7 +502,7 @@ export function StateProfile({ slug }: { slug: string }) {
                 letterSpacing: "0.1em",
               }}
             >
-              {latestClaim.id}
+              {latestHypothesis.id}
             </span>
             <span
               style={{
@@ -512,7 +512,7 @@ export function StateProfile({ slug }: { slug: string }) {
                 letterSpacing: "0.1em",
               }}
             >
-              CYCLE {latestClaim.cycle}
+              CYCLE {latestHypothesis.cycle}
             </span>
           </div>
           <p
@@ -525,7 +525,7 @@ export function StateProfile({ slug }: { slug: string }) {
               textAlign: "center",
             }}
           >
-            {latestClaim.position}
+            {latestHypothesis.position}
           </p>
         </div>
       </div>
@@ -547,7 +547,7 @@ export function StateProfile({ slug }: { slug: string }) {
         >
           Knowledge Graph
         </h2>
-        <KnowledgeGraph stateName={state.name} stateClaims={stateClaims} />
+        <KnowledgeGraph stateName={state.name} stateClaims={stateHypotheses} />
       </div>
 
       <SectionDivider />
@@ -576,9 +576,9 @@ export function StateProfile({ slug }: { slug: string }) {
             style={{ width: "1px", backgroundColor: "#1c1c1c" }}
           />
 
-          {claimsByCycle.map((cycleClaims, idx) => {
-            if (cycleClaims.length === 0) return null;
-            const claim = cycleClaims[0];
+          {hypothesesByCycle.map((cycleHypotheses, idx) => {
+            if (cycleHypotheses.length === 0) return null;
+            const claim = cycleHypotheses[0];
             return (
               <div key={idx} className="relative pb-12 last:pb-0">
                 {/* Node on timeline */}
@@ -679,8 +679,8 @@ export function StateProfile({ slug }: { slug: string }) {
         </div>
 
         <div className="flex flex-col items-center gap-4">
-          {stateClaims.map((claim, i) => (
-            <DebateCard key={claim.id} claim={claim} index={i} />
+          {stateHypotheses.map((hypothesis, i) => (
+            <DebateCard key={hypothesis.id} claim={hypothesis} index={i} />
           ))}
         </div>
       </div>
@@ -690,7 +690,7 @@ export function StateProfile({ slug }: { slug: string }) {
       {/* ── SURVIVING KNOWLEDGE ── */}
       <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <div className="scroll-reveal" style={{ textAlign: "center", width: "100%" }}>
-          <SectionLabel>VAULT</SectionLabel>
+          <SectionLabel>KNOWLEDGE BASE</SectionLabel>
           <h2
             style={{
               fontFamily: "var(--font-serif)",
@@ -701,11 +701,11 @@ export function StateProfile({ slug }: { slug: string }) {
               textAlign: "center",
             }}
           >
-            Surviving Knowledge
+            Validated Hypotheses
           </h2>
         </div>
 
-        {survivingClaims.length === 0 ? (
+        {validatedHypotheses.length === 0 ? (
           <p
             className="scroll-reveal"
             style={{
@@ -716,11 +716,11 @@ export function StateProfile({ slug }: { slug: string }) {
               fontStyle: "italic",
             }}
           >
-            No surviving claims yet.
+            No validated hypotheses yet.
           </p>
         ) : (
           <div className="flex flex-col items-center gap-6">
-            {survivingClaims.map((claim, i) => (
+            {validatedHypotheses.map((claim, i) => (
               <div
                 key={claim.id}
                 className="scroll-reveal mx-auto w-full max-w-2xl rounded-xl px-8 py-6 text-center"
@@ -767,7 +767,7 @@ export function StateProfile({ slug }: { slug: string }) {
       {/* ── GRAVEYARD ── */}
       <div className="mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <div className="scroll-reveal" style={{ textAlign: "center", width: "100%" }}>
-          <SectionLabel>FALLEN</SectionLabel>
+          <SectionLabel>REFUTED</SectionLabel>
           <h2
             style={{
               fontFamily: "var(--font-serif)",
@@ -778,11 +778,11 @@ export function StateProfile({ slug }: { slug: string }) {
               letterSpacing: "0.15em",
             }}
           >
-            Graveyard
+            Refuted Hypotheses
           </h2>
         </div>
 
-        {destroyedClaims.length === 0 ? (
+        {refutedHypotheses.length === 0 ? (
           <p
             className="scroll-reveal"
             style={{
@@ -793,11 +793,11 @@ export function StateProfile({ slug }: { slug: string }) {
               fontStyle: "italic",
             }}
           >
-            No destroyed claims.
+            No refuted hypotheses.
           </p>
         ) : (
           <div className="flex flex-col items-center gap-6">
-            {destroyedClaims.map((claim, i) => (
+            {refutedHypotheses.map((claim, i) => (
               <div
                 key={claim.id}
                 className="scroll-reveal mx-auto w-full max-w-2xl rounded-xl px-8 py-6 text-center"

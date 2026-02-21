@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { CLAIMS, type Claim } from "@/lib/data";
+import { HYPOTHESES, type Hypothesis } from "@/lib/data";
 
 const CYCLE_FILTERS = [1, 2, 3] as const;
 
@@ -27,7 +27,7 @@ export function Debates() {
     return () => observer.disconnect();
   }, [activeCycle]);
 
-  const filteredClaims = CLAIMS.filter((c) => c.cycle === activeCycle);
+  const filteredHypotheses = HYPOTHESES.filter((c) => c.cycle === activeCycle);
   return (
     <section ref={containerRef} className="text-center">
       {/* Page header - centered */}
@@ -51,8 +51,8 @@ export function Debates() {
             color: "#d4d4d4",
           }}
         >
-          Every claim. Every challenge. Every verdict. Watch the adversarial
-          process unfold.
+          Every hypothesis. Every challenge. Every verdict. Watch the adversarial
+          review process unfold.
         </p>
       </div>
 
@@ -76,15 +76,15 @@ export function Debates() {
 
       {/* Debate cards */}
       <div className="mx-auto flex max-w-[900px] flex-col gap-16">
-        {filteredClaims.map((claim) => (
-          <MatchCard key={claim.id} claim={claim} />
+        {filteredHypotheses.map((hypothesis) => (
+          <MatchCard key={hypothesis.id} claim={hypothesis} />
         ))}
       </div>
     </section>
   );
 }
 
-function MatchCard({ claim }: { claim: Claim }) {
+function MatchCard({ claim }: { claim: Hypothesis }) {
   const [step, setStep] = useState(0);
   const isAlive = claim.ruling !== "DESTROYED";
 
@@ -153,7 +153,7 @@ function MatchCard({ claim }: { claim: Claim }) {
               className="mb-4 block text-xs uppercase tracking-[0.25em] text-foreground/60"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              The Claim
+              The Hypothesis
             </span>
             <p
               className="text-2xl font-bold leading-[1.8] text-foreground"

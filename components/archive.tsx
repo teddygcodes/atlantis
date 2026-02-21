@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { CLAIMS, type Claim } from "@/lib/data";
+import { HYPOTHESES, type Hypothesis } from "@/lib/data";
 
 function useScrollReveal(deps: unknown[] = []) {
   const ref = useRef<HTMLDivElement>(null);
@@ -37,13 +37,13 @@ export function Archive() {
   const [filter, setFilter] = useState<DomainFilter>("All");
   const containerRef = useScrollReveal([filter]);
 
-  const survivingClaims = CLAIMS.filter(
+  const validatedHypotheses = HYPOTHESES.filter(
     (c) => c.ruling === "REVISE" || c.ruling === "PARTIAL"
   );
-  const filteredClaims =
+  const filteredHypotheses =
     filter === "All"
-      ? survivingClaims
-      : survivingClaims.filter((c) => c.domain === filter);
+      ? validatedHypotheses
+      : validatedHypotheses.filter((c) => c.domain === filter);
 
   return (
     <section ref={containerRef}>
@@ -58,7 +58,7 @@ export function Archive() {
             letterSpacing: "0.25em",
           }}
         >
-          THE ARCHIVE
+          KNOWLEDGE BASE
         </h2>
         <p
           style={{
@@ -68,8 +68,8 @@ export function Archive() {
             fontWeight: 600,
           }}
         >
-          The surviving claims. Each one has withstood adversarial challenge and
-          earned its place in the vault.
+          The validated hypotheses. Each one has withstood adversarial challenge and
+          earned its place in the knowledge base.
         </p>
       </div>
 
@@ -96,25 +96,26 @@ export function Archive() {
 
       {/* Vault entries */}
       <div className="mx-auto flex max-w-[900px] flex-col gap-4">
-        {filteredClaims.map((claim) => (
-          <VaultEntry key={claim.id} claim={claim} />
+        {filteredHypotheses.map((hypothesis) => (
+          <VaultEntry key={hypothesis.id} hypothesis={hypothesis} />
         ))}
       </div>
 
-      {filteredClaims.length === 0 && (
+      {filteredHypotheses.length === 0 && (
         <p
           className="mx-auto max-w-[900px] py-20 text-center text-lg text-muted/40"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
-          No surviving claims in this domain.
+          No validated hypotheses in this domain.
         </p>
       )}
     </section>
   );
 }
 
-function VaultEntry({ claim }: { claim: Claim }) {
+function VaultEntry({ hypothesis }: { hypothesis: Hypothesis }) {
   const [unlocked, setUnlocked] = useState(false);
+  const claim = hypothesis;
   const isSurviving = claim.ruling === "REVISE" || claim.ruling === "PARTIAL";
 
   return (
