@@ -503,6 +503,7 @@ export function StateProfile({ slug }: { slug: string }) {
             </span>
           </div>
           <p
+            className="text-center"
             style={{
               fontFamily: "var(--font-body)",
               fontSize: "20px",
