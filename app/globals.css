@@ -309,15 +309,3 @@ body {
 .animation-delay-400 { animation-delay: 0.4s; }
 .animation-delay-500 { animation-delay: 0.5s; }
 
-/* Force center ALL text inside state profile pages */
-.state-profile-centered,
-.state-profile-centered *,
-.state-profile-centered p,
-.state-profile-centered span,
-.state-profile-centered div,
-.state-profile-centered h1,
-.state-profile-centered h2,
-.state-profile-centered h3,
-.state-profile-centered button {
-  text-align: center !important;
-}
