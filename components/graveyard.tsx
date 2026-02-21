@@ -14,18 +14,13 @@ export function Graveyard() {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             entry.target.classList.add("is-visible");
-          } else {
-            // Dim tombstones as they scroll past
-            const rect = entry.boundingClientRect;
-            if (rect.top < 0) {
-              entry.target.classList.add("tombstone-past");
-            }
           }
         });
       },
-      { threshold: 0.2, rootMargin: "0px 0px -80px 0px" }
+      { threshold: 0.1, rootMargin: "0px 0px -60px 0px" }
     );
-    el.querySelectorAll(".tombstone").forEach((child) =>
+    // Observe both scroll-reveal and tombstone elements
+    el.querySelectorAll(".scroll-reveal, .tombstone").forEach((child) =>
       observer.observe(child)
     );
     return () => observer.disconnect();
@@ -52,7 +47,7 @@ export function Graveyard() {
           style={{
             fontFamily: "var(--font-body)",
             fontSize: "16px",
-            color: "#a3a3a3",
+            color: "#e5e5e5",
           }}
         >
           The fallen. Every destroyed claim is preserved here as a monument to
@@ -87,7 +82,7 @@ export function Graveyard() {
 
               {/* Claim ID */}
               <span
-                className="mb-4 block text-sm tracking-[0.2em] text-destroyed/60"
+                className="mb-4 block text-sm tracking-[0.2em] text-accent"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
                 {claim.id}
@@ -95,7 +90,7 @@ export function Graveyard() {
 
               {/* Epitaph: the one-line reason it died */}
               <p
-                className="mb-6 text-lg italic leading-relaxed text-muted/40"
+                className="mb-6 text-lg italic leading-relaxed text-foreground/80"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 &ldquo;{getEpitaph(claim.verdict)}&rdquo;
@@ -104,14 +99,14 @@ export function Graveyard() {
               {/* Meta */}
               <div className="flex items-center justify-center gap-3">
                 <span
-                  className="text-[9px] uppercase tracking-[0.2em] text-muted/25"
+                  className="text-[9px] uppercase tracking-[0.2em] text-foreground/50"
                   style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                 >
                   {claim.state.replace("_", " ")}
                 </span>
-                <span className="text-muted/15">|</span>
+                <span className="text-foreground/30">|</span>
                 <span
-                  className="text-[9px] uppercase tracking-[0.2em] text-muted/25"
+                  className="text-[9px] uppercase tracking-[0.2em] text-foreground/50"
                   style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                 >
                   Cycle {claim.cycle}

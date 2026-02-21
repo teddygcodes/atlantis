@@ -64,7 +64,7 @@ export function Chronicle() {
   };
 
   return (
-    <section ref={containerRef} className="scroll-reveal">
+    <section ref={containerRef}>
       {/* Page header - centered */}
       <div className="mx-auto mb-12 text-center" style={{ paddingTop: "64px" }}>
         <h2
@@ -82,7 +82,7 @@ export function Chronicle() {
           style={{
             fontFamily: "var(--font-body)",
             fontSize: "16px",
-            color: "#a3a3a3",
+            color: "#e5e5e5",
           }}
         >
           Three cycles. Eighteen claims. A civilization learning what holds up
@@ -168,7 +168,7 @@ export function Chronicle() {
 
                 {/* Narrative */}
                 <p
-                  className="mb-8 flex-1 text-lg leading-[1.9] text-muted"
+                  className="mb-8 flex-1 text-lg leading-[1.9] text-foreground/80"
                   style={{ fontFamily: "var(--font-cormorant)" }}
                 >
                   {entry.narrative}
@@ -184,7 +184,7 @@ export function Chronicle() {
                       {stats.total}
                     </span>
                     <span
-                      className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
+                      className="text-[9px] uppercase tracking-[0.2em] text-foreground/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
                       Claims
@@ -198,7 +198,7 @@ export function Chronicle() {
                       {stats.destroyed}
                     </span>
                     <span
-                      className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
+                      className="text-[9px] uppercase tracking-[0.2em] text-foreground/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
                       Destroyed
@@ -212,7 +212,7 @@ export function Chronicle() {
                       {stats.survived}
                     </span>
                     <span
-                      className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
+                      className="text-[9px] uppercase tracking-[0.2em] text-foreground/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
                       Survived
@@ -231,7 +231,7 @@ export function Chronicle() {
                       %
                     </span>
                     <span
-                      className="text-[9px] uppercase tracking-[0.2em] text-muted/60"
+                      className="text-[9px] uppercase tracking-[0.2em] text-foreground/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
                       Kill Rate

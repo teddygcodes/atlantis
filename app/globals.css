@@ -124,16 +124,12 @@ body {
 }
 
 .tombstone.is-visible {
-  opacity: 0.65;
+  opacity: 1;
   transform: translateY(0);
 }
 
 .tombstone.is-visible:hover {
-  opacity: 0.85;
-}
-
-.tombstone.tombstone-past {
-  opacity: 0.25;
+  opacity: 1;
 }
 
 /* Section door hover glow */
