@@ -320,7 +320,7 @@ export function StateProfile({ slug }: { slug: string }) {
   );
 
   return (
-    <section ref={containerRef} className="text-center">
+    <section ref={containerRef} className="state-profile-centered">
       {/* ── HERO ZONE ── */}
       <div className="scroll-reveal mb-6 text-center">
         <Link
