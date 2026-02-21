@@ -18,6 +18,8 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -775,6 +777,11 @@ class AtlantisEngine:
             print(f"  {line}")
 
         self._save_run_artifacts()
+        try:
+            subprocess.run([sys.executable, "generate_site_data.py"], check=True)
+            print("  ✓ Site data generated → lib/data.ts")
+        except (subprocess.CalledProcessError, OSError) as err:
+            print(f"  WARNING: Site data generation failed (optional): {err}")
         print(f"  Run saved to: {self.run_output_dir.as_posix()}/")
         print(f"\n  Done.\n")
 
