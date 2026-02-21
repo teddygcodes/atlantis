@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { STATES, type StateEntity } from "@/lib/data";
 
@@ -111,15 +111,15 @@ export function States() {
 }
 
 function StateCard({ state, index }: { state: StateEntity; index: number }) {
-  const [revealed, setRevealed] = useState(false);
   const total = state.wins + state.partials + state.losses;
   const survivalPct =
     total > 0 ? Math.round(((state.wins + state.partials) / total) * 100) : 0;
   const slug = state.name.toLowerCase().replace("_", "-");
 
   return (
-    <article
-      className="scroll-reveal group relative overflow-hidden"
+    <Link
+      href={`/states/${slug}`}
+      className="scroll-reveal group relative block cursor-pointer overflow-hidden"
       style={{
         backgroundColor: "#0e0e0e",
         border: "1px solid #1c1c1c",
@@ -127,6 +127,7 @@ function StateCard({ state, index }: { state: StateEntity; index: number }) {
         padding: "32px",
         animationDelay: `${index * 0.06}s`,
         transition: "border-color 0.3s ease, box-shadow 0.3s ease",
+        textDecoration: "none",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = "rgba(220, 38, 38, 0.3)";
@@ -225,86 +226,22 @@ function StateCard({ state, index }: { state: StateEntity; index: number }) {
         &ldquo;{state.approach}&rdquo;
       </p>
 
-      {/* Reveal toggle - bottom right */}
+      {/* View State link - bottom right */}
       <div className="flex justify-end">
-        <button
-          onClick={() => setRevealed(!revealed)}
-          className="flex items-center gap-2 transition-colors duration-200"
+        <span
+          className="inline-flex items-center gap-2 transition-colors duration-200 group-hover:text-red-500"
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: "10px",
-            color: revealed ? "#dc2626" : "#525252",
+            color: "#525252",
             textTransform: "uppercase" as const,
             letterSpacing: "0.2em",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "#dc2626"; }}
-          onMouseLeave={(e) => { if (!revealed) e.currentTarget.style.color = "#525252"; }}
         >
-          {revealed ? "COLLAPSE" : "REVEAL FULL STORY"}
-          <span
-            className="inline-block transition-transform duration-300"
-            style={{
-              transform: revealed ? "rotate(180deg)" : "rotate(0deg)",
-            }}
-          >
-            &#8595;
-          </span>
-        </button>
+          VIEW STATE
+          <span className="transition-transform duration-300 group-hover:translate-x-1">&rarr;</span>
+        </span>
       </div>
-
-      {/* Expanded: Learning Arc + profile link */}
-      <div
-        className="grid transition-all duration-500 ease-out"
-        style={{
-          gridTemplateRows: revealed ? "1fr" : "0fr",
-          opacity: revealed ? 1 : 0,
-        }}
-      >
-        <div className="overflow-hidden">
-          <div style={{ paddingTop: "24px" }}>
-            <div className="mb-4 h-px w-full" style={{ backgroundColor: "#1c1c1c" }} />
-            <span
-              className="mb-3 block"
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "9px",
-                color: "#dc2626",
-                textTransform: "uppercase" as const,
-                letterSpacing: "0.25em",
-              }}
-            >
-              Learning Arc
-            </span>
-            <p
-              className="mb-6"
-              style={{
-                fontFamily: "var(--font-body)",
-                fontSize: "16px",
-                color: "#a3a3a3",
-                lineHeight: "1.9",
-              }}
-            >
-              {state.learningArc}
-            </p>
-            <Link
-              href={`/states/${slug}`}
-              className="inline-flex items-center gap-2"
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "10px",
-                color: "#dc2626",
-                textTransform: "uppercase" as const,
-                letterSpacing: "0.2em",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "#dc2626"; }}
-            >
-              VIEW FULL PROFILE
-              <span>&rarr;</span>
-            </Link>
-          </div>
-        </div>
-      </div>
-    </article>
+    </Link>
   );
 }
