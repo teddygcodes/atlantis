@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { HYPOTHESES, type Hypothesis } from "@/lib/data";
-import { ExplainSimply } from "@/components/explain-simply";
+import { ExplainSimply } from "@/components/explain-button";
 
 export function Graveyard() {
   const containerRef = useRef<HTMLDivElement>(null);

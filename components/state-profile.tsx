@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { STATES, HYPOTHESES, type StateEntity, type Hypothesis } from "@/lib/data";
-import { ExplainSimply } from "@/components/explain-simply";
+import { ExplainSimply } from "@/components/explain-button";
 import { KnowledgeGraph } from "@/components/knowledge-graph";
 
 function useScrollReveal() {
@@ -150,8 +150,6 @@ function DebateCard({ claim, index }: { claim: Hypothesis; index: number }) {
         >
           {claim.position}
         </p>
-        <ExplainSimply text={claim.position} type="hypothesis" />
-
         {/* Expand hint */}
         <div className="mt-3 text-center">
           <span
@@ -168,6 +166,8 @@ function DebateCard({ claim, index }: { claim: Hypothesis; index: number }) {
           </span>
         </div>
       </button>
+
+      <ExplainSimply text={claim.position} type="hypothesis" />
 
       {/* Expanded content */}
       <div

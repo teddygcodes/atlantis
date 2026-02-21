@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 
-const explanationCache = new Map<string, string>();
+const cache = new Map<string, string>();
 
 export function ExplainSimply({
   text,
@@ -28,8 +28,8 @@ export function ExplainSimply({
       setOpen(true);
 
       const cacheKey = `${type}::${text}`;
-      if (explanationCache.has(cacheKey)) {
-        setExplanation(explanationCache.get(cacheKey)!);
+      if (cache.has(cacheKey)) {
+        setExplanation(cache.get(cacheKey)!);
         return;
       }
 
@@ -40,10 +40,11 @@ export function ExplainSimply({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, type }),
         });
-        if (!res.ok) throw new Error(`${res.status}`);
         const data = await res.json();
-        if (!data.explanation) throw new Error("empty");
-        explanationCache.set(cacheKey, data.explanation);
+        if (!res.ok || !data.explanation) {
+          throw new Error(data.error || "Failed");
+        }
+        cache.set(cacheKey, data.explanation);
         setExplanation(data.explanation);
       } catch {
         setExplanation("Unable to generate explanation. Please try again.");
@@ -59,15 +60,12 @@ export function ExplainSimply({
       style={{ textAlign: "left", width: "100%" }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Uses span to avoid nested button hydration errors */}
       <span
         role="button"
         tabIndex={0}
         onClick={handleClick}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            handleClick(e);
-          }
+          if (e.key === "Enter" || e.key === " ") handleClick(e);
         }}
         style={{
           fontFamily: "var(--font-ibm-plex-mono)",

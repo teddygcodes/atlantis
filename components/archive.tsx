@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { HYPOTHESES, type Hypothesis } from "@/lib/data";
-import { ExplainSimply } from "@/components/explain-simply";
+import { ExplainSimply } from "@/components/explain-button";
 
 function useScrollReveal(deps: unknown[] = []) {
   const ref = useRef<HTMLDivElement>(null);
@@ -190,7 +190,6 @@ function VaultEntry({ hypothesis }: { hypothesis: Hypothesis }) {
           >
             {claim.hypothesis || claim.position}
           </p>
-          <ExplainSimply text={claim.hypothesis || claim.position} type="hypothesis" />
         </div>
 
         {/* Arrow */}
@@ -204,6 +203,10 @@ function VaultEntry({ hypothesis }: { hypothesis: Hypothesis }) {
           <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1" />
         </svg>
       </button>
+
+      <div className="px-6 pb-2">
+        <ExplainSimply text={claim.hypothesis || claim.position} type="hypothesis" />
+      </div>
 
       {/* Expanded debate content */}
       <div

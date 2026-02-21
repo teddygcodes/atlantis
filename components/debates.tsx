@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { HYPOTHESES, type Hypothesis } from "@/lib/data";
-import { ExplainSimply } from "@/components/explain-simply";
+import { ExplainSimply } from "@/components/explain-button";
 
 const CYCLE_FILTERS = [1, 2, 3] as const;
 
