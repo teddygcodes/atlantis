@@ -143,33 +143,33 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
       <ParticleField />
 
       <div className="relative z-10 flex flex-col items-center px-6">
-        <div className="hero-fade-in mb-10">
+        <div className="hero-fade-in mb-12">
           <Image
             src="/images/logo.png"
             alt="Atlantis logo"
-            width={160}
-            height={160}
-            className="object-contain drop-shadow-[0_0_40px_rgba(220,38,38,0.15)]"
-            style={{ width: "160px", height: "auto" }}
+            width={340}
+            height={340}
+            className="object-contain drop-shadow-[0_0_60px_rgba(220,38,38,0.2)]"
+            style={{ width: "340px", height: "auto" }}
             priority
             crossOrigin="anonymous"
           />
         </div>
 
         <h1
-          className="hero-fade-in-delay-1 mb-6 text-center text-3xl tracking-[0.4em] text-foreground md:text-4xl"
+          className="hero-fade-in-delay-1 mb-6 text-center text-4xl tracking-[0.4em] text-foreground md:text-5xl"
           style={{ fontFamily: "var(--font-cinzel)" }}
         >
           ATLANTIS
         </h1>
 
         <div
-          className="hero-fade-in-delay-2 mb-10 h-px w-16"
+          className="hero-fade-in-delay-2 mb-10 h-px w-20"
           style={{ backgroundColor: "rgba(220, 38, 38, 0.5)" }}
         />
 
         <p
-          className="hero-fade-in-delay-2 mb-16 max-w-lg text-center text-xl leading-relaxed text-muted"
+          className="hero-fade-in-delay-2 mb-16 max-w-lg text-center text-2xl leading-relaxed text-muted"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
           Where ideas are tested. Only validated knowledge survives.

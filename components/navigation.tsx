@@ -7,18 +7,19 @@ interface NavigationProps {
   activeTab: NavItem;
   onTabChange: (tab: NavItem) => void;
   visible: boolean;
+  onHome?: () => void;
 }
 
-export function Navigation({ activeTab, onTabChange, visible }: NavigationProps) {
+export function Navigation({ activeTab, onTabChange, visible, onHome }: NavigationProps) {
   if (!visible) return null;
 
   return (
     <header className="nav-animate-in sticky top-0 z-50 border-b border-border/50 bg-background/90 backdrop-blur-md">
       <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
         <button
-          onClick={() => onTabChange("Chronicle")}
+          onClick={onHome ?? (() => onTabChange("Chronicle"))}
           className="flex items-center gap-2.5 transition-opacity hover:opacity-70"
-          aria-label="Go to Chronicle"
+          aria-label="Go home"
         >
           <Image
             src="/images/logo.png"
