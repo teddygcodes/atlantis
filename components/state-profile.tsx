@@ -320,8 +320,8 @@ export function StateProfile({ slug }: { slug: string }) {
   );
 
   return (
-    <div style={{ textAlign: "center" }}>
-    <section ref={containerRef} style={{ textAlign: "center" }}>
+    <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+    <section ref={containerRef} style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
       {/* ── HERO ZONE ── */}
       <div className="scroll-reveal mb-6 text-center">
         <Link
@@ -467,7 +467,7 @@ export function StateProfile({ slug }: { slug: string }) {
       <SectionDivider />
 
       {/* ── CURRENT RESEARCH ── */}
-      <div className="scroll-reveal mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div className="scroll-reveal mb-0" style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
         <SectionLabel>CURRENT FOCUS</SectionLabel>
         <h2
           style={{
