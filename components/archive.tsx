@@ -1,52 +1,81 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CLAIMS, type Claim } from "@/lib/data";
-import { ChevronDown } from "lucide-react";
 
-const DOMAIN_FILTERS = ["All", "Consciousness", "Causation", "Mathematics"] as const;
+function useScrollReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) entry.target.classList.add("is-visible");
+        });
+      },
+      { threshold: 0.1, rootMargin: "0px 0px -60px 0px" }
+    );
+    el.querySelectorAll(".scroll-reveal").forEach((child) =>
+      observer.observe(child)
+    );
+    return () => observer.disconnect();
+  }, []);
+  return ref;
+}
+
+const DOMAIN_FILTERS = [
+  "All",
+  "Consciousness",
+  "Causation",
+  "Mathematics",
+] as const;
 type DomainFilter = (typeof DOMAIN_FILTERS)[number];
 
 export function Archive() {
+  const containerRef = useScrollReveal();
   const [filter, setFilter] = useState<DomainFilter>("All");
 
   const survivingClaims = CLAIMS.filter(
     (c) => c.ruling === "REVISE" || c.ruling === "PARTIAL"
   );
-
   const filteredClaims =
     filter === "All"
       ? survivingClaims
       : survivingClaims.filter((c) => c.domain === filter);
 
   return (
-    <section>
-      <header className="mb-12 animate-fade-in-up">
-        <h1
-          className="mb-4 text-4xl tracking-[0.2em] text-foreground md:text-5xl"
-          style={{ fontFamily: "var(--font-cinzel)" }}
-        >
-          Archive
-        </h1>
+    <section ref={containerRef}>
+      {/* Vault header */}
+      <div className="scroll-reveal mx-auto mb-20 max-w-[800px]">
+        <div className="mb-6 flex items-center gap-4">
+          <h2
+            className="text-sm uppercase tracking-[0.3em] text-foreground"
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+          >
+            The Archive
+          </h2>
+          <div className="h-px flex-1 bg-accent/20" />
+        </div>
         <p
-          className="max-w-2xl text-xl leading-relaxed text-muted"
+          className="text-xl leading-[1.9] text-muted"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
           The surviving claims. Each one has withstood adversarial challenge and
-          earned its place.
+          earned its place in the vault.
         </p>
-      </header>
+      </div>
 
-      {/* Domain filter tabs */}
-      <div className="mb-10 flex gap-1 border-b border-border">
+      {/* Domain filter */}
+      <div className="scroll-reveal mx-auto mb-12 flex max-w-[800px] items-center gap-1">
         {DOMAIN_FILTERS.map((d) => (
           <button
             key={d}
             onClick={() => setFilter(d)}
-            className={`px-4 py-3 text-sm transition-colors ${
+            className={`rounded-sm px-4 py-2 text-[10px] uppercase tracking-[0.2em] transition-all ${
               filter === d
-                ? "border-b-2 border-accent font-semibold text-foreground"
-                : "text-muted hover:text-foreground"
+                ? "bg-accent/10 text-accent"
+                : "text-muted/50 hover:text-muted"
             }`}
             style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
           >
@@ -55,15 +84,16 @@ export function Archive() {
         ))}
       </div>
 
-      <div className="flex flex-col gap-4">
-        {filteredClaims.map((claim, index) => (
-          <ArchiveCard key={claim.id} claim={claim} index={index} />
+      {/* Vault entries */}
+      <div className="mx-auto flex max-w-[800px] flex-col gap-4">
+        {filteredClaims.map((claim) => (
+          <VaultEntry key={claim.id} claim={claim} />
         ))}
       </div>
 
       {filteredClaims.length === 0 && (
         <p
-          className="py-20 text-center text-lg text-muted"
+          className="mx-auto max-w-[800px] py-20 text-center text-lg text-muted/40"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
           No surviving claims in this domain.
@@ -73,103 +103,157 @@ export function Archive() {
   );
 }
 
-function ArchiveCard({ claim, index }: { claim: Claim; index: number }) {
-  const [expanded, setExpanded] = useState(false);
+function VaultEntry({ claim }: { claim: Claim }) {
+  const [unlocked, setUnlocked] = useState(false);
+  const isSurviving = claim.ruling === "REVISE" || claim.ruling === "PARTIAL";
 
   return (
     <article
-      className={`animate-fade-in-up animation-delay-${((index % 5) + 1) * 100} rounded border border-border bg-surface transition-colors hover:border-accent/20`}
+      className="scroll-reveal group overflow-hidden rounded border border-border/60 transition-all duration-500 hover:border-border"
+      style={{
+        boxShadow: isSurviving
+          ? "0 0 0 0 rgba(220, 38, 38, 0)"
+          : undefined,
+      }}
     >
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full px-6 py-5 text-left"
-        aria-expanded={expanded}
+        onClick={() => setUnlocked(!unlocked)}
+        className="flex w-full items-center gap-6 px-6 py-6 text-left transition-colors hover:bg-surface/50"
       >
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          <span
-            className="text-sm font-bold text-accent"
-            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-          >
-            {claim.id}
-          </span>
-          <span
-            className={`rounded px-2 py-0.5 text-xs font-medium ${
-              claim.ruling === "REVISE"
-                ? "bg-accent/10 text-accent"
-                : "bg-amber-500/10 text-amber-500"
-            }`}
-            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-          >
-            {claim.ruling}
-          </span>
-          <span
-            className="text-xs text-muted"
-            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-          >
-            {claim.domain} &middot; Cycle {claim.cycle}
-          </span>
+        {/* Lock icon */}
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded border border-border/60">
+          {unlocked ? (
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              className="text-accent"
+            >
+              <rect x="2" y="7" width="12" height="8" rx="1" stroke="currentColor" strokeWidth="1" />
+              <path d="M5 7V5a3 3 0 016 0" stroke="currentColor" strokeWidth="1" />
+            </svg>
+          ) : (
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              className="text-muted/40"
+            >
+              <rect x="2" y="7" width="12" height="8" rx="1" stroke="currentColor" strokeWidth="1" />
+              <path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1" />
+            </svg>
+          )}
         </div>
 
-        <p
-          className="mb-4 text-lg leading-relaxed text-foreground"
-          style={{ fontFamily: "var(--font-cormorant)" }}
-        >
-          {claim.position}
-        </p>
-
-        <div className="flex items-center gap-6">
-          <div
-            className="flex items-center gap-4 text-xs text-muted"
-            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-          >
-            <span>Drama {claim.drama}</span>
-            <span>Novelty {claim.novelty}</span>
-            <span>Depth {claim.depth}</span>
+        <div className="flex-1">
+          <div className="mb-2 flex flex-wrap items-center gap-3">
+            <span
+              className="text-xs font-bold text-accent"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              {claim.id}
+            </span>
+            <span
+              className={`rounded-sm px-2 py-0.5 text-[9px] uppercase tracking-wider ${
+                claim.ruling === "REVISE"
+                  ? "bg-accent/10 text-accent"
+                  : "bg-amber-500/10 text-amber-500"
+              }`}
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              {claim.ruling}
+            </span>
+            <span
+              className="text-[10px] text-muted/40"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              {claim.domain} / Cycle {claim.cycle}
+            </span>
           </div>
-          <ChevronDown
-            className={`ml-auto h-4 w-4 text-muted transition-transform duration-300 ${expanded ? "rotate-180" : ""}`}
-          />
+          <p
+            className="text-lg leading-relaxed text-foreground/80"
+            style={{ fontFamily: "var(--font-cormorant)" }}
+          >
+            {claim.position}
+          </p>
         </div>
+
+        {/* Arrow */}
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          className={`flex-shrink-0 text-muted/30 transition-transform duration-300 ${unlocked ? "rotate-90" : ""}`}
+        >
+          <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1" />
+        </svg>
       </button>
 
-      {expanded && (
-        <div className="flex flex-col gap-3 border-t border-border px-6 py-5">
-          <DebateSection label="Challenge" text={claim.challenge} />
-          <DebateSection label="Rebuttal" text={claim.rebuttal} />
-          <DebateSection label="Verdict" text={claim.verdict} variant="verdict" />
+      {/* Expanded debate content */}
+      <div
+        className="grid transition-all duration-500 ease-out"
+        style={{
+          gridTemplateRows: unlocked ? "1fr" : "0fr",
+          opacity: unlocked ? 1 : 0,
+        }}
+      >
+        <div className="overflow-hidden">
+          <div className="flex flex-col gap-4 border-t border-border/40 px-6 py-8">
+            <DebateStep label="Challenge" text={claim.challenge} side="left" />
+            <DebateStep label="Rebuttal" text={claim.rebuttal} side="right" />
+            <div className="mx-auto mt-4 max-w-lg rounded border border-accent/10 bg-accent/5 px-6 py-5 text-center">
+              <span
+                className="mb-2 block text-[9px] uppercase tracking-[0.25em] text-accent"
+                style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+              >
+                Verdict
+              </span>
+              <p
+                className="text-lg leading-relaxed text-foreground/80"
+                style={{ fontFamily: "var(--font-cormorant)" }}
+              >
+                {claim.verdict}
+              </p>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
     </article>
   );
 }
 
-function DebateSection({
+function DebateStep({
   label,
   text,
-  variant,
+  side,
 }: {
   label: string;
   text: string;
-  variant?: "verdict";
+  side: "left" | "right";
 }) {
   return (
-    <div
-      className={`rounded px-5 py-4 ${
-        variant === "verdict" ? "bg-accent/5 border border-accent/10" : "bg-background"
-      }`}
-    >
-      <span
-        className="mb-2 block text-xs tracking-[0.15em] text-muted"
-        style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+    <div className={`flex ${side === "right" ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[85%] rounded-lg bg-surface px-5 py-4 ${
+          side === "right" ? "rounded-br-none" : "rounded-bl-none"
+        }`}
       >
-        {label.toUpperCase()}
-      </span>
-      <p
-        className="text-base leading-relaxed text-foreground/80"
-        style={{ fontFamily: "var(--font-cormorant)" }}
-      >
-        {text}
-      </p>
+        <span
+          className="mb-2 block text-[9px] uppercase tracking-[0.2em] text-muted/50"
+          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
+          {label}
+        </span>
+        <p
+          className="text-base leading-[1.8] text-muted"
+          style={{ fontFamily: "var(--font-cormorant)" }}
+        >
+          {text}
+        </p>
+      </div>
     </div>
   );
 }
