@@ -147,10 +147,10 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
           <Image
             src="/images/hero-emblem.png"
             alt="Atlantis logo"
-            width={420}
-            height={420}
-            className="object-contain drop-shadow-[0_0_80px_rgba(220,38,38,0.25)]"
-            style={{ width: "min(420px, 70vw)", height: "auto" }}
+            width={560}
+            height={560}
+            className="object-contain drop-shadow-[0_0_100px_rgba(220,38,38,0.3)]"
+            style={{ width: "min(560px, 80vw)", height: "auto" }}
             priority
             crossOrigin="anonymous"
           />
