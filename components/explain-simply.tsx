@@ -40,10 +40,17 @@ export function ExplainSimply({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, type }),
         });
+        if (!res.ok) {
+          throw new Error(`API returned ${res.status}`);
+        }
         const data = await res.json();
+        if (!data.explanation) {
+          throw new Error("No explanation in response");
+        }
         cache.set(cacheKey, data.explanation);
         setExplanation(data.explanation);
-      } catch {
+      } catch (err) {
+        console.error("[v0] ExplainSimply error:", err);
         setExplanation("Unable to generate explanation. Please try again.");
       } finally {
         setLoading(false);
