@@ -312,7 +312,7 @@ export function StateProfile({ slug }: { slug: string }) {
     return (
       <div className="p-6 border border-border/50 rounded-lg bg-muted/30">
         <p className="text-sm text-muted-foreground text-center">
-          No hypotheses submitted yet. Check back after the next governance cycle.
+          No hypotheses yet.
         </p>
       </div>
     );
