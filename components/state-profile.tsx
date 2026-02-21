@@ -177,7 +177,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
       >
         <div className="overflow-hidden">
           <div
-            className="mx-4 mb-2 flex flex-col gap-8 rounded-b-xl px-6 pb-8 pt-6 md:mx-8 md:px-10"
+            className="mx-4 mb-2 flex flex-col gap-8 rounded-b-xl px-6 pb-8 pt-6 text-center md:mx-8 md:px-10"
             style={{
               backgroundColor: "#0a0a0a",
               borderLeft: "1px solid #1c1c1c",
@@ -317,7 +317,7 @@ export function StateProfile({ slug }: { slug: string }) {
   );
 
   return (
-    <section ref={containerRef}>
+    <section ref={containerRef} className="text-center">
       {/* ── HERO ZONE ── */}
       <div className="scroll-reveal mb-6 text-center">
         <Link
@@ -448,7 +448,7 @@ export function StateProfile({ slug }: { slug: string }) {
                   ? "#a3a3a3"
                   : tier === "BRONZE"
                     ? "#cd7f32"
-                    : "#525252",
+                    : "#a3a3a3",
             fontWeight: 700,
           }}
         >
@@ -473,7 +473,7 @@ export function StateProfile({ slug }: { slug: string }) {
           Active Research
         </h2>
         <div
-          className="mx-auto max-w-2xl rounded-xl px-8 py-8 md:px-12"
+          className="mx-auto max-w-2xl rounded-xl px-8 py-8 text-center md:px-12"
           style={{
             backgroundColor: "#0e0e0e",
             border: "1px solid #dc262625",
@@ -590,7 +590,7 @@ export function StateProfile({ slug }: { slug: string }) {
                 </div>
 
                 {/* Content */}
-                <div className="mx-auto w-full pt-14">
+                <div className="mx-auto w-full pt-14 text-center">
                   <div className="mb-2 flex items-center justify-center gap-3">
                     <span
                       style={{
@@ -706,7 +706,7 @@ export function StateProfile({ slug }: { slug: string }) {
             {survivingClaims.map((claim, i) => (
               <div
                 key={claim.id}
-                className="scroll-reveal mx-auto w-full max-w-2xl rounded-xl px-8 py-6"
+                className="scroll-reveal mx-auto w-full max-w-2xl rounded-xl px-8 py-6 text-center"
                 style={{
                   backgroundColor: "#0e0e0e",
                   border: "1px solid #1c1c1c",
@@ -782,7 +782,7 @@ export function StateProfile({ slug }: { slug: string }) {
             {destroyedClaims.map((claim, i) => (
               <div
                 key={claim.id}
-                className="scroll-reveal mx-auto w-full max-w-2xl rounded-xl px-8 py-6"
+                className="scroll-reveal mx-auto w-full max-w-2xl rounded-xl px-8 py-6 text-center"
                 style={{
                   backgroundColor: "#0a0a0a",
                   border: "1px solid #141414",
