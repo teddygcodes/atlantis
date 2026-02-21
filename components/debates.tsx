@@ -33,7 +33,7 @@ export function Debates() {
   const filteredClaims = CLAIMS.filter((c) => c.cycle === activeCycle);
 
   return (
-    <section ref={containerRef}>
+    <section ref={containerRef} className="text-center">
       {/* Page header - centered */}
       <div className="scroll-reveal mx-auto mb-12 text-center" style={{ paddingTop: "64px" }}>
         <h2
@@ -162,7 +162,7 @@ function MatchCard({ claim }: { claim: Claim }) {
               The Claim
             </span>
             <p
-              className="mx-auto max-w-2xl text-xl leading-[1.8] text-foreground"
+              className="text-xl leading-[1.8] text-foreground"
               style={{ fontFamily: "var(--font-cormorant)" }}
             >
               {claim.position}
@@ -172,8 +172,8 @@ function MatchCard({ claim }: { claim: Claim }) {
 
         {/* Step 1+: Challenge */}
         {step >= 1 && (
-          <div className="mt-6 flex justify-center debate-animate-in">
-            <div className="max-w-[80%] rounded-lg border border-border/40 bg-background px-5 py-4 text-center">
+          <div className="mt-6 debate-animate-in">
+            <div className="rounded-lg border border-border/40 bg-background px-5 py-4 text-center">
               <span
                 className="mb-2 block text-[9px] uppercase tracking-[0.2em] text-red-400"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
@@ -192,8 +192,8 @@ function MatchCard({ claim }: { claim: Claim }) {
 
         {/* Step 2+: Rebuttal */}
         {step >= 2 && (
-          <div className="mt-4 flex justify-center debate-animate-in">
-            <div className="max-w-[80%] rounded-lg border border-border/40 bg-background px-5 py-4 text-center">
+          <div className="mt-4 debate-animate-in">
+            <div className="rounded-lg border border-border/40 bg-background px-5 py-4 text-center">
               <span
                 className="mb-2 block text-[9px] uppercase tracking-[0.2em] text-emerald-500"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
