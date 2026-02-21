@@ -3,8 +3,6 @@ export const NAV_ITEMS = [
   "States",
   "Archive",
   "Debates",
-  "Dispatches",
-  "Newsroom",
   "Graveyard",
   "About",
 ] as const;

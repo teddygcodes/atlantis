@@ -14,26 +14,26 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
       <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
         <button
           onClick={() => onTabChange("Chronicle")}
-          className="flex items-center gap-2.5 transition-opacity hover:opacity-80"
+          className="flex items-center gap-2.5 transition-opacity hover:opacity-70"
           aria-label="Go to Chronicle"
         >
           <Image
             src="/images/logo.png"
             alt="Atlantis logo"
-            width={24}
-            height={24}
+            width={22}
+            height={22}
             className="object-contain"
-            style={{ width: "24px", height: "auto" }}
+            style={{ width: "22px", height: "auto" }}
           />
           <span
-            className="text-sm tracking-[0.3em] text-foreground"
+            className="text-xs tracking-[0.3em] text-foreground"
             style={{ fontFamily: "var(--font-cinzel)" }}
           >
             ATLANTIS
           </span>
         </button>
 
-        <div className="hidden items-center gap-6 md:flex">
+        <div className="hidden items-center gap-7 md:flex">
           {NAV_ITEMS.map((item) => (
             <button
               key={item}
@@ -47,7 +47,10 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
             >
               {item}
               {activeTab === item && (
-                <span className="absolute -bottom-[21px] left-0 right-0 h-px bg-accent" />
+                <span
+                  className="absolute -bottom-[21px] left-0 right-0 h-px"
+                  style={{ backgroundColor: "#dc2626" }}
+                />
               )}
             </button>
           ))}

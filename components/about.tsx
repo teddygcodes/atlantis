@@ -5,14 +5,14 @@ import { ABOUT_PARAGRAPHS, STATS } from "@/lib/data";
 export function About() {
   return (
     <section className="mx-auto max-w-[800px]">
-      <div className="mb-20 flex flex-col gap-10">
+      <div className="mb-24 flex flex-col gap-12">
         {ABOUT_PARAGRAPHS.map((paragraph, index) => (
           <p
             key={index}
-            className={`animate-fade-in-up animation-delay-${(index + 1) * 100} text-center text-lg leading-[1.8] text-foreground/85 md:text-xl ${
+            className={`animate-fade-in-up animation-delay-${(index + 1) * 100} text-center text-[18px] leading-[1.9] ${
               index === ABOUT_PARAGRAPHS.length - 1
                 ? "font-semibold text-foreground"
-                : ""
+                : "text-muted"
             }`}
             style={{ fontFamily: "var(--font-cormorant)" }}
           >
@@ -21,7 +21,7 @@ export function About() {
         ))}
       </div>
 
-      <div className="animate-fade-in-up animation-delay-400 border-t border-border pt-12">
+      <div className="animate-fade-in-up animation-delay-400 border-t border-border pt-16">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
           {[
             { label: "DOMAINS", value: STATS.domains },
@@ -37,7 +37,7 @@ export function About() {
                 {stat.value}
               </div>
               <div
-                className="text-xs tracking-[0.2em] text-muted"
+                className="text-[10px] tracking-[0.25em] text-muted"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
                 {stat.label}

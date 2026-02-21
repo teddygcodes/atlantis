@@ -1,19 +1,51 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { CHRONICLE_ENTRIES } from "@/lib/data";
 
+function useScrollReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = ref.current;
+    if (!container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+          }
+        });
+      },
+      { threshold: 0.15, rootMargin: "0px 0px -40px 0px" }
+    );
+
+    const elements = container.querySelectorAll(".scroll-reveal");
+    elements.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, []);
+
+  return ref;
+}
+
 export function Chronicle() {
+  const containerRef = useScrollReveal();
+
   return (
-    <section className="mx-auto max-w-[800px] py-8">
-      <header className="mb-20 animate-fade-in-up">
-        <h1
-          className="mb-6 text-2xl tracking-[0.2em] text-foreground md:text-3xl"
+    <section ref={containerRef} className="mx-auto max-w-[800px]">
+      {/* Section header with red rule */}
+      <header className="scroll-reveal mb-24">
+        <h2
+          className="mb-4 text-lg tracking-[0.3em] text-foreground md:text-xl"
           style={{ fontFamily: "var(--font-cinzel)" }}
         >
-          Chronicle
-        </h1>
+          The Chronicle
+        </h2>
+        <div className="mb-8 h-px w-10" style={{ backgroundColor: "#dc2626" }} />
         <p
-          className="text-lg leading-[1.8] text-muted md:text-xl"
+          className="text-[18px] leading-[1.9] text-muted"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
           A record of what happened. Each cycle brings new claims, new
@@ -21,23 +53,26 @@ export function Chronicle() {
         </p>
       </header>
 
-      <div className="relative pl-8 md:pl-10">
-        {/* Timeline line */}
+      {/* Timeline */}
+      <div className="relative pl-10 md:pl-12">
+        {/* Vertical red line */}
         <div
-          className="absolute left-0 top-0 h-full"
-          style={{ width: "1px", backgroundColor: "#dc2626" }}
+          className="absolute left-[4px] top-2 h-[calc(100%-16px)]"
+          style={{ width: "1px", backgroundColor: "#dc2626", opacity: 0.5 }}
         />
 
-        <div className="flex flex-col gap-20">
-          {CHRONICLE_ENTRIES.map((entry, index) => (
-            <article
-              key={entry.cycle}
-              className={`animate-fade-in-up relative animation-delay-${(index + 1) * 100}`}
-            >
-              {/* Timeline marker - red circle */}
+        <div className="flex flex-col" style={{ gap: "72px" }}>
+          {CHRONICLE_ENTRIES.map((entry) => (
+            <article key={entry.cycle} className="scroll-reveal relative">
+              {/* Red dot marker */}
               <div
-                className="absolute top-[6px] flex items-center justify-center"
-                style={{ left: "-32px", width: "9px", height: "9px" }}
+                className="absolute flex items-center justify-center"
+                style={{
+                  left: "-40px",
+                  top: "8px",
+                  width: "9px",
+                  height: "9px",
+                }}
               >
                 <div
                   className="rounded-full"
@@ -45,26 +80,27 @@ export function Chronicle() {
                     width: "9px",
                     height: "9px",
                     backgroundColor: "#dc2626",
+                    boxShadow: "0 0 6px rgba(220, 38, 38, 0.4)",
                   }}
                 />
               </div>
 
               <span
-                className="mb-3 inline-block text-[11px] uppercase tracking-[0.25em] text-accent"
+                className="mb-4 inline-block text-[11px] uppercase tracking-[0.25em] text-accent"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
                 Cycle {entry.cycle}
               </span>
 
-              <h2
-                className="mb-5 text-xl tracking-wide text-foreground md:text-2xl"
+              <h3
+                className="mb-6 text-xl tracking-wide text-foreground md:text-2xl"
                 style={{ fontFamily: "var(--font-cinzel)" }}
               >
                 {entry.title}
-              </h2>
+              </h3>
 
               <p
-                className="text-lg leading-[1.8] text-muted"
+                className="text-[18px] leading-[1.9] text-muted"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {entry.narrative}
@@ -73,17 +109,15 @@ export function Chronicle() {
           ))}
         </div>
 
-        {/* Timeline end marker */}
-        <div
-          className="absolute bottom-0"
-          style={{ left: "-3px" }}
-        >
+        {/* Timeline end cap */}
+        <div className="absolute bottom-0" style={{ left: "1px" }}>
           <div
             className="rotate-45"
             style={{
               width: "7px",
               height: "7px",
               backgroundColor: "#dc2626",
+              opacity: 0.5,
             }}
           />
         </div>

@@ -3,12 +3,12 @@
 @theme {
   --color-background: #060606;
   --color-surface: #0e0e0e;
-  --color-border: #1c1c1c;
+  --color-border: #1a1a1a;
   --color-accent: #dc2626;
   --color-accent-dim: #991b1b;
-  --color-foreground: #f5f5f5;
-  --color-muted: #737373;
-  --color-destroyed: #404040;
+  --color-foreground: #e5e5e5;
+  --color-muted: #a3a3a3;
+  --color-destroyed: #525252;
 
   --font-serif: "Cinzel", serif;
   --font-body: "Cormorant Garamond", serif;
@@ -47,11 +47,11 @@ body {
   background: var(--color-muted);
 }
 
-/* Fade in animation */
+/* Fade in animation (initial load) */
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(24px);
   }
   to {
     opacity: 1;
@@ -60,8 +60,32 @@ body {
 }
 
 .animate-fade-in-up {
-  animation: fade-in-up 0.6s ease-out forwards;
+  animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   opacity: 0;
+}
+
+/* Scroll-triggered reveal */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.scroll-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .animation-delay-100 {
