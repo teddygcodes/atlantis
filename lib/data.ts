@@ -142,7 +142,7 @@ export const HYPOTHESES: Hypothesis[] = [
     rebuttal:
       "The recursive self-modeling criterion generates testable predictions about which systems are conscious that diverge from IIT\u2019s phi metric.",
     verdict:
-      "Promising framework but needs sharper delineation from existing computational theories. Survives with mandatory revisions.",
+      "Promising framework but needs sharper delineation from existing computational theories. Validated with mandatory revisions.",
     drama: 6,
     novelty: 5,
     depth: 7,
@@ -341,7 +341,7 @@ export const HYPOTHESES: Hypothesis[] = [
     rebuttal:
       "The four-color theorem\u2019s acceptance required the mathematical community to expand its definition of \u2018proof\u2019 to include computer verification \u2014 a social decision.",
     verdict:
-      "Survives with revisions. The social-technology framing is productive. Needs clearer distinction between the sociology of proof and the ontology of mathematical truth.",
+      "Validated with revisions. The social-technology framing is productive. Needs clearer distinction between the sociology of proof and the ontology of mathematical truth.",
     drama: 6,
     novelty: 7,
     depth: 6,
@@ -450,7 +450,7 @@ export const HYPOTHESES: Hypothesis[] = [
     rebuttal:
       "Leibniz\u2019s notation enabled manipulations (chain rule as fraction-like operation) that were literally unthinkable in Newton\u2019s fluxion notation. The notation constitutively shaped the mathematics.",
     verdict:
-      "Partial. Continued growth from the social-technology line. The constitutive role of notation is well-argued. Needs to address the distinction between psychological and metaphysical claims.",
+      "Partial. Continued growth from the social-technology line. The constitutive role of notation is well-argued. Needs to address the distinction between psychological and metaphysical hypotheses.",
     drama: 5,
     novelty: 7,
     depth: 7,

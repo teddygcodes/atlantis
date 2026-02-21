@@ -42,7 +42,7 @@ export function Navigation() {
             width={56}
             height={56}
             className="object-contain"
-            style={{ width: "56px", height: "auto" }}
+            style={{ width: "56px", height: "56px" }}
           />
         </Link>
 
