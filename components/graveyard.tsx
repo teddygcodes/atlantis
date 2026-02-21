@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { HYPOTHESES, type Hypothesis } from "@/lib/data";
+import { ExplainSimply } from "@/components/explain-button";
 
 export function Graveyard() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -182,6 +183,7 @@ function Tombstone({
             >
               {claim.hypothesis || claim.position}
             </p>
+            <ExplainSimply text={claim.hypothesis || claim.position} type="hypothesis" />
           </div>
 
           <div className="mx-auto h-px w-16 bg-border/20" />
@@ -200,6 +202,7 @@ function Tombstone({
             >
               {claim.challenge}
             </p>
+            <ExplainSimply text={claim.challenge} type="peer review" />
           </div>
 
           <div className="mx-auto h-px w-16 bg-border/20" />
@@ -218,6 +221,7 @@ function Tombstone({
             >
               {claim.rebuttal}
             </p>
+            <ExplainSimply text={claim.rebuttal} type="defense" />
           </div>
 
           <div className="mx-auto h-px w-16 bg-border/20" />
@@ -236,6 +240,7 @@ function Tombstone({
             >
               {claim.verdict}
             </p>
+            <ExplainSimply text={claim.verdict} type="ruling" />
           </div>
 
           {/* Scores */}

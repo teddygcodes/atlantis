@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { STATES, HYPOTHESES, type StateEntity, type Hypothesis } from "@/lib/data";
+import { ExplainSimply } from "@/components/explain-button";
 import { KnowledgeGraph } from "@/components/knowledge-graph";
 
 function useScrollReveal() {
@@ -149,7 +150,6 @@ function DebateCard({ claim, index }: { claim: Hypothesis; index: number }) {
         >
           {claim.position}
         </p>
-
         {/* Expand hint */}
         <div className="mt-3 text-center">
           <span
@@ -166,6 +166,8 @@ function DebateCard({ claim, index }: { claim: Hypothesis; index: number }) {
           </span>
         </div>
       </button>
+
+      <ExplainSimply text={claim.position} type="hypothesis" />
 
       {/* Expanded content */}
       <div
@@ -200,6 +202,7 @@ function DebateCard({ claim, index }: { claim: Hypothesis; index: number }) {
               >
                 {claim.challenge}
               </p>
+              <ExplainSimply text={claim.challenge} type="peer review" />
             </div>
 
             <div className="mx-auto h-px w-16" style={{ backgroundColor: "#1c1c1c" }} />
@@ -219,6 +222,7 @@ function DebateCard({ claim, index }: { claim: Hypothesis; index: number }) {
               >
                 {claim.rebuttal}
               </p>
+              <ExplainSimply text={claim.rebuttal} type="defense" />
             </div>
 
             <div className="mx-auto h-px w-16" style={{ backgroundColor: "#1c1c1c" }} />
@@ -238,6 +242,7 @@ function DebateCard({ claim, index }: { claim: Hypothesis; index: number }) {
               >
                 {claim.verdict}
               </p>
+              <ExplainSimply text={claim.verdict} type="ruling" />
             </div>
 
             {/* Scores */}

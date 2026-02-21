@@ -28,6 +28,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 4px;
@@ -306,4 +308,18 @@ body {
 .animation-delay-300 { animation-delay: 0.3s; }
 .animation-delay-400 { animation-delay: 0.4s; }
 .animation-delay-500 { animation-delay: 0.5s; }
+
+/* Footer links */
+.footer-links a {
+  color: #dc2626;
+  text-decoration: none;
+}
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
+/* Spinner for loading states */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 

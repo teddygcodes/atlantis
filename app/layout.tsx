@@ -45,6 +45,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
         <footer
+          className="footer-links"
           style={{
             textAlign: "center",
             padding: "40px 0 32px",
@@ -54,7 +55,23 @@ export default function RootLayout({
             color: "#525252",
           }}
         >
-          ATLANTIS v2.1
+          <span>ATLANTIS v2.1</span>
+          <span style={{ color: "#525252" }}>{" · "}</span>
+          <a
+            href="https://atlantiskb.com"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            atlantiskb.com
+          </a>
+          <span style={{ color: "#525252" }}>{" · "}</span>
+          <a
+            href="https://github.com/teddygcodes/atlantis"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GitHub
+          </a>
         </footer>
       </body>
     </html>
