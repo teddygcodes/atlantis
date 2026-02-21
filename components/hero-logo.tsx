@@ -143,7 +143,7 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
       <ParticleField />
 
       <div className="relative z-10 flex flex-col items-center px-6">
-        <div className="hero-fade-in mb-4">
+        <div className="hero-fade-in mb-2">
           <Image
             src="/images/hero-emblem.png"
             alt="Atlantis logo"
@@ -157,19 +157,19 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
         </div>
 
         <h1
-          className="hero-fade-in-delay-1 mb-3 text-center text-4xl tracking-[0.4em] text-foreground md:text-5xl"
+          className="hero-fade-in-delay-1 mb-2 text-center text-4xl tracking-[0.4em] text-foreground md:text-5xl"
           style={{ fontFamily: "var(--font-cinzel)" }}
         >
           ATLANTIS
         </h1>
 
         <div
-          className="hero-fade-in-delay-2 mb-4 h-px w-20"
+          className="hero-fade-in-delay-2 mb-2 h-px w-20"
           style={{ backgroundColor: "rgba(220, 38, 38, 0.5)" }}
         />
 
         <p
-          className="hero-fade-in-delay-2 mb-10 whitespace-nowrap text-center text-lg leading-relaxed text-muted sm:text-xl md:text-2xl"
+          className="hero-fade-in-delay-2 mb-6 whitespace-nowrap text-center text-lg leading-relaxed text-muted sm:text-xl md:text-2xl"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
           Only validated knowledge survives.
@@ -177,7 +177,7 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
 
         <button
           onClick={onEnter}
-          className="hero-fade-in-delay-3 group flex flex-col items-center gap-3 transition-opacity hover:opacity-70"
+          className="hero-fade-in-delay-3 group flex flex-col items-center gap-2 transition-opacity hover:opacity-70"
           aria-label="Enter Atlantis"
         >
           <span

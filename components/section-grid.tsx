@@ -11,27 +11,27 @@ const SECTIONS: {
   {
     id: "Chronicle",
     title: "Chronicle",
-    description: "The history of ideas tested through fire",
+    description: "what happened when ideas went to war",
   },
   {
     id: "States",
     title: "States",
-    description: "Six rival programs competing for truth",
+    description: "meet the minds that survived",
   },
   {
     id: "Archive",
     title: "Archive",
-    description: "Knowledge that survived adversarial challenge",
+    description: "the knowledge that earned its place",
   },
   {
     id: "Debates",
     title: "Debates",
-    description: "Watch claims fight for survival",
+    description: "watch them fight",
   },
   {
     id: "Graveyard",
     title: "Graveyard",
-    description: "Ideas that did not survive",
+    description: "not everyone makes it",
   },
 ];
 
@@ -157,7 +157,7 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
           </h3>
 
           <p
-            className="mb-8 max-w-md text-[16px] transition-colors duration-300 group-hover:[color:#a3a3a3]"
+            className="mb-8 max-w-md text-[16px] italic transition-colors duration-300 group-hover:[color:#a3a3a3]"
             style={{
               fontFamily: "var(--font-cormorant)",
               color: "#737373",
