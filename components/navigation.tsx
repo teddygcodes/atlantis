@@ -9,7 +9,7 @@ const ROUTE_MAP: Record<string, string> = {
   "Research Timeline": "/chronicle",
   "States": "/states",
   "Knowledge Base": "/archive",
-  "Peer Review": "/debates",
+  "Debates": "/debates",
   "Refuted": "/graveyard",
   "About": "/about",
 };
@@ -18,7 +18,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   "Research Timeline": "Research Timeline",
   "States": "States",
   "Knowledge Base": "Knowledge Base",
-  "Peer Review": "Peer Review",
+  "Debates": "Debates",
   "Refuted": "Refuted",
   "About": "About",
 };

@@ -66,7 +66,7 @@ export function Chronicle() {
   return (
     <section ref={containerRef}>
       {/* Page header - centered */}
-      <div className="mx-auto mb-12 text-center" style={{ paddingTop: "64px" }}>
+      <div className="scroll-reveal mx-auto mb-12 text-center" style={{ paddingTop: "64px" }}>
         <h2
           className="mb-4"
           style={{

@@ -71,11 +71,11 @@ export function States() {
       <div style={{ height: "48px" }} />
 
       {/* Domain groups */}
-      <div className="mx-auto flex max-w-[900px] flex-col px-6">
+      <div className="mx-auto flex max-w-[900px] flex-col items-center px-6">
         {PAIRS.map((pair, pairIdx) => (
           <div key={pair.domain}>
             {/* Domain divider: ——— DOMAIN ——— */}
-            <div className="scroll-reveal flex items-center gap-4" style={{ marginBottom: "32px" }}>
+            <div className="scroll-reveal flex items-center justify-center gap-4" style={{ marginBottom: "32px" }}>
               <div className="h-px flex-1" style={{ backgroundColor: "#dc2626", opacity: 0.3 }} />
               <span
                 style={{

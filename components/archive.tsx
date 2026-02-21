@@ -95,7 +95,7 @@ export function Archive() {
       </div>
 
       {/* Vault entries */}
-      <div className="mx-auto flex max-w-[900px] flex-col gap-4">
+      <div className="mx-auto flex max-w-[900px] flex-col items-center gap-4">
         {filteredHypotheses.map((hypothesis) => (
           <VaultEntry key={hypothesis.id} hypothesis={hypothesis} />
         ))}
