@@ -6,21 +6,21 @@ import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/data";
 
 const ROUTE_MAP: Record<string, string> = {
-  Chronicle: "/chronicle",
-  States: "/states",
-  Archive: "/archive",
-  Debates: "/debates",
-  Graveyard: "/graveyard",
-  About: "/about",
+  "Research Timeline": "/chronicle",
+  "States": "/states",
+  "Knowledge Base": "/archive",
+  "Peer Review": "/debates",
+  "Refuted": "/graveyard",
+  "About": "/about",
 };
 
 const DISPLAY_NAMES: Record<string, string> = {
-  Chronicle: "Research Timeline",
-  States: "States",
-  Archive: "Knowledge Base",
-  Debates: "Peer Review",
-  Graveyard: "Refuted",
-  About: "About",
+  "Research Timeline": "Research Timeline",
+  "States": "States",
+  "Knowledge Base": "Knowledge Base",
+  "Peer Review": "Peer Review",
+  "Refuted": "Refuted",
+  "About": "About",
 };
 
 export function Navigation() {

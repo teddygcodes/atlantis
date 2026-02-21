@@ -76,7 +76,7 @@ export function About() {
       </div>
 
       {/* Stats */}
-      <div className="scroll-reveal border-t border-border pt-16">
+      <div className="scroll-reveal mx-auto max-w-[900px] border-t border-border pt-16">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
           {[
             { label: "DOMAINS", value: STATS.domains },
