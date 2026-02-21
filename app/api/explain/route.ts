@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     console.log("[v0] Explain API called with:", { textLength: text.length, type: label });
 
     const result = await generateText({
-      model: "openai/gpt-4o-mini",
+      model: "anthropic/claude-sonnet-4-20250514",
       system: `You explain complex academic ${label} in simple everyday English that a high schooler would understand. Keep it to 2-3 sentences. No jargon. Be clear and direct.`,
       prompt: text,
     });
