@@ -1,21 +1,40 @@
 "use client";
 
 import Image from "next/image";
-import { NAV_ITEMS, type NavItem } from "@/lib/data";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { NAV_ITEMS } from "@/lib/data";
 
-interface NavigationProps {
-  activeTab: NavItem;
-  onTabChange: (tab: NavItem) => void;
-}
+const ROUTE_MAP: Record<string, string> = {
+  Chronicle: "/chronicle",
+  States: "/states",
+  Archive: "/archive",
+  Debates: "/debates",
+  Graveyard: "/graveyard",
+  About: "/about",
+};
 
-export function Navigation({ activeTab, onTabChange }: NavigationProps) {
+export function Navigation() {
+  const pathname = usePathname();
+
+  const activeItem = NAV_ITEMS.find(
+    (item) => {
+      const route = ROUTE_MAP[item];
+      return route && (pathname === route || pathname.startsWith(route + "/"));
+    }
+  );
+
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
-      <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <button
-          onClick={() => onTabChange("Chronicle")}
-          className="flex items-center gap-3 transition-opacity hover:opacity-80"
-          aria-label="Go to Chronicle"
+    <header
+      className="sticky top-0 z-50"
+      style={{ height: "64px", backgroundColor: "#060606", borderBottom: "1px solid #1a1a1a" }}
+    >
+      <nav className="mx-auto flex h-full max-w-6xl items-center px-6">
+        {/* Logo home link */}
+        <Link
+          href="/"
+          className="flex-shrink-0 transition-opacity hover:opacity-70"
+          aria-label="Go home"
         >
           <Image
             src="/images/logo.png"
@@ -23,63 +42,64 @@ export function Navigation({ activeTab, onTabChange }: NavigationProps) {
             width={40}
             height={40}
             className="object-contain"
+            style={{ width: "auto", height: "auto", maxWidth: "40px", maxHeight: "40px" }}
           />
-          <span
-            className="font-[var(--font-cinzel)] text-lg tracking-[0.3em] text-foreground"
-            style={{ fontFamily: "var(--font-cinzel)" }}
-          >
-            ATLANTIS
-          </span>
-        </button>
+        </Link>
 
-        <div className="hidden items-center gap-1 md:flex">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item}
-              onClick={() => onTabChange(item)}
-              className={`relative px-3 py-2 text-sm transition-colors ${
-                activeTab === item
-                  ? "font-semibold text-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-              style={{ fontFamily: "var(--font-cinzel)" }}
-            >
-              {item}
-              {activeTab === item && (
-                <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-accent" />
-              )}
-            </button>
-          ))}
+        {/* Centered nav links */}
+        <div className="hidden flex-1 items-center justify-center gap-8 md:flex">
+          {NAV_ITEMS.map((item) => {
+            const isActive = activeItem === item;
+            return (
+              <Link
+                key={item}
+                href={ROUTE_MAP[item] || "/"}
+                className="relative py-1 transition-colors duration-200"
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "11px",
+                  textTransform: "uppercase" as const,
+                  letterSpacing: "0.15em",
+                  color: isActive ? "#dc2626" : "#e5e5e5",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.color = "#a3a3a3";
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.color = "#e5e5e5";
+                }}
+              >
+                {item}
+              </Link>
+            );
+          })}
         </div>
 
-        <MobileMenu activeTab={activeTab} onTabChange={onTabChange} />
+        {/* Mobile nav */}
+        <div className="ml-auto md:hidden">
+          <select
+            value={activeItem || ""}
+            onChange={(e) => {
+              const href = ROUTE_MAP[e.target.value];
+              if (href) window.location.href = href;
+            }}
+            className="rounded border border-border bg-background px-3 py-2 text-foreground"
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "11px",
+              textTransform: "uppercase" as const,
+              letterSpacing: "0.15em",
+            }}
+            aria-label="Navigation"
+          >
+            {NAV_ITEMS.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </div>
       </nav>
     </header>
-  );
-}
-
-function MobileMenu({
-  activeTab,
-  onTabChange,
-}: {
-  activeTab: NavItem;
-  onTabChange: (tab: NavItem) => void;
-}) {
-  return (
-    <div className="md:hidden">
-      <select
-        value={activeTab}
-        onChange={(e) => onTabChange(e.target.value as NavItem)}
-        className="rounded border border-border bg-surface px-3 py-2 text-sm text-foreground"
-        style={{ fontFamily: "var(--font-cinzel)" }}
-        aria-label="Navigation"
-      >
-        {NAV_ITEMS.map((item) => (
-          <option key={item} value={item}>
-            {item}
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }

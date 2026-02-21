@@ -3,12 +3,12 @@
 @theme {
   --color-background: #060606;
   --color-surface: #0e0e0e;
-  --color-border: #1c1c1c;
+  --color-border: #1a1a1a;
   --color-accent: #dc2626;
   --color-accent-dim: #991b1b;
-  --color-foreground: #f5f5f5;
-  --color-muted: #737373;
-  --color-destroyed: #404040;
+  --color-foreground: #e5e5e5;
+  --color-muted: #a3a3a3;
+  --color-destroyed: #525252;
 
   --font-serif: "Cinzel", serif;
   --font-body: "Cormorant Garamond", serif;
@@ -31,7 +31,7 @@ body {
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -40,18 +40,136 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-muted);
+  background: #333;
 }
 
-/* Fade in animation */
+/* Hide scrollbar for horizontal scroll */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Hero animations - staggered fade in */
+@keyframes hero-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-fade-in {
+  animation: hero-fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+.hero-fade-in-delay-1 {
+  animation: hero-fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+  opacity: 0;
+}
+
+.hero-fade-in-delay-2 {
+  animation: hero-fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
+  opacity: 0;
+}
+
+.hero-fade-in-delay-3 {
+  animation: hero-fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) 0.9s forwards;
+  opacity: 0;
+}
+
+/* Gentle bounce for scroll arrow */
+@keyframes gentle-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+.animate-gentle-bounce {
+  animation: gentle-bounce 2s ease-in-out infinite;
+}
+
+/* Scroll-triggered reveal */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.scroll-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Tombstone animations */
+.tombstone {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tombstone.is-visible {
+  opacity: 0.65;
+  transform: translateY(0);
+}
+
+.tombstone.is-visible:hover {
+  opacity: 0.85;
+}
+
+.tombstone.tombstone-past {
+  opacity: 0.25;
+}
+
+/* Section door hover glow */
+.section-door {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  transition: box-shadow 0.3s ease,
+              border-color 0.3s ease;
+}
+
+.section-door:hover {
+  box-shadow: 0 8px 32px rgba(220, 38, 38, 0.15),
+              0 4px 20px rgba(0, 0, 0, 0.4);
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
+/* Debate step animation */
+@keyframes debate-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.debate-animate-in {
+  animation: debate-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* General fade-in-up for initial loads */
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(24px);
   }
   to {
     opacity: 1;
@@ -60,26 +178,28 @@ body {
 }
 
 .animate-fade-in-up {
-  animation: fade-in-up 0.6s ease-out forwards;
+  animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   opacity: 0;
 }
 
-.animation-delay-100 {
-  animation-delay: 0.1s;
+/* Nav show animation */
+@keyframes nav-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.animation-delay-200 {
-  animation-delay: 0.2s;
+.nav-animate-in {
+  animation: nav-slide-down 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.animation-delay-300 {
-  animation-delay: 0.3s;
-}
-
-.animation-delay-400 {
-  animation-delay: 0.4s;
-}
-
-.animation-delay-500 {
-  animation-delay: 0.5s;
-}
+.animation-delay-100 { animation-delay: 0.1s; }
+.animation-delay-200 { animation-delay: 0.2s; }
+.animation-delay-300 { animation-delay: 0.3s; }
+.animation-delay-400 { animation-delay: 0.4s; }
+.animation-delay-500 { animation-delay: 0.5s; }

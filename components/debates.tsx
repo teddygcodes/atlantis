@@ -1,43 +1,77 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { CLAIMS, type Claim } from "@/lib/data";
+
+function useScrollReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) entry.target.classList.add("is-visible");
+        });
+      },
+      { threshold: 0.1, rootMargin: "0px 0px -60px 0px" }
+    );
+    el.querySelectorAll(".scroll-reveal").forEach((child) =>
+      observer.observe(child)
+    );
+    return () => observer.disconnect();
+  }, []);
+  return ref;
+}
 
 const CYCLE_FILTERS = [1, 2, 3] as const;
 
 export function Debates() {
+  const containerRef = useScrollReveal();
   const [activeCycle, setActiveCycle] = useState<number>(1);
 
   const filteredClaims = CLAIMS.filter((c) => c.cycle === activeCycle);
 
   return (
-    <section>
-      <header className="mb-12 animate-fade-in-up">
-        <h1
-          className="mb-4 text-4xl tracking-[0.2em] text-foreground md:text-5xl"
-          style={{ fontFamily: "var(--font-cinzel)" }}
-        >
-          Debates
-        </h1>
+    <section ref={containerRef}>
+      {/* Header */}
+      <div className="scroll-reveal mx-auto mb-20 flex max-w-[800px] items-start gap-8">
+        <Image
+          src="/images/logo.png"
+          alt="Atlantis logo"
+          width={80}
+          height={80}
+          className="mt-1 flex-shrink-0 object-contain"
+          style={{ width: "80px", height: "auto" }}
+        />
+        <div>
+          <h2
+            className="mb-4 tracking-[0.25em] text-foreground"
+            style={{ fontFamily: "var(--font-cinzel)", fontSize: "36px" }}
+          >
+            THE DEBATES
+          </h2>
         <p
-          className="max-w-2xl text-xl leading-relaxed text-muted"
+          className="text-xl leading-[1.9] text-muted"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
-          Every claim. Every challenge. Every verdict. The full adversarial
-          record.
+          Every claim. Every challenge. Every verdict. Watch the adversarial
+          process unfold.
         </p>
-      </header>
+        </div>
+      </div>
 
-      {/* Cycle filter tabs */}
-      <div className="mb-10 flex gap-1 border-b border-border">
+      {/* Cycle selector */}
+      <div className="scroll-reveal mx-auto mb-16 flex max-w-[800px] items-center gap-1">
         {CYCLE_FILTERS.map((cycle) => (
           <button
             key={cycle}
             onClick={() => setActiveCycle(cycle)}
-            className={`px-4 py-3 text-sm transition-colors ${
+            className={`rounded-sm px-4 py-2 text-[10px] uppercase tracking-[0.2em] transition-all ${
               activeCycle === cycle
-                ? "border-b-2 border-accent font-semibold text-foreground"
-                : "text-muted hover:text-foreground"
+                ? "bg-accent/10 text-accent"
+                : "text-muted/50 hover:text-muted"
             }`}
             style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
           >
@@ -46,112 +80,225 @@ export function Debates() {
         ))}
       </div>
 
-      <div className="flex flex-col gap-6">
-        {filteredClaims.map((claim, index) => (
-          <DebateCard key={claim.id} claim={claim} index={index} />
+      {/* Debate cards */}
+      <div className="mx-auto flex max-w-[800px] flex-col gap-16">
+        {filteredClaims.map((claim) => (
+          <MatchCard key={claim.id} claim={claim} />
         ))}
       </div>
     </section>
   );
 }
 
-function DebateCard({ claim, index }: { claim: Claim; index: number }) {
+function MatchCard({ claim }: { claim: Claim }) {
+  const [step, setStep] = useState(0);
   const isAlive = claim.ruling !== "DESTROYED";
 
+  const advanceStep = () => {
+    if (step < 3) setStep(step + 1);
+    else setStep(0);
+  };
+
   return (
-    <article
-      className={`animate-fade-in-up animation-delay-${((index % 5) + 1) * 100} overflow-hidden rounded border border-border bg-surface`}
-    >
-      {/* Colored left border accent */}
-      <div className="flex">
-        <div
-          className={`w-1 shrink-0 ${isAlive ? "bg-accent" : "bg-destroyed"}`}
-        />
-
-        <div className="flex-1 p-6">
-          {/* Header */}
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <span
-              className="text-sm font-bold text-accent"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-            >
-              {claim.id}
-            </span>
-            <span
-              className={`rounded px-2 py-0.5 text-xs font-medium ${
-                claim.ruling === "DESTROYED"
-                  ? "bg-destroyed/20 text-destroyed"
-                  : claim.ruling === "REVISE"
-                    ? "bg-accent/10 text-accent"
-                    : "bg-amber-500/10 text-amber-500"
-              }`}
-              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-            >
-              {claim.ruling}
-            </span>
-            <span
-              className="text-xs text-muted"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-            >
-              {claim.domain} &middot; {claim.state}
-            </span>
-          </div>
-
-          {/* Position */}
-          <p
-            className="mb-6 text-lg leading-relaxed text-foreground"
-            style={{ fontFamily: "var(--font-cormorant)" }}
+    <article className="scroll-reveal">
+      {/* Match header */}
+      <div className="mb-6 flex items-center gap-4">
+        <span
+          className="text-xs font-bold text-accent"
+          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
+          {claim.id}
+        </span>
+        <span
+          className="text-[10px] text-muted/40"
+          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
+          {claim.domain}
+        </span>
+        <span
+          className="text-[10px] text-muted/40"
+          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
+          {claim.state.replace("_", " ")}
+        </span>
+        <div className="ml-auto">
+          <span
+            className={`rounded-sm px-2 py-0.5 text-[9px] uppercase tracking-wider ${
+              claim.ruling === "DESTROYED"
+                ? "bg-destroyed/20 text-destroyed"
+                : claim.ruling === "REVISE"
+                  ? "bg-accent/10 text-accent"
+                  : "bg-amber-500/10 text-amber-500"
+            }`}
+            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
           >
-            {claim.position}
-          </p>
+            {claim.ruling}
+          </span>
+        </div>
+      </div>
 
-          {/* Challenge and Rebuttal grid */}
-          <div className="mb-4 grid gap-4 md:grid-cols-2">
-            <div className="rounded bg-background px-5 py-4">
+      {/* The match arena */}
+      <div
+        className="cursor-pointer rounded-lg border border-border/60 bg-surface/30 p-6 transition-colors hover:border-border md:p-8"
+        onClick={advanceStep}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            advanceStep();
+          }
+        }}
+        aria-label="Advance debate step"
+      >
+        {/* Step 0: The claim */}
+        <div
+          className="transition-all duration-500"
+          style={{ opacity: step >= 0 ? 1 : 0 }}
+        >
+          <div className="mb-6 text-center">
+            <span
+              className="mb-3 block text-[9px] uppercase tracking-[0.25em] text-muted/40"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              The Claim
+            </span>
+            <p
+              className="mx-auto max-w-2xl text-xl leading-[1.8] text-foreground"
+              style={{ fontFamily: "var(--font-cormorant)" }}
+            >
+              {claim.position}
+            </p>
+          </div>
+        </div>
+
+        {/* Step 1+: Challenge from left */}
+        {step >= 1 && (
+          <div className="mt-6 flex justify-start debate-animate-in">
+            <div className="max-w-[80%] rounded-lg rounded-bl-none border border-border/40 bg-background px-5 py-4">
               <span
-                className="mb-2 block text-xs tracking-[0.15em] text-muted"
+                className="mb-2 block text-[9px] uppercase tracking-[0.2em] text-red-400"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
-                CHALLENGE
+                Challenge
               </span>
               <p
-                className="text-base leading-relaxed text-foreground/80"
+                className="text-base leading-[1.8] text-muted"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {claim.challenge}
               </p>
             </div>
-            <div className="rounded bg-background px-5 py-4">
+          </div>
+        )}
+
+        {/* Step 2+: Rebuttal from right */}
+        {step >= 2 && (
+          <div className="mt-4 flex justify-end debate-animate-in">
+            <div className="max-w-[80%] rounded-lg rounded-br-none border border-border/40 bg-background px-5 py-4">
               <span
-                className="mb-2 block text-xs tracking-[0.15em] text-muted"
+                className="mb-2 block text-[9px] uppercase tracking-[0.2em] text-emerald-500"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
-                REBUTTAL
+                Rebuttal
               </span>
               <p
-                className="text-base leading-relaxed text-foreground/80"
+                className="text-base leading-[1.8] text-muted"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {claim.rebuttal}
               </p>
             </div>
           </div>
+        )}
 
-          {/* Verdict */}
-          <div className="rounded border border-accent/10 bg-accent/5 px-5 py-4">
+        {/* Step 3: Verdict drops center */}
+        {step >= 3 && (
+          <div className="mt-8 flex justify-center debate-animate-in">
+            <div
+              className="max-w-lg rounded border px-6 py-5 text-center"
+              style={{
+                borderColor: isAlive
+                  ? "rgba(220, 38, 38, 0.2)"
+                  : "rgba(82, 82, 82, 0.3)",
+                backgroundColor: isAlive
+                  ? "rgba(220, 38, 38, 0.05)"
+                  : "rgba(82, 82, 82, 0.05)",
+              }}
+            >
+              <span
+                className="mb-2 block text-[9px] uppercase tracking-[0.25em]"
+                style={{
+                  fontFamily: "var(--font-ibm-plex-mono)",
+                  color: isAlive ? "#dc2626" : "#525252",
+                }}
+              >
+                Verdict
+              </span>
+              <p
+                className="text-lg leading-[1.8] text-foreground/90"
+                style={{ fontFamily: "var(--font-cormorant)" }}
+              >
+                {claim.verdict}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Click hint */}
+        {step < 3 && (
+          <div className="mt-6 text-center">
             <span
-              className="mb-2 block text-xs tracking-[0.15em] text-accent"
+              className="text-[9px] uppercase tracking-[0.2em] text-muted/30"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              VERDICT
+              Click to {step === 0 ? "challenge" : step === 1 ? "rebut" : "judge"}
             </span>
-            <p
-              className="text-base leading-relaxed text-foreground/90"
-              style={{ fontFamily: "var(--font-cormorant)" }}
-            >
-              {claim.verdict}
-            </p>
           </div>
+        )}
+        {step >= 3 && (
+          <div className="mt-6 text-center">
+            <span
+              className="text-[9px] uppercase tracking-[0.2em] text-muted/30"
+              style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+            >
+              Click to reset
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Score bar */}
+      <div className="mt-4 flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {[
+            { label: "Drama", value: claim.drama },
+            { label: "Novelty", value: claim.novelty },
+            { label: "Depth", value: claim.depth },
+          ].map((metric) => (
+            <div key={metric.label} className="flex items-center gap-1.5">
+              <span
+                className="text-[9px] uppercase tracking-wider text-muted/30"
+                style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+              >
+                {metric.label}
+              </span>
+              <div className="flex gap-px">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-1 w-1.5 rounded-sm"
+                    style={{
+                      backgroundColor:
+                        i < metric.value
+                          ? "rgba(220, 38, 38, 0.6)"
+                          : "rgba(255, 255, 255, 0.05)",
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </article>
