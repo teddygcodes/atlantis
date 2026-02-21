@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import Image from "next/image";
 import { CLAIMS, type Claim } from "@/lib/data";
 
 function useScrollReveal() {
@@ -47,35 +46,36 @@ export function Archive() {
 
   return (
     <section ref={containerRef}>
-      {/* Vault header */}
-      <div className="scroll-reveal mx-auto mb-20 flex max-w-[800px] items-start gap-8">
-        <Image
-          src="/images/logo.png"
-          alt="Atlantis logo"
-          width={80}
-          height={80}
-          className="mt-1 flex-shrink-0 object-contain"
-          style={{ width: "auto", height: "auto", maxWidth: "80px", maxHeight: "80px" }}
-        />
-        <div>
-          <h2
-            className="mb-4 tracking-[0.25em] text-foreground"
-            style={{ fontFamily: "var(--font-cinzel)", fontSize: "36px" }}
-          >
-            THE ARCHIVE
-          </h2>
-          <p
-            className="text-xl leading-[1.9] text-muted"
-            style={{ fontFamily: "var(--font-cormorant)" }}
-          >
-            The surviving claims. Each one has withstood adversarial challenge and
-            earned its place in the vault.
-          </p>
-        </div>
+      {/* Page header - centered */}
+      <div className="scroll-reveal mx-auto mb-12 text-center" style={{ paddingTop: "64px" }}>
+        <h2
+          className="mb-4"
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontSize: "36px",
+            color: "#e5e5e5",
+            letterSpacing: "0.25em",
+          }}
+        >
+          THE ARCHIVE
+        </h2>
+        <p
+          style={{
+            fontFamily: "var(--font-body)",
+            fontSize: "16px",
+            color: "#a3a3a3",
+          }}
+        >
+          The surviving claims. Each one has withstood adversarial challenge and
+          earned its place in the vault.
+        </p>
       </div>
 
+      {/* 48px gap below subtitle */}
+      <div style={{ height: "48px" }} />
+
       {/* Domain filter */}
-      <div className="scroll-reveal mx-auto mb-12 flex max-w-[800px] items-center gap-1">
+      <div className="scroll-reveal mx-auto mb-12 flex max-w-[900px] items-center gap-1">
         {DOMAIN_FILTERS.map((d) => (
           <button
             key={d}
@@ -93,7 +93,7 @@ export function Archive() {
       </div>
 
       {/* Vault entries */}
-      <div className="mx-auto flex max-w-[800px] flex-col gap-4">
+      <div className="mx-auto flex max-w-[900px] flex-col gap-4">
         {filteredClaims.map((claim) => (
           <VaultEntry key={claim.id} claim={claim} />
         ))}
@@ -101,7 +101,7 @@ export function Archive() {
 
       {filteredClaims.length === 0 && (
         <p
-          className="mx-auto max-w-[800px] py-20 text-center text-lg text-muted/40"
+          className="mx-auto max-w-[900px] py-20 text-center text-lg text-muted/40"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
           No surviving claims in this domain.
