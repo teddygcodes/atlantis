@@ -45,6 +45,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
         <footer
+          className="footer-links"
           style={{
             textAlign: "center",
             padding: "40px 0 32px",
@@ -60,9 +61,6 @@ export default function RootLayout({
             href="https://atlantiskb.com"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: "#dc2626", textDecoration: "none" }}
-            onMouseOver={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.textDecoration = "underline"; }}
-            onMouseOut={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.textDecoration = "none"; }}
           >
             atlantiskb.com
           </a>
@@ -71,9 +69,6 @@ export default function RootLayout({
             href="https://github.com/teddygcodes/atlantis"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: "#dc2626", textDecoration: "none" }}
-            onMouseOver={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.textDecoration = "underline"; }}
-            onMouseOut={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.textDecoration = "none"; }}
           >
             GitHub
           </a>
