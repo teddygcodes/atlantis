@@ -102,14 +102,14 @@ export function About() {
       </div>
 
       {/* Bottom logo */}
-      <div className="scroll-reveal mt-20 flex justify-center pb-4">
+      <div className="scroll-reveal mt-32 flex justify-center pb-8">
         <Image
           src="/images/atlantis-logo-full.png"
           alt="Atlantis logo"
-          width={200}
-          height={200}
-          className="object-contain opacity-60"
-          style={{ width: "auto", height: "auto", maxWidth: "160px" }}
+          width={600}
+          height={600}
+          className="object-contain opacity-50"
+          style={{ width: "auto", height: "auto", maxWidth: "360px" }}
         />
       </div>
     </section>
