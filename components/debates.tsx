@@ -51,7 +51,7 @@ export function Debates() {
           style={{
             fontFamily: "var(--font-body)",
             fontSize: "16px",
-            color: "#a3a3a3",
+            color: "#e5e5e5",
           }}
         >
           Every claim. Every challenge. Every verdict. Watch the adversarial
@@ -71,7 +71,7 @@ export function Debates() {
             className={`rounded-sm px-4 py-2 text-[10px] uppercase tracking-[0.2em] transition-all ${
               activeCycle === cycle
                 ? "bg-accent/10 text-accent"
-                : "text-muted/50 hover:text-muted"
+                : "text-foreground/50 hover:text-foreground"
             }`}
             style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
           >
@@ -110,13 +110,13 @@ function MatchCard({ claim }: { claim: Claim }) {
           {claim.id}
         </span>
         <span
-          className="text-[10px] text-muted/40"
+          className="text-[10px] text-foreground/70"
           style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
         >
           {claim.domain}
         </span>
         <span
-          className="text-[10px] text-muted/40"
+          className="text-[10px] text-foreground/70"
           style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
         >
           {claim.state.replace("_", " ")}
@@ -156,7 +156,7 @@ function MatchCard({ claim }: { claim: Claim }) {
         >
           <div className="mb-6 text-center">
             <span
-              className="mb-3 block text-[9px] uppercase tracking-[0.25em] text-muted/40"
+              className="mb-3 block text-[9px] uppercase tracking-[0.25em] text-foreground/60"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
               The Claim
@@ -181,7 +181,7 @@ function MatchCard({ claim }: { claim: Claim }) {
                 Challenge
               </span>
               <p
-                className="text-base leading-[1.8] text-muted"
+                className="text-base leading-[1.8] text-foreground/90"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {claim.challenge}
@@ -201,7 +201,7 @@ function MatchCard({ claim }: { claim: Claim }) {
                 Rebuttal
               </span>
               <p
-                className="text-base leading-[1.8] text-muted"
+                className="text-base leading-[1.8] text-foreground/90"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {claim.rebuttal}
@@ -247,7 +247,7 @@ function MatchCard({ claim }: { claim: Claim }) {
         {step < 3 && (
           <div className="mt-6 text-center">
             <span
-              className="text-[9px] uppercase tracking-[0.2em] text-muted/30"
+              className="text-[9px] uppercase tracking-[0.2em] text-foreground/50"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
               Click to {step === 0 ? "challenge" : step === 1 ? "rebut" : "judge"}
@@ -257,7 +257,7 @@ function MatchCard({ claim }: { claim: Claim }) {
         {step >= 3 && (
           <div className="mt-6 text-center">
             <span
-              className="text-[9px] uppercase tracking-[0.2em] text-muted/30"
+              className="text-[9px] uppercase tracking-[0.2em] text-foreground/50"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
               Click to reset
@@ -276,7 +276,7 @@ function MatchCard({ claim }: { claim: Claim }) {
           ].map((metric) => (
             <div key={metric.label} className="flex items-center gap-1.5">
               <span
-                className="text-[9px] uppercase tracking-wider text-muted/30"
+                className="text-[9px] uppercase tracking-wider text-foreground/60"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
                 {metric.label}
