@@ -18,7 +18,10 @@ export function Navigation() {
   const pathname = usePathname();
 
   const activeItem = NAV_ITEMS.find(
-    (item) => ROUTE_MAP[item] === pathname
+    (item) => {
+      const route = ROUTE_MAP[item];
+      return route && (pathname === route || pathname.startsWith(route + "/"));
+    }
   );
 
   return (
@@ -39,7 +42,7 @@ export function Navigation() {
             width={40}
             height={40}
             className="object-contain"
-            style={{ width: "40px", height: "auto" }}
+            style={{ width: "auto", height: "auto", maxWidth: "40px", maxHeight: "40px" }}
           />
         </Link>
 
