@@ -192,7 +192,7 @@ function Tombstone({
               className="mb-2 block text-xs uppercase tracking-[0.2em] text-red-400/70"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              Challenge
+              Peer Review
             </span>
             <p
               className="text-base font-semibold leading-[1.8] text-foreground/90"
@@ -210,7 +210,7 @@ function Tombstone({
               className="mb-2 block text-xs uppercase tracking-[0.2em] text-emerald-500/50"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              Rebuttal
+              Defense
             </span>
             <p
               className="text-base font-semibold leading-[1.8] text-foreground/90"
@@ -228,7 +228,7 @@ function Tombstone({
               className="mb-2 block text-xs uppercase tracking-[0.2em] text-destroyed"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              Verdict
+              Ruling
             </span>
             <p
               className="text-base font-semibold leading-[1.8] text-foreground/80"

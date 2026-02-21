@@ -11,7 +11,7 @@ const SECTIONS: {
   href: string;
 }[] = [
   {
-    id: "Research Timeline",
+    id: "Chronicle",
     title: "Research Timeline",
     description: "what happened when ideas were put to the test",
     href: "/chronicle",
@@ -23,19 +23,19 @@ const SECTIONS: {
     href: "/states",
   },
   {
-    id: "Knowledge Base",
+    id: "Archive",
     title: "Knowledge Base",
     description: "the knowledge that earned its place",
     href: "/archive",
   },
   {
     id: "Debates",
-    title: "Debates",
+    title: "Peer Review",
     description: "watch the adversarial review process",
     href: "/debates",
   },
   {
-    id: "Refuted",
+    id: "Graveyard",
     title: "Refuted",
     description: "not every hypothesis holds up",
     href: "/graveyard",

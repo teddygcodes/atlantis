@@ -6,12 +6,21 @@ import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/data";
 
 const ROUTE_MAP: Record<string, string> = {
-  "Research Timeline": "/chronicle",
+  Chronicle: "/chronicle",
   States: "/states",
-  "Knowledge Base": "/archive",
+  Archive: "/archive",
   Debates: "/debates",
-  Refuted: "/graveyard",
+  Graveyard: "/graveyard",
   About: "/about",
+};
+
+const DISPLAY_NAMES: Record<string, string> = {
+  Chronicle: "Research Timeline",
+  States: "States",
+  Archive: "Knowledge Base",
+  Debates: "Peer Review",
+  Graveyard: "Refuted",
+  About: "About",
 };
 
 export function Navigation() {
@@ -69,7 +78,7 @@ export function Navigation() {
                   if (!isActive) e.currentTarget.style.color = "#e5e5e5";
                 }}
               >
-                {item}
+                {DISPLAY_NAMES[item] || item}
               </Link>
             );
           })}
@@ -94,7 +103,7 @@ export function Navigation() {
           >
             {NAV_ITEMS.map((item) => (
               <option key={item} value={item}>
-                {item}
+                {DISPLAY_NAMES[item] || item}
               </option>
             ))}
           </select>

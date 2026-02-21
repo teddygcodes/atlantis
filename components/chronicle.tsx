@@ -235,7 +235,7 @@ export function Chronicle() {
                       className="text-[9px] uppercase tracking-[0.2em] text-foreground/60"
                       style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
                     >
-                      Kill Rate
+                      Refutation Rate
                     </span>
                   </div>
                 </div>

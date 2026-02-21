@@ -213,14 +213,14 @@ function VaultEntry({ hypothesis }: { hypothesis: Hypothesis }) {
       >
         <div className="overflow-hidden">
           <div className="flex flex-col gap-4 border-t border-border/40 px-6 py-8">
-            <DebateStep label="Challenge" text={claim.challenge} side="left" />
-            <DebateStep label="Rebuttal" text={claim.rebuttal} side="right" />
+            <DebateStep label="Peer Review" text={claim.challenge} side="left" />
+            <DebateStep label="Defense" text={claim.rebuttal} side="right" />
             <div className="mx-auto mt-4 max-w-lg rounded border border-accent/10 bg-accent/5 px-6 py-5 text-center">
               <span
                 className="mb-2 block text-[9px] uppercase tracking-[0.25em] text-accent"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
-                Verdict
+                Ruling
               </span>
               <p
                 className="text-lg font-semibold leading-relaxed text-foreground/90"

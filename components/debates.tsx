@@ -172,7 +172,7 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
                 className="mb-3 block text-xs uppercase tracking-[0.2em] text-red-400"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
-                Challenge
+                Peer Review
               </span>
               <p
                 className="text-xl font-semibold leading-[1.8] text-foreground/90"
@@ -192,7 +192,7 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
                 className="mb-3 block text-xs uppercase tracking-[0.2em] text-emerald-500"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
-                Rebuttal
+                Defense
               </span>
               <p
                 className="text-xl font-semibold leading-[1.8] text-foreground/90"
@@ -225,7 +225,7 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
                   color: isAlive ? "#dc2626" : "#525252",
                 }}
               >
-                Verdict
+                Ruling
               </span>
               <p
                 className="text-xl font-semibold leading-[1.8] text-foreground/90"
@@ -244,7 +244,7 @@ function MatchCard({ claim }: { claim: Hypothesis }) {
               className="text-xs uppercase tracking-[0.2em] text-foreground/50"
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              Click to {step === 0 ? "challenge" : step === 1 ? "rebut" : "judge"}
+              Click to {step === 0 ? "review" : step === 1 ? "defend" : "judge"}
             </span>
           </div>
         )}

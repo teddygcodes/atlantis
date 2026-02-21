@@ -22,7 +22,11 @@
       "Bash(do sleep 3)",
       "Bash(tee:*)",
       "Bash(jobs:*)",
-      "Bash(while:*)"
+      "Bash(while:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(git reset:*)"
     ]
   }
 }
