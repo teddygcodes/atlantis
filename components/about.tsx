@@ -38,7 +38,7 @@ export function About() {
           width={80}
           height={80}
           className="mt-1 flex-shrink-0 object-contain"
-          style={{ width: "80px", height: "auto" }}
+          style={{ width: "auto", height: "auto", maxWidth: "80px", maxHeight: "80px" }}
         />
         <div>
           <h2
