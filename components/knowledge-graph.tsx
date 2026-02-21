@@ -62,10 +62,19 @@ function buildAndLayoutGraph(
     }
   }
 
-  // Initialize positions in a circle
+  // Initialize positions in a circle (deterministic - no Math.random)
   const cx = width / 2;
   const cy = height / 2;
   const r = Math.min(width, height) * 0.28;
+
+  // Simple deterministic hash for slight position jitter
+  function hashOffset(id: string, axis: number): number {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) {
+      h = ((h << 5) - h + id.charCodeAt(i) + axis * 31) | 0;
+    }
+    return ((h % 20) - 10);
+  }
 
   const nodes: GraphNode[] = allClaims.map((claim, i) => ({
     id: claim.id,
@@ -73,11 +82,11 @@ function buildAndLayoutGraph(
     x:
       cx +
       r * Math.cos((2 * Math.PI * i) / allClaims.length) +
-      (Math.random() - 0.5) * 20,
+      hashOffset(claim.id, 0),
     y:
       cy +
       r * Math.sin((2 * Math.PI * i) / allClaims.length) +
-      (Math.random() - 0.5) * 20,
+      hashOffset(claim.id, 1),
     radius: claim.state === stateName ? 26 : 16,
     isLocal: claim.state === stateName,
   }));

@@ -16,7 +16,7 @@ function useScrollReveal() {
           if (entry.isIntersecting) entry.target.classList.add("is-visible");
         });
       },
-      { threshold: 0.1, rootMargin: "0px 0px -40px 0px" }
+      { threshold: 0.08, rootMargin: "0px 0px -40px 0px" }
     );
     el.querySelectorAll(".scroll-reveal").forEach((child) =>
       observer.observe(child)
@@ -26,144 +26,148 @@ function useScrollReveal() {
   return ref;
 }
 
-function rulingColor(ruling: string): string {
-  return ruling === "DESTROYED" ? "#dc2626" : "#d4d4d4";
+/* ───────────── Shared sub-components ───────────── */
+
+function rulingBadge(ruling: string) {
+  const color =
+    ruling === "DESTROYED" ? "#dc2626" : ruling === "PARTIAL" ? "#f59e0b" : "#22c55e";
+  return (
+    <span
+      style={{
+        fontFamily: "var(--font-mono)",
+        fontSize: "11px",
+        letterSpacing: "0.15em",
+        color,
+        fontWeight: 700,
+        padding: "3px 10px",
+        border: `1px solid ${color}33`,
+        borderRadius: "4px",
+      }}
+    >
+      {ruling}
+    </span>
+  );
 }
 
-function SectionHeading({ title }: { title: string }) {
+function SectionDivider() {
   return (
-    <div className="scroll-reveal mb-8 text-center">
-      <h3
-        className="mb-3"
-        style={{
-          fontFamily: "var(--font-serif)",
-          fontSize: "22px",
-          color: "#f5f5f5",
-          letterSpacing: "0.2em",
-        }}
-      >
-        {title}
-      </h3>
-      <div className="mx-auto h-px w-12" style={{ backgroundColor: "#dc2626", opacity: 0.5 }} />
+    <div className="scroll-reveal flex items-center justify-center gap-4 py-16">
+      <div className="h-px w-8" style={{ backgroundColor: "#dc262640" }} />
+      <div
+        className="h-1.5 w-1.5 rotate-45"
+        style={{ backgroundColor: "#dc2626", opacity: 0.5 }}
+      />
+      <div className="h-px w-8" style={{ backgroundColor: "#dc262640" }} />
     </div>
   );
 }
 
-function DarkCard({
-  children,
-  className = "",
-  dimmed = false,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  dimmed?: boolean;
-}) {
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      className={className}
+    <span
+      className="mb-2 block text-center"
       style={{
-        backgroundColor: dimmed ? "#0a0a0a" : "#0e0e0e",
-        border: "1px solid #1c1c1c",
-        borderRadius: "12px",
-        padding: "28px",
-        opacity: dimmed ? 0.8 : 1,
+        fontFamily: "var(--font-mono)",
+        fontSize: "10px",
+        letterSpacing: "0.3em",
+        color: "#dc2626",
+        fontWeight: 600,
       }}
     >
       {children}
-    </div>
+    </span>
   );
 }
 
-function DebateCard({ claim }: { claim: Claim }) {
+/* ───────────── Debate Accordion ───────────── */
+
+function DebateCard({ claim, index }: { claim: Claim; index: number }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <DarkCard className="scroll-reveal" dimmed={claim.ruling === "DESTROYED"}>
-      {/* Top row */}
-      <div className="mb-4 flex flex-wrap items-center justify-center gap-4">
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "12px",
-            color: "#d4d4d4",
-            letterSpacing: "0.1em",
-            fontWeight: 600,
-          }}
-        >
-          {claim.id}
-        </span>
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "12px",
-            color: "#a3a3a3",
-            letterSpacing: "0.1em",
-          }}
-        >
-          CYCLE {claim.cycle}
-        </span>
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "12px",
-            letterSpacing: "0.1em",
-            color: rulingColor(claim.ruling),
-            fontWeight: 600,
-          }}
-        >
-          {claim.ruling}
-        </span>
-      </div>
-
-      {/* Position text */}
-      <p
-        className="mb-5 text-center"
+    <div
+      className="scroll-reveal"
+      style={{ animationDelay: `${index * 80}ms` }}
+    >
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full text-left transition-colors duration-300"
         style={{
-          fontFamily: "var(--font-body)",
-          fontSize: "17px",
-          fontWeight: 600,
-          color: claim.ruling === "DESTROYED" ? "#a3a3a3" : "#e5e5e5",
-          lineHeight: "1.8",
-          fontStyle: claim.ruling === "DESTROYED" ? "italic" : "normal",
+          backgroundColor: expanded ? "#0e0e0e" : "transparent",
+          border: `1px solid ${expanded ? "#1c1c1c" : "#141414"}`,
+          borderRadius: "12px",
+          padding: "24px 28px",
+          cursor: "pointer",
+        }}
+        onMouseEnter={(e) => {
+          if (!expanded)
+            e.currentTarget.style.borderColor = "#dc262640";
+        }}
+        onMouseLeave={(e) => {
+          if (!expanded)
+            e.currentTarget.style.borderColor = "#141414";
         }}
       >
-        {claim.position}
-      </p>
+        {/* Header row */}
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-3">
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "12px",
+              color: "#dc2626",
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+            }}
+          >
+            {claim.id}
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "11px",
+              color: "#525252",
+              letterSpacing: "0.1em",
+            }}
+          >
+            CYCLE {claim.cycle}
+          </span>
+          {rulingBadge(claim.ruling)}
+        </div>
 
-      {/* Expand toggle */}
-      <div className="text-center">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="inline-flex items-center gap-2"
+        {/* Claim text */}
+        <p
+          className="text-center"
           style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "11px",
-            color: expanded ? "#dc2626" : "#a3a3a3",
-            textTransform: "uppercase" as const,
-            letterSpacing: "0.2em",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            transition: "color 0.2s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "#dc2626";
-          }}
-          onMouseLeave={(e) => {
-            if (!expanded) e.currentTarget.style.color = "#a3a3a3";
+            fontFamily: "var(--font-body)",
+            fontSize: "18px",
+            fontWeight: 600,
+            color: claim.ruling === "DESTROYED" ? "#a3a3a3" : "#f5f5f5",
+            lineHeight: "1.8",
+            textDecoration: claim.ruling === "DESTROYED" ? "line-through" : "none",
+            textDecorationColor: "#dc262640",
           }}
         >
-          {expanded ? "COLLAPSE" : "VIEW DEBATE"}
+          {claim.position}
+        </p>
+
+        {/* Expand hint */}
+        <div className="mt-3 text-center">
           <span
             className="inline-block transition-transform duration-300"
-            style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "10px",
+              color: expanded ? "#dc2626" : "#404040",
+              letterSpacing: "0.2em",
+              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+            }}
           >
-            &#8595;
+            &#9660;
           </span>
-        </button>
-      </div>
+        </div>
+      </button>
 
-      {/* Expanded debate */}
+      {/* Expanded content */}
       <div
         className="grid transition-all duration-500 ease-out"
         style={{
@@ -172,98 +176,105 @@ function DebateCard({ claim }: { claim: Claim }) {
         }}
       >
         <div className="overflow-hidden">
-          <div style={{ paddingTop: "20px" }}>
-            <div className="mb-5 h-px" style={{ backgroundColor: "#1c1c1c" }} />
-
+          <div
+            className="mx-4 mb-2 flex flex-col gap-8 rounded-b-xl px-6 pb-8 pt-6 md:mx-8 md:px-10"
+            style={{
+              backgroundColor: "#0a0a0a",
+              borderLeft: "1px solid #1c1c1c",
+              borderRight: "1px solid #1c1c1c",
+              borderBottom: "1px solid #1c1c1c",
+            }}
+          >
             {/* Challenge */}
-            <div className="mb-5 text-center">
-              <span
-                className="mb-2 block"
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  color: "#d4d4d4",
-                  letterSpacing: "0.25em",
-                  textTransform: "uppercase" as const,
-                }}
-              >
-                Challenge
-              </span>
+            <div className="text-center">
+              <SectionLabel>CHALLENGE</SectionLabel>
               <p
                 style={{
                   fontFamily: "var(--font-body)",
-                  fontSize: "16px",
+                  fontSize: "17px",
                   fontWeight: 600,
                   color: "#e5e5e5",
-                  lineHeight: "1.8",
+                  lineHeight: "1.9",
                 }}
               >
                 {claim.challenge}
               </p>
             </div>
 
+            <div className="mx-auto h-px w-16" style={{ backgroundColor: "#1c1c1c" }} />
+
             {/* Rebuttal */}
-            <div className="mb-5 text-center">
-              <span
-                className="mb-2 block"
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  color: "#d4d4d4",
-                  letterSpacing: "0.25em",
-                  textTransform: "uppercase" as const,
-                }}
-              >
-                Rebuttal
-              </span>
+            <div className="text-center">
+              <SectionLabel>REBUTTAL</SectionLabel>
               <p
                 style={{
                   fontFamily: "var(--font-body)",
-                  fontSize: "16px",
+                  fontSize: "17px",
                   fontWeight: 600,
                   color: "#e5e5e5",
-                  lineHeight: "1.8",
+                  lineHeight: "1.9",
                 }}
               >
                 {claim.rebuttal}
               </p>
             </div>
 
+            <div className="mx-auto h-px w-16" style={{ backgroundColor: "#1c1c1c" }} />
+
             {/* Verdict */}
             <div className="text-center">
-              <span
-                className="mb-2 block"
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  color: "#d4d4d4",
-                  letterSpacing: "0.25em",
-                  textTransform: "uppercase" as const,
-                }}
-              >
-                Verdict &middot;{" "}
-                <span style={{ color: rulingColor(claim.ruling) }}>
-                  {claim.ruling}
-                </span>
-              </span>
+              <SectionLabel>VERDICT</SectionLabel>
               <p
                 style={{
                   fontFamily: "var(--font-body)",
-                  fontSize: "16px",
+                  fontSize: "17px",
                   fontWeight: 600,
                   color: "#f5f5f5",
-                  lineHeight: "1.8",
+                  lineHeight: "1.9",
                 }}
               >
                 {claim.verdict}
               </p>
             </div>
+
+            {/* Scores */}
+            <div className="flex items-center justify-center gap-10 pt-2">
+              {[
+                { label: "DRAMA", value: claim.drama },
+                { label: "NOVELTY", value: claim.novelty },
+                { label: "DEPTH", value: claim.depth },
+              ].map((m) => (
+                <div key={m.label} className="flex flex-col items-center gap-1">
+                  <span
+                    style={{
+                      fontFamily: "var(--font-serif)",
+                      fontSize: "24px",
+                      color: "#f5f5f5",
+                    }}
+                  >
+                    {m.value}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "9px",
+                      color: "#525252",
+                      letterSpacing: "0.2em",
+                    }}
+                  >
+                    {m.label}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
-    </DarkCard>
+    </div>
   );
 }
+
+/* ───────────── Main Component ───────────── */
 
 export function StateProfile({ slug }: { slug: string }) {
   const containerRef = useScrollReveal();
@@ -275,7 +286,7 @@ export function StateProfile({ slug }: { slug: string }) {
   if (!state) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p style={{ fontFamily: "var(--font-body)", fontSize: "20px", color: "#a3a3a3" }}>
+        <p style={{ fontFamily: "var(--font-body)", fontSize: "22px", color: "#525252" }}>
           State not found.
         </p>
       </div>
@@ -307,221 +318,194 @@ export function StateProfile({ slug }: { slug: string }) {
 
   return (
     <section ref={containerRef}>
-      {/* Back breadcrumb */}
-      <div className="scroll-reveal mb-10 text-center">
+      {/* ── HERO ZONE ── */}
+      <div className="scroll-reveal mb-6 text-center">
         <Link
           href="/states"
-          className="inline-flex items-center gap-2 transition-colors duration-200 hover:opacity-70"
+          className="inline-flex items-center gap-2 transition-opacity duration-200 hover:opacity-60"
           style={{
             fontFamily: "var(--font-mono)",
-            fontSize: "12px",
-            color: "#dc2626",
-            letterSpacing: "0.15em",
+            fontSize: "11px",
+            color: "#525252",
+            letterSpacing: "0.2em",
           }}
         >
-          &larr; STATES
+          &larr; ALL STATES
         </Link>
       </div>
 
-      {/* Header - centered */}
-      <div className="scroll-reveal mb-16 text-center">
+      {/* State identity */}
+      <div className="scroll-reveal mb-6 text-center">
+        <div
+          className="mb-4"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            color: "#dc2626",
+            letterSpacing: "0.3em",
+          }}
+        >
+          {state.domain.toUpperCase()}
+        </div>
+
         <h1
-          className="mb-3"
           style={{
             fontFamily: "var(--font-serif)",
-            fontSize: "36px",
+            fontSize: "clamp(32px, 6vw, 48px)",
             color: "#f5f5f5",
-            letterSpacing: "0.15em",
+            letterSpacing: "0.12em",
+            lineHeight: 1.1,
           }}
         >
           {state.name.replace("_", " ")}
         </h1>
+      </div>
 
-        <span
-          className="mb-5 inline-block"
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "12px",
-            color: "#dc2626",
-            letterSpacing: "0.2em",
-            textTransform: "uppercase" as const,
-          }}
-        >
-          {state.domain}
-        </span>
-
+      {/* Approach quote */}
+      <div className="scroll-reveal mb-8 text-center">
         <p
-          className="mx-auto mb-6 max-w-2xl"
+          className="mx-auto max-w-xl"
           style={{
             fontFamily: "var(--font-body)",
-            fontSize: "19px",
+            fontSize: "20px",
             fontWeight: 600,
             fontStyle: "italic",
-            color: "#d4d4d4",
+            color: "#a3a3a3",
             lineHeight: "1.8",
           }}
         >
           &ldquo;{state.approach}&rdquo;
         </p>
-
-        {/* Stats row - centered */}
-        <div className="flex flex-wrap items-center justify-center gap-8">
-          <div
-            className="flex items-center gap-1.5"
-            style={{ fontFamily: "var(--font-mono)", fontSize: "14px" }}
-          >
-            <span style={{ color: "#d4d4d4" }}>W</span>
-            <span style={{ color: "#f5f5f5", fontWeight: 700 }}>{state.wins}</span>
-            <span style={{ color: "#2a2a2a" }}>/</span>
-            <span style={{ color: "#d4d4d4" }}>P</span>
-            <span style={{ color: "#f5f5f5", fontWeight: 700 }}>{state.partials}</span>
-            <span style={{ color: "#2a2a2a" }}>/</span>
-            <span style={{ color: "#d4d4d4" }}>L</span>
-            <span style={{ color: "#f5f5f5", fontWeight: 700 }}>{state.losses}</span>
-          </div>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "14px",
-              color: "#dc2626",
-              fontWeight: 700,
-            }}
-          >
-            {survivalPct}% survival
-          </span>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "11px",
-              letterSpacing: "0.15em",
-              color: "#d4d4d4",
-              border: "1px solid #333",
-              padding: "4px 12px",
-              borderRadius: "4px",
-            }}
-          >
-            {tier} TIER
-          </span>
-        </div>
       </div>
 
-      {/* Divider */}
-      <div className="mx-auto mb-16 h-px max-w-xs" style={{ backgroundColor: "#1c1c1c" }} />
-
-      {/* 1. LEARNING ARC */}
-      <div className="mb-20">
-        <SectionHeading title="LEARNING ARC" />
-        <DarkCard className="scroll-reveal">
-          <div className="flex flex-col gap-6">
-            {claimsByCycle.map((cycleClaims, idx) => {
-              if (cycleClaims.length === 0) return null;
-              const claim = cycleClaims[0];
-              return (
-                <div key={idx} className="text-center">
-                  <div className="mb-2 flex items-center justify-center gap-4">
-                    <span
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "12px",
-                        color: "#d4d4d4",
-                        letterSpacing: "0.2em",
-                      }}
-                    >
-                      CYCLE {idx + 1}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "12px",
-                        letterSpacing: "0.1em",
-                        color: rulingColor(claim.ruling),
-                        fontWeight: 600,
-                      }}
-                    >
-                      {claim.ruling}
-                    </span>
-                  </div>
-                  <p
-                    style={{
-                      fontFamily: "var(--font-body)",
-                      fontSize: "17px",
-                      fontWeight: 600,
-                      color: "#e5e5e5",
-                      lineHeight: "1.8",
-                    }}
-                  >
-                    {claim.position}
-                  </p>
-                  {idx < claimsByCycle.filter((c) => c.length > 0).length - 1 && (
-                    <div
-                      className="mx-auto mt-6"
-                      style={{ height: "1px", maxWidth: "120px", backgroundColor: "#1c1c1c" }}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Narrative */}
-          <div className="mt-8 pt-6 text-center" style={{ borderTop: "1px solid #1c1c1c" }}>
+      {/* Stats strip */}
+      <div className="scroll-reveal mb-4 flex flex-wrap items-center justify-center gap-6">
+        {[
+          { label: "W", value: state.wins, color: "#22c55e" },
+          { label: "P", value: state.partials, color: "#f59e0b" },
+          { label: "L", value: state.losses, color: "#dc2626" },
+        ].map((s) => (
+          <div key={s.label} className="flex items-center gap-2">
             <span
-              className="mb-3 block"
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: "11px",
-                color: "#d4d4d4",
-                letterSpacing: "0.25em",
-                textTransform: "uppercase" as const,
+                color: "#525252",
+                letterSpacing: "0.1em",
               }}
             >
-              Narrative
+              {s.label}
             </span>
-            <p
+            <span
               style={{
-                fontFamily: "var(--font-body)",
-                fontSize: "17px",
-                fontWeight: 600,
-                color: "#e5e5e5",
-                lineHeight: "1.9",
+                fontFamily: "var(--font-serif)",
+                fontSize: "28px",
+                color: s.color,
+                fontWeight: 700,
               }}
             >
-              {state.learningArc}
-            </p>
+              {s.value}
+            </span>
           </div>
-        </DarkCard>
+        ))}
+
+        <div className="h-6 w-px" style={{ backgroundColor: "#1c1c1c" }} />
+
+        <div className="flex items-center gap-3">
+          <span
+            style={{
+              fontFamily: "var(--font-serif)",
+              fontSize: "28px",
+              color: "#f5f5f5",
+              fontWeight: 700,
+            }}
+          >
+            {survivalPct}%
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "10px",
+              color: "#525252",
+              letterSpacing: "0.15em",
+            }}
+          >
+            SURVIVAL
+          </span>
+        </div>
+
+        <div className="h-6 w-px" style={{ backgroundColor: "#1c1c1c" }} />
+
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            letterSpacing: "0.2em",
+            color:
+              tier === "GOLD"
+                ? "#f59e0b"
+                : tier === "SILVER"
+                  ? "#a3a3a3"
+                  : tier === "BRONZE"
+                    ? "#cd7f32"
+                    : "#525252",
+            fontWeight: 700,
+          }}
+        >
+          {tier}
+        </span>
       </div>
 
-      {/* 2. ACTIVE RESEARCH */}
-      <div className="mb-20">
-        <SectionHeading title="ACTIVE RESEARCH" />
-        <DarkCard className="scroll-reveal text-center">
+      <SectionDivider />
+
+      {/* ── CURRENT RESEARCH ── */}
+      <div className="scroll-reveal mb-0 text-center">
+        <SectionLabel>CURRENT FOCUS</SectionLabel>
+        <h2
+          className="mb-6"
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontSize: "24px",
+            color: "#f5f5f5",
+            letterSpacing: "0.15em",
+          }}
+        >
+          Active Research
+        </h2>
+        <div
+          className="mx-auto max-w-2xl rounded-xl px-8 py-8 md:px-12"
+          style={{
+            backgroundColor: "#0e0e0e",
+            border: "1px solid #dc262625",
+          }}
+        >
           <div className="mb-3 flex items-center justify-center gap-3">
             <span
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: "12px",
                 color: "#dc2626",
-                letterSpacing: "0.15em",
-                textTransform: "uppercase" as const,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
               }}
             >
-              {state.domain}
+              {latestClaim.id}
             </span>
             <span
               style={{
                 fontFamily: "var(--font-mono)",
-                fontSize: "12px",
-                color: "#a3a3a3",
+                fontSize: "11px",
+                color: "#404040",
+                letterSpacing: "0.1em",
               }}
             >
-              {latestClaim.id} &middot; Cycle {latestClaim.cycle}
+              CYCLE {latestClaim.cycle}
             </span>
           </div>
           <p
             style={{
               fontFamily: "var(--font-body)",
-              fontSize: "18px",
+              fontSize: "20px",
               fontWeight: 600,
               color: "#f5f5f5",
               lineHeight: "1.8",
@@ -529,104 +513,221 @@ export function StateProfile({ slug }: { slug: string }) {
           >
             {latestClaim.position}
           </p>
-        </DarkCard>
-      </div>
-
-      {/* 3. KNOWLEDGE GRAPH */}
-      <div className="mb-20">
-        <SectionHeading title="KNOWLEDGE GRAPH" />
-        <div className="scroll-reveal">
-          <KnowledgeGraph stateName={state.name} stateClaims={stateClaims} />
         </div>
       </div>
 
-      {/* 4. DEBATES */}
-      <div className="mb-20">
-        <SectionHeading title="DEBATES" />
-        <div className="flex flex-col gap-6">
-          {claimsByCycle.map((cycleClaims, cycleIdx) => {
+      <SectionDivider />
+
+      {/* ── KNOWLEDGE GRAPH ── */}
+      <div className="scroll-reveal mb-0 text-center">
+        <SectionLabel>NETWORK</SectionLabel>
+        <h2
+          className="mb-8"
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontSize: "24px",
+            color: "#f5f5f5",
+            letterSpacing: "0.15em",
+          }}
+        >
+          Knowledge Graph
+        </h2>
+        <KnowledgeGraph stateName={state.name} stateClaims={stateClaims} />
+      </div>
+
+      <SectionDivider />
+
+      {/* ── LEARNING ARC ── */}
+      <div className="scroll-reveal mb-0 text-center">
+        <SectionLabel>EVOLUTION</SectionLabel>
+        <h2
+          className="mb-10"
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontSize: "24px",
+            color: "#f5f5f5",
+            letterSpacing: "0.15em",
+          }}
+        >
+          Learning Arc
+        </h2>
+
+        {/* Timeline */}
+        <div className="relative mx-auto max-w-2xl">
+          {/* Vertical line */}
+          <div
+            className="absolute left-1/2 top-0 h-full -translate-x-1/2"
+            style={{ width: "1px", backgroundColor: "#1c1c1c" }}
+          />
+
+          {claimsByCycle.map((cycleClaims, idx) => {
             if (cycleClaims.length === 0) return null;
+            const claim = cycleClaims[0];
             return (
-              <div key={cycleIdx}>
-                <span
-                  className="scroll-reveal mb-4 block text-center"
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "12px",
-                    color: "#d4d4d4",
-                    letterSpacing: "0.2em",
-                  }}
-                >
-                  CYCLE {cycleIdx + 1}
-                </span>
-                <div className="flex flex-col gap-4">
-                  {cycleClaims.map((claim) => (
-                    <DebateCard key={claim.id} claim={claim} />
-                  ))}
+              <div key={idx} className="relative pb-12 last:pb-0">
+                {/* Node on timeline */}
+                <div className="absolute left-1/2 top-2 flex -translate-x-1/2 items-center justify-center">
+                  <div
+                    className="z-10 flex h-8 w-8 items-center justify-center rounded-full"
+                    style={{
+                      backgroundColor:
+                        claim.ruling === "DESTROYED" ? "#1c1c1c" : "#dc2626",
+                      border: "2px solid #0e0e0e",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "10px",
+                        color: claim.ruling === "DESTROYED" ? "#525252" : "#fff",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {idx + 1}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="mx-auto w-full pt-14">
+                  <div className="mb-2 flex items-center justify-center gap-3">
+                    <span
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "11px",
+                        color: "#525252",
+                        letterSpacing: "0.15em",
+                      }}
+                    >
+                      CYCLE {idx + 1}
+                    </span>
+                    {rulingBadge(claim.ruling)}
+                  </div>
+                  <p
+                    style={{
+                      fontFamily: "var(--font-body)",
+                      fontSize: "18px",
+                      fontWeight: 600,
+                      color: claim.ruling === "DESTROYED" ? "#737373" : "#e5e5e5",
+                      lineHeight: "1.8",
+                      textDecoration:
+                        claim.ruling === "DESTROYED" ? "line-through" : "none",
+                      textDecorationColor: "#dc262640",
+                    }}
+                  >
+                    {claim.position}
+                  </p>
                 </div>
               </div>
             );
           })}
         </div>
-      </div>
 
-      {/* 5. KNOWLEDGE (surviving claims) */}
-      <div className="mb-20">
-        <SectionHeading title="KNOWLEDGE" />
-        {survivingClaims.length === 0 ? (
+        {/* Narrative */}
+        <div className="mx-auto mt-12 max-w-2xl">
           <p
-            className="scroll-reveal text-center"
             style={{
               fontFamily: "var(--font-body)",
               fontSize: "17px",
               fontWeight: 600,
-              color: "#737373",
+              color: "#a3a3a3",
+              lineHeight: "1.9",
+              fontStyle: "italic",
+            }}
+          >
+            {state.learningArc}
+          </p>
+        </div>
+      </div>
+
+      <SectionDivider />
+
+      {/* ── DEBATES ── */}
+      <div className="mb-0 text-center">
+        <div className="scroll-reveal">
+          <SectionLabel>ADVERSARIAL RECORD</SectionLabel>
+          <h2
+            className="mb-10"
+            style={{
+              fontFamily: "var(--font-serif)",
+              fontSize: "24px",
+              color: "#f5f5f5",
+              letterSpacing: "0.15em",
+            }}
+          >
+            Debates
+          </h2>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          {stateClaims.map((claim, i) => (
+            <DebateCard key={claim.id} claim={claim} index={i} />
+          ))}
+        </div>
+      </div>
+
+      <SectionDivider />
+
+      {/* ── SURVIVING KNOWLEDGE ── */}
+      <div className="mb-0 text-center">
+        <div className="scroll-reveal">
+          <SectionLabel>VAULT</SectionLabel>
+          <h2
+            className="mb-10"
+            style={{
+              fontFamily: "var(--font-serif)",
+              fontSize: "24px",
+              color: "#f5f5f5",
+              letterSpacing: "0.15em",
+            }}
+          >
+            Surviving Knowledge
+          </h2>
+        </div>
+
+        {survivingClaims.length === 0 ? (
+          <p
+            className="scroll-reveal"
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: "18px",
+              fontWeight: 600,
+              color: "#404040",
               fontStyle: "italic",
             }}
           >
             No surviving claims yet.
           </p>
         ) : (
-          <div className="flex flex-col gap-4">
-            {survivingClaims.map((claim) => (
-              <DarkCard key={claim.id} className="scroll-reveal text-center">
+          <div className="flex flex-col gap-6">
+            {survivingClaims.map((claim, i) => (
+              <div
+                key={claim.id}
+                className="scroll-reveal mx-auto w-full max-w-2xl rounded-xl px-8 py-6"
+                style={{
+                  backgroundColor: "#0e0e0e",
+                  border: "1px solid #1c1c1c",
+                  animationDelay: `${i * 80}ms`,
+                }}
+              >
                 <div className="mb-3 flex items-center justify-center gap-3">
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
                       fontSize: "12px",
-                      color: "#d4d4d4",
+                      color: "#dc2626",
+                      fontWeight: 700,
                       letterSpacing: "0.1em",
-                      fontWeight: 600,
                     }}
                   >
                     {claim.id}
                   </span>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "12px",
-                      color: "#a3a3a3",
-                      letterSpacing: "0.1em",
-                    }}
-                  >
-                    CYCLE {claim.cycle}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "12px",
-                      letterSpacing: "0.1em",
-                      color: "#d4d4d4",
-                    }}
-                  >
-                    {claim.ruling}
-                  </span>
+                  {rulingBadge(claim.ruling)}
                 </div>
                 <p
                   style={{
                     fontFamily: "var(--font-body)",
-                    fontSize: "17px",
+                    fontSize: "18px",
                     fontWeight: 600,
                     color: "#e5e5e5",
                     lineHeight: "1.8",
@@ -634,74 +735,80 @@ export function StateProfile({ slug }: { slug: string }) {
                 >
                   {claim.position}
                 </p>
-              </DarkCard>
+              </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* 6. GRAVEYARD (destroyed claims) */}
-      <div className="mb-20">
-        <SectionHeading title="GRAVEYARD" />
+      <SectionDivider />
+
+      {/* ── GRAVEYARD ── */}
+      <div className="mb-0 text-center">
+        <div className="scroll-reveal">
+          <SectionLabel>FALLEN</SectionLabel>
+          <h2
+            className="mb-10"
+            style={{
+              fontFamily: "var(--font-serif)",
+              fontSize: "24px",
+              color: "#525252",
+              letterSpacing: "0.15em",
+            }}
+          >
+            Graveyard
+          </h2>
+        </div>
+
         {destroyedClaims.length === 0 ? (
           <p
-            className="scroll-reveal text-center"
+            className="scroll-reveal"
             style={{
               fontFamily: "var(--font-body)",
-              fontSize: "17px",
+              fontSize: "18px",
               fontWeight: 600,
-              color: "#737373",
+              color: "#404040",
               fontStyle: "italic",
             }}
           >
             No destroyed claims.
           </p>
         ) : (
-          <div className="flex flex-col gap-4">
-            {destroyedClaims.map((claim) => (
-              <DarkCard key={claim.id} className="scroll-reveal text-center" dimmed>
+          <div className="flex flex-col gap-6">
+            {destroyedClaims.map((claim, i) => (
+              <div
+                key={claim.id}
+                className="scroll-reveal mx-auto w-full max-w-2xl rounded-xl px-8 py-6"
+                style={{
+                  backgroundColor: "#0a0a0a",
+                  border: "1px solid #141414",
+                  animationDelay: `${i * 80}ms`,
+                }}
+              >
                 <div className="mb-3 flex items-center justify-center gap-3">
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
                       fontSize: "12px",
-                      color: "#a3a3a3",
+                      color: "#404040",
+                      fontWeight: 700,
                       letterSpacing: "0.1em",
-                      fontWeight: 600,
                     }}
                   >
                     {claim.id}
                   </span>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "12px",
-                      color: "#a3a3a3",
-                      letterSpacing: "0.1em",
-                    }}
-                  >
-                    CYCLE {claim.cycle}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "12px",
-                      letterSpacing: "0.1em",
-                      color: "#dc2626",
-                      fontWeight: 600,
-                    }}
-                  >
-                    DESTROYED
-                  </span>
+                  {rulingBadge("DESTROYED")}
                 </div>
                 <p
-                  className="mb-4"
+                  className="mb-3"
                   style={{
                     fontFamily: "var(--font-body)",
                     fontSize: "17px",
                     fontWeight: 600,
-                    color: "#a3a3a3",
+                    color: "#737373",
                     lineHeight: "1.8",
+                    textDecoration: "line-through",
+                    textDecorationColor: "#dc262640",
                   }}
                 >
                   {claim.position}
@@ -709,79 +816,22 @@ export function StateProfile({ slug }: { slug: string }) {
                 <p
                   style={{
                     fontFamily: "var(--font-body)",
-                    fontSize: "16px",
+                    fontSize: "15px",
                     fontWeight: 600,
-                    color: "#737373",
+                    color: "#404040",
                     lineHeight: "1.8",
                     fontStyle: "italic",
                   }}
                 >
                   {claim.verdict}
                 </p>
-              </DarkCard>
+              </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* 7. CITIES & TOWNS */}
-      <div className="mb-20">
-        <SectionHeading title="CITIES & TOWNS" />
-        <div className="scroll-reveal flex flex-col gap-6 md:flex-row">
-          <DarkCard className="flex-1 text-center">
-            <span
-              className="mb-3 block"
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "11px",
-                color: "#a3a3a3",
-                letterSpacing: "0.2em",
-                textTransform: "uppercase" as const,
-              }}
-            >
-              Cities
-            </span>
-            <p
-              style={{
-                fontFamily: "var(--font-body)",
-                fontSize: "17px",
-                fontWeight: 600,
-                color: "#737373",
-                fontStyle: "italic",
-              }}
-            >
-              No cities formed yet.
-            </p>
-          </DarkCard>
-          <DarkCard className="flex-1 text-center">
-            <span
-              className="mb-3 block"
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "11px",
-                color: "#a3a3a3",
-                letterSpacing: "0.2em",
-                textTransform: "uppercase" as const,
-              }}
-            >
-              Towns
-            </span>
-            <p
-              style={{
-                fontFamily: "var(--font-body)",
-                fontSize: "17px",
-                fontWeight: 600,
-                color: "#737373",
-                fontStyle: "italic",
-              }}
-            >
-              No towns formed yet.
-            </p>
-          </DarkCard>
-        </div>
-      </div>
-
-      <div style={{ height: "40px" }} />
+      <div style={{ height: "60px" }} />
     </section>
   );
 }
