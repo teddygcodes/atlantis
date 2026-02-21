@@ -112,7 +112,7 @@ export function Chronicle() {
         />
 
         {/* Scroll controls */}
-        <div           className="mx-auto mb-6 flex max-w-[900px] items-center justify-end gap-2 px-6">
+        <div className="mx-auto mb-6 flex max-w-[900px] items-center justify-center gap-2 px-6">
           <button
             onClick={() => scroll("left")}
             disabled={!canScrollLeft}

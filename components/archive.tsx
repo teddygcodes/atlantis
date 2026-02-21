@@ -75,7 +75,7 @@ export function Archive() {
       <div style={{ height: "48px" }} />
 
       {/* Domain filter */}
-      <div className="scroll-reveal mx-auto mb-12 flex max-w-[900px] items-center gap-1">
+      <div className="scroll-reveal mx-auto mb-12 flex max-w-[900px] items-center justify-center gap-1">
         {DOMAIN_FILTERS.map((d) => (
           <button
             key={d}

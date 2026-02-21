@@ -102,7 +102,7 @@ function MatchCard({ claim }: { claim: Claim }) {
   return (
     <article className="scroll-reveal">
       {/* Match header */}
-      <div className="mb-6 flex items-center gap-4">
+      <div className="mb-6 flex flex-wrap items-center justify-center gap-4">
         <span
           className="text-xs font-bold text-accent"
           style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
@@ -121,20 +121,18 @@ function MatchCard({ claim }: { claim: Claim }) {
         >
           {claim.state.replace("_", " ")}
         </span>
-        <div className="ml-auto">
-          <span
-            className={`rounded-sm px-2 py-0.5 text-[9px] uppercase tracking-wider ${
-              claim.ruling === "DESTROYED"
-                ? "bg-destroyed/20 text-destroyed"
-                : claim.ruling === "REVISE"
-                  ? "bg-accent/10 text-accent"
-                  : "bg-amber-500/10 text-amber-500"
-            }`}
-            style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
-          >
-            {claim.ruling}
-          </span>
-        </div>
+        <span
+          className={`rounded-sm px-2 py-0.5 text-[9px] uppercase tracking-wider ${
+            claim.ruling === "DESTROYED"
+              ? "bg-destroyed/20 text-destroyed"
+              : claim.ruling === "REVISE"
+                ? "bg-accent/10 text-accent"
+                : "bg-amber-500/10 text-amber-500"
+          }`}
+          style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
+        >
+          {claim.ruling}
+        </span>
       </div>
 
       {/* The match arena */}
@@ -269,7 +267,7 @@ function MatchCard({ claim }: { claim: Claim }) {
       </div>
 
       {/* Score bar */}
-      <div className="mt-4 flex items-center gap-4">
+      <div className="mt-4 flex items-center justify-center gap-4">
         <div className="flex items-center gap-3">
           {[
             { label: "Drama", value: claim.drama },
