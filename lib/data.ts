@@ -117,8 +117,11 @@ export interface Hypothesis {
   domain: "Consciousness" | "Causation" | "Mathematics";
   cycle: number;
   state: string;
-  ruling: "REVISE" | "PARTIAL" | "DESTROYED";
+  ruling: "REVISE" | "PARTIAL" | "DESTROYED" | "SURVIVED";
   position: string;
+  hypothesis?: string;
+  operational_def?: string;
+  prediction?: string;
   challenge: string;
   rebuttal: string;
   verdict: string;
