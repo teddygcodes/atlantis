@@ -125,7 +125,7 @@ function Tombstone({
           className="mb-6 text-lg font-semibold italic leading-relaxed text-foreground/90"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
-          &ldquo;{getEpitaph(claim.verdict)}&rdquo;
+          &ldquo;{getEpitaph(claim.verdict) || "No verdict recorded."}&rdquo;
         </p>
 
         {/* Meta */}
@@ -273,6 +273,8 @@ function Tombstone({
 }
 
 function getEpitaph(verdict: string): string {
+  if (!verdict.trim()) return "No verdict recorded.";
   const firstSentence = verdict.split(". ")[0];
-  return firstSentence.replace(/^(Destroyed|Refuted)\.\s*/i, "").trim();
+  const epitaph = firstSentence.replace(/^(Destroyed|Refuted)\.\s*/i, "").trim();
+  return epitaph || "No verdict recorded.";
 }
