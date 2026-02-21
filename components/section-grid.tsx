@@ -70,10 +70,10 @@ export function SectionGrid() {
   return (
     <section className="mx-auto max-w-5xl px-6 py-28 md:py-40">
       <p
-        className="mb-20 text-center text-[11px] uppercase tracking-[0.35em]"
+        className="mb-20 text-center text-[11px] uppercase tracking-[0.35em] animate-fade-in-up"
         style={{
           fontFamily: "var(--font-ibm-plex-mono)",
-          color: "#404040",
+          color: "#737373",
         }}
       >
         Explore the world

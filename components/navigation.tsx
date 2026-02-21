@@ -39,10 +39,10 @@ export function Navigation() {
           <Image
             src="/images/logo.png"
             alt="Atlantis logo"
-            width={40}
-            height={40}
+            width={56}
+            height={56}
             className="object-contain"
-            style={{ width: "auto", height: "auto", maxWidth: "40px", maxHeight: "40px" }}
+            style={{ width: "auto", height: "auto", maxWidth: "56px", maxHeight: "56px" }}
           />
         </Link>
 
