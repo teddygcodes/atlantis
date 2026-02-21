@@ -148,13 +148,19 @@ function StateCard({ state, index }: { state: StateEntity; index: number }) {
         {/* Reveal toggle */}
         <button
           onClick={() => setRevealed(!revealed)}
-          className="text-[10px] uppercase tracking-[0.25em] transition-colors duration-200 hover:text-foreground"
+          className="flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] transition-colors duration-200 hover:text-foreground"
           style={{
             fontFamily: "var(--font-ibm-plex-mono)",
-            color: "#525252",
+            color: revealed ? "#dc2626" : "#525252",
           }}
         >
-          {revealed ? "Hide story" : "Reveal full story"}
+          {revealed ? "Collapse" : "Reveal full story"}
+          <span
+            className="inline-block transition-transform duration-300"
+            style={{ transform: revealed ? "rotate(180deg)" : "rotate(0deg)" }}
+          >
+            &#8595;
+          </span>
         </button>
 
         {/* Expanded learning arc */}
