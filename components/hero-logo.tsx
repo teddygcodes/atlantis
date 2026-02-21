@@ -157,32 +157,40 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
           />
         </div>
 
-        {/* Middle: Wordmark + description */}
-        <div className="flex flex-col items-center py-2">
+        {/* Middle: Wordmark + three lines */}
+        <div className="flex flex-col items-center">
           <h1
-            className="hero-fade-in-delay-1 mb-3 text-center text-4xl tracking-[0.4em] text-foreground md:text-5xl"
-            style={{ fontFamily: "var(--font-cinzel)" }}
+            className="hero-fade-in-delay-1 text-center tracking-[0.3em] text-foreground"
+            style={{ fontFamily: "var(--font-cinzel)", fontSize: "clamp(48px, 8vw, 72px)" }}
           >
             ATLANTIS
           </h1>
 
           <div
-            className="hero-fade-in-delay-2 mb-4 h-px w-20"
+            className="hero-fade-in-delay-2 mt-6 mb-6 h-px w-20"
             style={{ backgroundColor: "rgba(220, 38, 38, 0.5)" }}
           />
 
-          <p
-            className="hero-fade-in-delay-2 max-w-lg text-center text-lg italic leading-[1.8]"
-            style={{
-              fontFamily: "var(--font-cormorant)",
-              color: "#a3a3a3",
-              fontSize: "18px",
-            }}
-          >
-            A living knowledge engine where ideas are tested through structured
-            adversarial debate. Claims are made. Challenges are issued. Only
-            validated knowledge survives.
-          </p>
+          <div className="hero-fade-in-delay-2 flex flex-col items-center gap-2">
+            <p
+              className="text-center"
+              style={{ fontFamily: "var(--font-cormorant)", fontSize: "20px", color: "#a3a3a3" }}
+            >
+              Claims are made.
+            </p>
+            <p
+              className="text-center"
+              style={{ fontFamily: "var(--font-cormorant)", fontSize: "20px", color: "#a3a3a3" }}
+            >
+              Challenges are issued.
+            </p>
+            <p
+              className="text-center"
+              style={{ fontFamily: "var(--font-cormorant)", fontSize: "20px", color: "#a3a3a3" }}
+            >
+              Only validated knowledge survives.
+            </p>
+          </div>
         </div>
 
         {/* Bottom: Scroll prompt */}
