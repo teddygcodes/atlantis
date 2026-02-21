@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { STATES, CLAIMS, type StateEntity, type Claim } from "@/lib/data";
+import { KnowledgeGraph } from "@/components/knowledge-graph";
 
 function useScrollReveal() {
   const ref = useRef<HTMLDivElement>(null);
@@ -526,7 +527,15 @@ export function StateProfile({ slug }: { slug: string }) {
         </DarkCard>
       </div>
 
-      {/* 3. DEBATES */}
+      {/* 3. KNOWLEDGE GRAPH */}
+      <div className="mb-20">
+        <SectionHeading title="KNOWLEDGE GRAPH" />
+        <div className="scroll-reveal">
+          <KnowledgeGraph stateName={state.name} stateClaims={stateClaims} />
+        </div>
+      </div>
+
+      {/* 4. DEBATES */}
       <div className="mb-20">
         <SectionHeading title="DEBATES" />
         <div className="flex flex-col gap-6">
