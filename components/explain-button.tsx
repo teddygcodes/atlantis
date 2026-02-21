@@ -46,8 +46,10 @@ export function ExplainSimply({
         }
         cache.set(cacheKey, data.explanation);
         setExplanation(data.explanation);
-      } catch {
-        setExplanation("Unable to generate explanation. Please try again.");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[v0] ExplainSimply client error:", msg);
+        setExplanation(`Error: ${msg}`);
       } finally {
         setLoading(false);
       }
