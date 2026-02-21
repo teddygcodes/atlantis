@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import Image from "next/image";
 import { CHRONICLE_ENTRIES, CLAIMS } from "@/lib/data";
 
 function useScrollReveal() {
@@ -66,32 +65,33 @@ export function Chronicle() {
 
   return (
     <section ref={containerRef} className="scroll-reveal">
-      {/* Section intro */}
-      <div className="mx-auto mb-16 flex max-w-[800px] items-start gap-8 px-6">
-        <Image
-          src="/images/logo.png"
-          alt="Atlantis logo"
-          width={80}
-          height={80}
-          className="mt-1 flex-shrink-0 object-contain"
-          style={{ width: "80px", height: "auto" }}
-        />
-        <div>
-          <h2
-            className="mb-4 tracking-[0.25em] text-foreground"
-            style={{ fontFamily: "var(--font-cinzel)", fontSize: "36px" }}
-          >
-            THE CHRONICLE
-          </h2>
-          <p
-            className="text-xl leading-[1.9] text-muted"
-            style={{ fontFamily: "var(--font-cormorant)" }}
-          >
-            Three cycles. Eighteen claims. A civilization learning what holds up
-            under pressure.
-          </p>
-        </div>
+      {/* Page header - centered */}
+      <div className="mx-auto mb-12 text-center" style={{ paddingTop: "64px" }}>
+        <h2
+          className="mb-4"
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontSize: "36px",
+            color: "#e5e5e5",
+            letterSpacing: "0.25em",
+          }}
+        >
+          THE CHRONICLE
+        </h2>
+        <p
+          style={{
+            fontFamily: "var(--font-body)",
+            fontSize: "16px",
+            color: "#a3a3a3",
+          }}
+        >
+          Three cycles. Eighteen claims. A civilization learning what holds up
+          under pressure.
+        </p>
       </div>
+
+      {/* 48px gap below subtitle */}
+      <div style={{ height: "48px" }} />
 
       {/* Horizontal scroll area */}
       <div className="relative">
@@ -112,7 +112,7 @@ export function Chronicle() {
         />
 
         {/* Scroll controls */}
-        <div className="mx-auto mb-6 flex max-w-[800px] items-center justify-end gap-2 px-6">
+        <div           className="mx-auto mb-6 flex max-w-[900px] items-center justify-end gap-2 px-6">
           <button
             onClick={() => scroll("left")}
             disabled={!canScrollLeft}

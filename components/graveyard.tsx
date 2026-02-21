@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Image from "next/image";
 import { CLAIMS } from "@/lib/data";
 
 export function Graveyard() {
@@ -36,35 +35,36 @@ export function Graveyard() {
 
   return (
     <section ref={containerRef}>
-      {/* Header */}
-      <div className="scroll-reveal mx-auto mb-20 flex max-w-[800px] items-start gap-8">
-        <Image
-          src="/images/logo.png"
-          alt="Atlantis logo"
-          width={80}
-          height={80}
-          className="mt-1 flex-shrink-0 object-contain"
-          style={{ width: "80px", height: "auto" }}
-        />
-        <div>
-          <h2
-            className="mb-4 tracking-[0.25em] text-foreground"
-            style={{ fontFamily: "var(--font-cinzel)", fontSize: "36px" }}
-          >
-            THE GRAVEYARD
-          </h2>
-          <p
-            className="text-xl leading-[1.9] text-muted/60"
-            style={{ fontFamily: "var(--font-cormorant)" }}
-          >
-            The fallen. Every destroyed claim is preserved here as a monument to
-            what the system will not accept.
-          </p>
-        </div>
+      {/* Page header - centered */}
+      <div className="scroll-reveal mx-auto mb-12 text-center" style={{ paddingTop: "64px" }}>
+        <h2
+          className="mb-4"
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontSize: "36px",
+            color: "#e5e5e5",
+            letterSpacing: "0.25em",
+          }}
+        >
+          THE GRAVEYARD
+        </h2>
+        <p
+          style={{
+            fontFamily: "var(--font-body)",
+            fontSize: "16px",
+            color: "#a3a3a3",
+          }}
+        >
+          The fallen. Every destroyed claim is preserved here as a monument to
+          what the system will not accept.
+        </p>
       </div>
 
+      {/* 48px gap below subtitle */}
+      <div style={{ height: "48px" }} />
+
       {/* Tombstones */}
-      <div className="mx-auto flex max-w-[600px] flex-col gap-12">
+      <div className="mx-auto flex max-w-[900px] flex-col gap-12">
         {destroyedClaims.map((claim) => (
           <article
             key={claim.id}
