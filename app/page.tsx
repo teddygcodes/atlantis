@@ -23,7 +23,7 @@ export default function Home() {
   }, [enteredWorld]);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" /* refreshed */>
       <HeroLogo onEnter={handleEnter} />
       <SectionGrid />
     </div>
