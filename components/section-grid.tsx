@@ -1,45 +1,48 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
+import Link from "next/link";
 import type { NavItem } from "@/lib/data";
 
 const SECTIONS: {
   id: NavItem;
   title: string;
   description: string;
+  href: string;
 }[] = [
   {
     id: "Chronicle",
     title: "Chronicle",
     description: "what happened when ideas went to war",
+    href: "/chronicle",
   },
   {
     id: "States",
     title: "States",
     description: "meet the minds that survived",
+    href: "/states",
   },
   {
     id: "Archive",
     title: "Archive",
     description: "the knowledge that earned its place",
+    href: "/archive",
   },
   {
     id: "Debates",
     title: "Debates",
     description: "watch them fight",
+    href: "/debates",
   },
   {
     id: "Graveyard",
     title: "Graveyard",
     description: "not everyone makes it",
+    href: "/graveyard",
   },
 ];
 
-interface SectionGridProps {
-  onNavigate: (tab: NavItem) => void;
-}
-
-export function SectionGrid({ onNavigate }: SectionGridProps) {
+export function SectionGrid() {
   const gridRef = useRef<HTMLDivElement>(null);
   const [visibleRows, setVisibleRows] = useState<Set<number>>(new Set());
 
@@ -62,10 +65,6 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
     return () => observer.disconnect();
   }, []);
 
-  /* Row assignments:
-     Row 0 = Chronicle (full width, hero tile)
-     Row 1 = States + Archive
-     Row 2 = Debates + Graveyard */
   const rowMap = [0, 1, 1, 2, 2];
 
   return (
@@ -81,16 +80,13 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
       </p>
 
       <div ref={gridRef} className="flex flex-col gap-4">
-        {/* Row 0: Chronicle -- full width hero tile */}
         {renderTile(SECTIONS[0], 0)}
 
-        {/* Row 1: States + Archive */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {renderTile(SECTIONS[1], 1)}
           {renderTile(SECTIONS[2], 2)}
         </div>
 
-        {/* Row 2: Debates + Graveyard */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {renderTile(SECTIONS[3], 3)}
           {renderTile(SECTIONS[4], 4)}
@@ -99,10 +95,7 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
     </section>
   );
 
-  function renderTile(
-    section: (typeof SECTIONS)[number],
-    index: number
-  ) {
+  function renderTile(section: (typeof SECTIONS)[number], index: number) {
     const row = rowMap[index];
     const isVisible = visibleRows.has(row);
     const colDelay = index === 2 || index === 4 ? 0.1 : 0;
@@ -111,10 +104,10 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
     const isChronicle = index === 0;
 
     return (
-      <button
+      <Link
         key={section.id}
+        href={section.href}
         data-row={row}
-        onClick={() => onNavigate(section.id)}
         className="section-door group relative flex cursor-pointer items-center justify-center overflow-hidden border text-center"
         style={{
           minHeight: isChronicle ? "280px" : "260px",
@@ -130,7 +123,10 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
         {/* Animated red left border */}
         <div
           className="pointer-events-none absolute inset-y-0 left-0 w-[2px] origin-top scale-y-0 transition-transform duration-[400ms] ease-out group-hover:scale-y-100"
-          style={{ backgroundColor: "rgba(220,38,38,0.6)", borderRadius: "12px 0 0 12px" }}
+          style={{
+            backgroundColor: "rgba(220,38,38,0.6)",
+            borderRadius: "12px 0 0 12px",
+          }}
         />
 
         {/* Animated red top border */}
@@ -143,7 +139,7 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
           }}
         />
 
-        {/* Content -- centered */}
+        {/* Content */}
         <div className="relative z-10 flex flex-col items-center px-10 py-10 md:px-12 md:py-12">
           <h3
             className={`mb-4 tracking-[0.12em] text-foreground/90 transition-all duration-300 group-hover:text-foreground ${
@@ -167,7 +163,6 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
             {section.description}
           </p>
 
-          {/* Enter arrow */}
           <div className="flex items-center gap-2 transition-all duration-300 group-hover:gap-4">
             <span
               className="text-[9px] uppercase tracking-[0.3em] transition-colors duration-300 group-hover:text-[#dc2626]/70"
@@ -194,7 +189,7 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
             </svg>
           </div>
         </div>
-      </button>
+      </Link>
     );
   }
 }
