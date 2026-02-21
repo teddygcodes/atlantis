@@ -54,7 +54,29 @@ export default function RootLayout({
             color: "#525252",
           }}
         >
-          ATLANTIS v2.1
+          <span>ATLANTIS v2.1</span>
+          <span style={{ color: "#525252" }}>{" · "}</span>
+          <a
+            href="https://atlantiskb.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "#dc2626", textDecoration: "none" }}
+            onMouseOver={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.textDecoration = "underline"; }}
+            onMouseOut={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.textDecoration = "none"; }}
+          >
+            atlantiskb.com
+          </a>
+          <span style={{ color: "#525252" }}>{" · "}</span>
+          <a
+            href="https://github.com/teddygcodes/atlantis"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "#dc2626", textDecoration: "none" }}
+            onMouseOver={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.textDecoration = "underline"; }}
+            onMouseOut={(e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.textDecoration = "none"; }}
+          >
+            GitHub
+          </a>
         </footer>
       </body>
     </html>
