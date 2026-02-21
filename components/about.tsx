@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Image from "next/image";
 import { ABOUT_PARAGRAPHS, STATS } from "@/lib/data";
 
 function useScrollReveal() {
@@ -98,6 +99,18 @@ export function About() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Bottom logo */}
+      <div className="scroll-reveal mt-20 flex justify-center pb-4">
+        <Image
+          src="/images/atlantis-logo-full.png"
+          alt="Atlantis logo"
+          width={200}
+          height={200}
+          className="object-contain opacity-60"
+          style={{ width: "auto", height: "auto", maxWidth: "160px" }}
+        />
       </div>
     </section>
   );
