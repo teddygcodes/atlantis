@@ -14,10 +14,8 @@ Knowledge enters the Archive ONLY if it survives challenge.
 """
 
 import json
-import copy
 import os
 import uuid
-import re
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Tuple
@@ -33,11 +31,8 @@ from governance.states import (
     City,
     Town,
     validate_claim,
-    extract_validation_rejection_types,
     validate_challenge,
-    autofill_discovery_gap,
     normalize_claim,
-    run_science_gate,
     decompose_premises,
     check_rebuttal_newness,
     check_anti_loop,
@@ -56,9 +51,6 @@ from config.settings import (
     WARMUP_CYCLES,
     V2_TIERS,
     CONTENT_THRESHOLDS,
-    EXECUTIVE_ELECTION_INTERVAL,
-    EXECUTIVE_TERM_CYCLES,
-    APPEAL_COST_TOKENS,
 )
 
 
@@ -86,12 +78,10 @@ class PerpetualEngine:
         content_gen,                   # ContentGenerator (imported in engine.py)
         config: dict,
         output_dir: str = "output",
-        verbose: bool = False,
     ):
         self.state_manager = state_manager
         self.founder_profiles = founder_profiles
         self.constitution_text = constitution_text
-        self.phase2_constitution_extract = self._build_phase2_constitution_extract(constitution_text)
         self.db = db
         self.models = models
         self.content_gen = content_gen
@@ -101,16 +91,6 @@ class PerpetualEngine:
         self.federal_lab_config: AgentConfig = create_federal_lab_agent()
         self.federal_lab_last_domain: Optional[str] = None
         self.cycle_log_data: dict = {}
-        self._default_cycle_cost = self.config.get("cycle_cost")
-        self._default_token_values = copy.deepcopy(TOKEN_VALUES)
-        self._default_tier_thresholds = {
-            tier: data.get("surviving_claims", 0)
-            for tier, data in V2_TIERS.items()
-            if tier > 0
-        }
-        self.active_executive: Optional[Dict] = None
-        self.supreme_court_rulings: List[Dict] = []
-        self.verbose = verbose
 
     def run_cycles(self, num_cycles: int):
         """num_cycles=0 runs indefinitely."""
@@ -125,109 +105,6 @@ class PerpetualEngine:
 
     # ─── MAIN CYCLE ──────────────────────────────────────────────
 
-    @staticmethod
-    def _one_line(text: str, limit: int = 90) -> str:
-        cleaned = " ".join((text or "").split())
-        if len(cleaned) <= limit:
-            return cleaned
-        return cleaned[: limit - 3].rstrip() + "..."
-
-    @classmethod
-    def _extract_claim_summary(cls, raw_claim: str) -> Dict[str, str]:
-        claim_type_match = re.search(r"(?mi)^\s*CLAIM TYPE:\s*([^\n]+)", raw_claim or "")
-        claim_type = (claim_type_match.group(1).strip() if claim_type_match else "Claim")
-
-        proposition_match = re.search(r"(?mi)^\s*PROPOSITION:\s*([^\n]+)", raw_claim or "")
-        proposition = proposition_match.group(1).strip() if proposition_match else cls._one_line(raw_claim, 80)
-
-        chain_match = re.search(r"(?mi)^\s*REASONING CHAIN:\s*\n(.*?)(?=\n\s*[A-Z][A-Z _-]*:|$)", raw_claim or "", re.DOTALL)
-        if chain_match:
-            steps = re.findall(r"(?m)^\s*(?:[-*]|\d+[.)])\s+", chain_match.group(1))
-            if not steps:
-                steps = [ln for ln in chain_match.group(1).splitlines() if ln.strip()]
-            step_count = len(steps)
-        else:
-            step_count = 0
-
-        return {
-            "claim_type": claim_type.title(),
-            "proposition": proposition,
-            "steps": str(step_count),
-        }
-
-    @classmethod
-    def _extract_challenge_summary(cls, challenge_text: str) -> str:
-        target_step = "?"
-        label = ""
-        step_match = re.search(r"(?mi)(?:STEP\s*(\d+)|REASONING STEP ATTACKED:\s*Step\s*(\d+))", challenge_text or "")
-        if step_match:
-            target_step = step_match.group(1) or step_match.group(2) or "?"
-
-        label_match = re.search(r"(?mi)^\s*STEP \d+[^:\n]*:\s*([^\n]+)", challenge_text or "")
-        if label_match:
-            label = label_match.group(1).strip()
-
-        if not label:
-            why_match = re.search(r"(?mi)^\s*WHY THIS STEP FAILS:\s*([^\n]+)", challenge_text or "")
-            if why_match:
-                label = why_match.group(1).strip()
-
-        if not label:
-            label = cls._one_line(challenge_text, 40)
-
-        return f"targets Step {target_step} ({cls._one_line(label, 45)})"
-
-    @classmethod
-    def _extract_rebuttal_summary(cls, rebuttal_text: str) -> str:
-        option_match = re.search(r"(?mi)\bOPTION\s*([ABC])\b", rebuttal_text or "")
-        option = option_match.group(1) if option_match else "?"
-
-        defense_match = re.search(r"(?mi)^\s*NEW EVIDENCE OR REASONING:\s*([^\n]+)", rebuttal_text or "")
-        if not defense_match:
-            defense_match = re.search(r"(?mi)^\s*REBUTTAL:\s*([^\n]+)", rebuttal_text or "")
-        defense = defense_match.group(1).strip() if defense_match else cls._one_line(rebuttal_text, 48)
-
-        return f"Option {option} — {cls._one_line(defense, 55)}"
-
-
-    @staticmethod
-    def _extract_article(text: str, article_heading: str) -> str:
-        pattern = rf"(?ms)^##\s+{re.escape(article_heading)}\s*$\n(.*?)(?=^##\s+ARTICLE\s+|^##\s+SIGNATURES|\Z)"
-        match = re.search(pattern, text)
-        return match.group(1).strip() if match else ""
-
-    @staticmethod
-    def _extract_named_section(article_body: str, section_title: str) -> str:
-        pattern = rf"(?ms)^\*\*Section\s+\d+\s*:\s*{re.escape(section_title)}\*\*\n(.*?)(?=^\*\*Section\s+\d+\s*:|\Z)"
-        match = re.search(pattern, article_body)
-        if not match:
-            return ""
-        return f"**Section: {section_title}**\n" + match.group(1).strip()
-
-    @classmethod
-    def _build_phase2_constitution_extract(cls, constitution_text: str) -> str:
-        article_iv = cls._extract_article(constitution_text, "ARTICLE IV: KNOWLEDGE AND THE CLAIM PIPELINE")
-        article_vi = cls._extract_article(constitution_text, "ARTICLE VI: TOKEN ECONOMY")
-
-        requested_blocks = [
-            cls._extract_named_section(article_iv, "Claim Types and Mandatory Structure"),
-            cls._extract_named_section(article_iv, "Structural Validation"),
-            cls._extract_named_section(article_iv, "Rebuttal Structure"),
-            cls._extract_named_section(article_iv, "Four Claim Outcomes"),
-            cls._extract_named_section(article_vi, "Budget"),
-            cls._extract_named_section(article_vi, "Earning — Claims"),
-        ]
-        blocks = [b for b in requested_blocks if b]
-        if not blocks:
-            return constitution_text[:10000]
-
-        extract = (
-            "CONSTITUTIONAL EXTRACT FOR PHASE 2 CLAIM ADJUDICATION\n"
-            "(claim validation rules, outcomes, scoring rubric, token economy)\n\n"
-            + "\n\n".join(blocks)
-        )
-        return extract[:10000]
-
     def _run_cycle(self):
         self.cycle_log_data = {
             "cycle": self.cycle,
@@ -241,8 +118,6 @@ class PerpetualEngine:
                     "suspended": False,
                 },
                 "senate_votes": [],
-                "executive": None,
-                "supreme_court": [],
             },
         }
 
@@ -250,6 +125,9 @@ class PerpetualEngine:
         quorum = self.cycle_log_data["governance"]["senate_quorum"]
         quorum["active_states"] = len(active_states)
         quorum["suspended"] = len(active_states) < SENATE_MIN_QUORUM
+
+        # Per-cycle operating cost for every active State
+        self._apply_cycle_cost(active_states)
 
         # Steps 1-17: All rival pairs
         for pair in self.state_manager.get_active_pairs():
@@ -295,49 +173,18 @@ class PerpetualEngine:
         b_lab = sb.produce_lab_hypothesis(open_q, self._get_recently_destroyed(sb.name))
 
         # Step 1-2: Both States produce claims
-        a_raw = sa.produce_claim(
-            a_ctx,
-            a_meta,
-            self.cycle,
-            self._get_previous_claim_positions(sa.name),
-            a_lab,
-        )
-        b_raw = sb.produce_claim(
-            b_ctx,
-            b_meta,
-            self.cycle,
-            self._get_previous_claim_positions(sb.name),
-            b_lab,
-        )
-        a_claim_summary = self._extract_claim_summary(a_raw)
-        b_claim_summary = self._extract_claim_summary(b_raw)
-        _log(
-            f"  {sa.name}: {a_claim_summary['claim_type']} — '{self._one_line(a_claim_summary['proposition'], 58)}' "
-            f"({a_claim_summary['steps']} steps)"
-        )
-        _log(
-            f"  {sb.name}: {b_claim_summary['claim_type']} — '{self._one_line(b_claim_summary['proposition'], 58)}' "
-            f"({b_claim_summary['steps']} steps)"
-        )
-        if self.verbose:
-            _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
-            _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
-
-        # Step 2.5: Discovery GAP ADDRESSED auto-fill repair (Haiku normalization)
-        a_raw, a_auto_filled_gap = autofill_discovery_gap(a_raw, self.models)
-        b_raw, b_auto_filled_gap = autofill_discovery_gap(b_raw, self.models)
+        a_raw = sa.produce_claim(a_ctx, a_meta, a_lab)
+        b_raw = sb.produce_claim(b_ctx, b_meta, b_lab)
+        _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
+        _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
 
         # Step 3: Structural validation
-        a_valid, a_errors = validate_claim(a_raw, self.models, self.db, domain_type=pair.domain_type)
-        b_valid, b_errors = validate_claim(b_raw, self.models, self.db, domain_type=pair.domain_type)
+        a_valid, a_errors = validate_claim(a_raw, self.models, self.db)
+        b_valid, b_errors = validate_claim(b_raw, self.models, self.db)
         if not a_valid:
-            a_rejections = extract_validation_rejection_types(a_raw, a_errors)
-            self.db.increment_pipeline_claims(sa.name, False, "", self.cycle, rejection_types=a_rejections)
             _log(f"  {sa.name} claim invalid: {a_errors}")
             return {"pair": f"{sa.name} vs {sb.name}", "skipped": True, "reason": "invalid_claim_a"}
         if not b_valid:
-            b_rejections = extract_validation_rejection_types(b_raw, b_errors)
-            self.db.increment_pipeline_claims(sb.name, False, "", self.cycle, rejection_types=b_rejections)
             _log(f"  {sb.name} claim invalid: {b_errors}")
             return {"pair": f"{sa.name} vs {sb.name}", "skipped": True, "reason": "invalid_claim_b"}
 
@@ -361,10 +208,6 @@ class PerpetualEngine:
         a_norm = normalize_claim(a_raw, self.models)
         b_norm = normalize_claim(b_raw, self.models)
 
-        # Step 5.5: Science gate (Haiku post-normalization)
-        a_science = run_science_gate(a_raw, a_norm, self.models)
-        b_science = run_science_gate(b_raw, b_norm, self.models)
-
         # Step 6: Decompose both (Haiku)
         a_premises = decompose_premises(a_raw, self.models)
         b_premises = decompose_premises(b_raw, self.models)
@@ -380,13 +223,8 @@ class PerpetualEngine:
             return {"pair": f"{sa.name} vs {sb.name}", "skipped": True, "reason": "depth_b"}
 
         # Steps 8-9: Critics cross-challenge (A attacks B, B attacks A)
-        a_challenge = sa.produce_challenge(b_raw, b_premises, self.phase2_constitution_extract)
-        b_challenge = sb.produce_challenge(a_raw, a_premises, self.phase2_constitution_extract)
-        _log(f"  Challenge by {sa.name} Critic: {self._extract_challenge_summary(a_challenge)}")
-        _log(f"  Challenge by {sb.name} Critic: {self._extract_challenge_summary(b_challenge)}")
-        if self.verbose:
-            _log(f"  RAW CHALLENGE ({sa.name}→{sb.name}):\n{a_challenge}\n")
-            _log(f"  RAW CHALLENGE ({sb.name}→{sa.name}):\n{b_challenge}\n")
+        a_challenge = sa.produce_challenge(b_raw, b_premises)
+        b_challenge = sb.produce_challenge(a_raw, a_premises)
 
         # Step 10: Validate challenges
         a_ch_ok, _ = validate_challenge(a_challenge)
@@ -399,13 +237,8 @@ class PerpetualEngine:
             b_challenge = ""
 
         # Steps 11-12: Researchers rebut
-        b_rebuttal = sb.produce_rebuttal(a_challenge, b_raw, self.phase2_constitution_extract) if a_challenge else "OPTION A: No challenge to rebut."
-        a_rebuttal = sa.produce_rebuttal(b_challenge, a_raw, self.phase2_constitution_extract) if b_challenge else "OPTION A: No challenge to rebut."
-        _log(f"  Rebuttal ({sb.name}): {self._extract_rebuttal_summary(b_rebuttal)}")
-        _log(f"  Rebuttal ({sa.name}): {self._extract_rebuttal_summary(a_rebuttal)}")
-        if self.verbose:
-            _log(f"  RAW REBUTTAL ({sb.name}):\n{b_rebuttal}\n")
-            _log(f"  RAW REBUTTAL ({sa.name}):\n{a_rebuttal}\n")
+        b_rebuttal = sb.produce_rebuttal(a_challenge, b_raw) if a_challenge else "OPTION A: No challenge to rebut."
+        a_rebuttal = sa.produce_rebuttal(b_challenge, a_raw) if b_challenge else "OPTION A: No challenge to rebut."
 
         # Step 13: Rebuttal newness (Haiku)
         a_newness = check_rebuttal_newness(a_raw, a_rebuttal, self.models)
@@ -413,63 +246,19 @@ class PerpetualEngine:
 
         # Step 14: Judge determines outcomes (Sonnet)
         approaches = {sa.name: sa.approach, sb.name: sb.approach}
-        a_outcome = determine_outcome(
-            a_raw, b_challenge, a_rebuttal, a_newness, pair.domain, approaches, self.models,
-            self.phase2_constitution_extract,
-            unverified_numeric_assertions=a_science.get("unverified_assertions", []),
-            state_tier=sa.tier,
-            claim_citations=a_norm.get("citations", []),
-            surviving_citation_count=self._count_surviving_citations(a_norm.get("citations", [])),
-        )
-        b_outcome = determine_outcome(
-            b_raw, a_challenge, b_rebuttal, b_newness, pair.domain, approaches, self.models,
-            self.phase2_constitution_extract,
-            unverified_numeric_assertions=b_science.get("unverified_assertions", []),
-            state_tier=sb.tier,
-            claim_citations=b_norm.get("citations", []),
-            surviving_citation_count=self._count_surviving_citations(b_norm.get("citations", [])),
-        )
-
-        a_outcome = self._maybe_run_supreme_court_appeal(
-            state=sa,
-            entry_claim_text=a_raw,
-            challenge_text=b_challenge,
-            rebuttal_text=a_rebuttal,
-            newness_result=a_newness,
-            domain=pair.domain,
-            approaches=approaches,
-            outcome=a_outcome,
-            appeal_target_id=None,
-        )
-        b_outcome = self._maybe_run_supreme_court_appeal(
-            state=sb,
-            entry_claim_text=b_raw,
-            challenge_text=a_challenge,
-            rebuttal_text=b_rebuttal,
-            newness_result=b_newness,
-            domain=pair.domain,
-            approaches=approaches,
-            outcome=b_outcome,
-            appeal_target_id=None,
-        )
-
-        self._apply_unverified_numeric_drama_bonus(a_outcome, b_challenge, a_science)
-        self._apply_unverified_numeric_drama_bonus(b_outcome, a_challenge, b_science)
+        a_outcome = determine_outcome(a_raw, b_challenge, a_rebuttal, a_newness, pair.domain, approaches, self.models)
+        b_outcome = determine_outcome(b_raw, a_challenge, b_rebuttal, b_newness, pair.domain, approaches, self.models)
 
         # Step 15: Build ArchiveEntry objects and deposit
         a_entry = self._build_archive_entry(
             state=sa, raw=a_raw, challenge=b_challenge, rebuttal=a_rebuttal,
             norm=a_norm, premises=a_premises, outcome=a_outcome,
-            science_gate=a_science,
             challenger_entity=f"{sb.name} Critic", lab_hypothesis=a_lab,
-            auto_filled_gap=a_auto_filled_gap,
         )
         b_entry = self._build_archive_entry(
             state=sb, raw=b_raw, challenge=a_challenge, rebuttal=b_rebuttal,
             norm=b_norm, premises=b_premises, outcome=b_outcome,
-            science_gate=b_science,
             challenger_entity=f"{sa.name} Critic", lab_hypothesis=b_lab,
-            auto_filled_gap=b_auto_filled_gap,
         )
 
         self.db.save_archive_entry(a_entry)
@@ -478,21 +267,21 @@ class PerpetualEngine:
         # Update referenced_by for all citations
         for cid in a_entry.citations:
             if cid:
-                self.db.update_referenced_by(cid, a_entry.display_id)
+                self._process_citation(cited_display_id=cid, citing_display_id=a_entry.display_id)
         for cid in b_entry.citations:
             if cid:
-                self.db.update_referenced_by(cid, b_entry.display_id)
+                self._process_citation(cited_display_id=cid, citing_display_id=b_entry.display_id)
 
         # Update pipeline claim counts
         a_survived = a_outcome["outcome"] in ("survived", "partial")
         b_survived = b_outcome["outcome"] in ("survived", "partial")
-        self.db.increment_pipeline_claims(sa.name, a_survived, a_outcome.get("ruling_type", ""), self.cycle)
-        self.db.increment_pipeline_claims(sb.name, b_survived, b_outcome.get("ruling_type", ""), self.cycle)
+        self.db.increment_pipeline_claims(sa.name, a_survived)
+        self.db.increment_pipeline_claims(sb.name, b_survived)
 
         # Step 16: Apply token outcomes
-        token_ledger = self._apply_token_outcomes(sa, a_norm, a_outcome, sb, b_norm, b_outcome)
-        self.db.update_tokens_earned(a_entry.display_id, token_ledger[sa.name]["claim_tokens"])
-        self.db.update_tokens_earned(b_entry.display_id, token_ledger[sb.name]["claim_tokens"])
+        claim_token_earnings = self._apply_token_outcomes(sa, a_norm, a_outcome, sb, b_norm, b_outcome)
+        self.db.update_tokens_earned(a_entry.display_id, claim_token_earnings[sa.name])
+        self.db.update_tokens_earned(b_entry.display_id, claim_token_earnings[sb.name])
 
         # Step 17: Update stability scores for surviving claims in domain
         self._update_stability_scores(pair.domain)
@@ -524,18 +313,7 @@ class PerpetualEngine:
             })
             self.cycle_log_data["content"].extend(content_files)
 
-        _log(
-            f"  {sa.name} VERDICT: {a_outcome['outcome']} ({a_outcome.get('ruling_type', '')}) "
-            f"| Drama: {int(a_outcome['scores'].get('drama', 0))} "
-            f"Novelty: {int(a_outcome['scores'].get('novelty', 0))} "
-            f"Depth: {int(a_outcome['scores'].get('depth', 0))}"
-        )
-        _log(
-            f"  {sb.name} VERDICT: {b_outcome['outcome']} ({b_outcome.get('ruling_type', '')}) "
-            f"| Drama: {int(b_outcome['scores'].get('drama', 0))} "
-            f"Novelty: {int(b_outcome['scores'].get('novelty', 0))} "
-            f"Depth: {int(b_outcome['scores'].get('depth', 0))}"
-        )
+        _log(f"  {sa.name}: {a_outcome['outcome']} | {sb.name}: {b_outcome['outcome']}")
         return {
             "pair": f"{sa.name} vs {sb.name}",
             "a_entry": a_entry.display_id,
@@ -553,17 +331,11 @@ class PerpetualEngine:
                 "novelty": int(a_outcome["scores"].get("novelty", 0)),
                 "depth": int(a_outcome["scores"].get("depth", 0)),
             },
-            "a_ruling_type": a_outcome.get("ruling_type", ""),
-            "a_judge_reasoning": a_outcome.get("reasoning", ""),
-            "a_tokens": token_ledger[sa.name],
             "b_scores": {
                 "drama": int(b_outcome["scores"].get("drama", 0)),
                 "novelty": int(b_outcome["scores"].get("novelty", 0)),
                 "depth": int(b_outcome["scores"].get("depth", 0)),
             },
-            "b_ruling_type": b_outcome.get("ruling_type", ""),
-            "b_judge_reasoning": b_outcome.get("reasoning", ""),
-            "b_tokens": token_ledger[sb.name],
         }
 
     def _run_warmup_pair(self, pair: RivalPair) -> dict:
@@ -581,8 +353,6 @@ class PerpetualEngine:
             raw = state.produce_claim(
                 self._build_archive_context(pair.domain, state.name),
                 self._get_meta_learning(state.name),
-                self.cycle,
-                self._get_previous_claim_positions(state.name),
             )
             display_id = self.db.next_display_id()
             entry = ArchiveEntry(
@@ -593,7 +363,6 @@ class PerpetualEngine:
                 source_entity=f"{state.name} Researcher",
                 cycle_created=self.cycle,
                 status="surviving",
-                archive_tier="main",
                 claim_type="discovery",
                 raw_claim_text=raw,
                 outcome="survived",
@@ -653,9 +422,7 @@ class PerpetualEngine:
             return {"skipped": True, "reason": "target_state_not_found", "domain": domain}
 
         rebuttal_text = target_state.produce_rebuttal(
-            challenge_text,
-            target.get("raw_claim_text", ""),
-            self.phase2_constitution_extract,
+            challenge_text, target.get("raw_claim_text", "")
         )
 
         # Newness check
@@ -673,22 +440,6 @@ class PerpetualEngine:
             domain,
             approaches,
             self.models,
-            self.phase2_constitution_extract,
-            state_tier=target_state.tier,
-            claim_citations=target.get("citations", []),
-            surviving_citation_count=self._count_surviving_citations(target.get("citations", [])),
-        )
-
-        outcome = self._maybe_run_supreme_court_appeal(
-            state=target_state,
-            entry_claim_text=target.get("raw_claim_text", ""),
-            challenge_text=challenge_text,
-            rebuttal_text=rebuttal_text,
-            newness_result=newness,
-            domain=domain,
-            approaches=approaches,
-            outcome=outcome,
-            appeal_target_id=target["display_id"],
         )
 
         # Deposit as separate Archive entry
@@ -701,7 +452,6 @@ class PerpetualEngine:
             source_entity=f"{target.get('source_state', '')} Researcher",
             cycle_created=self.cycle,
             status=outcome["outcome"],
-            archive_tier=self.db._archive_tier_for_status(outcome["outcome"]),
             claim_type="challenge",
             raw_claim_text=target.get("raw_claim_text", ""),
             raw_challenge_text=challenge_text,
@@ -716,10 +466,11 @@ class PerpetualEngine:
             citations=[target["display_id"]],
         )
         self.db.save_archive_entry(fed_entry)
-        self.db.update_referenced_by(target["display_id"], fed_entry.display_id)
+        self._process_citation(target["display_id"], fed_entry.display_id)
 
         # Apply token outcome to target State (Federal Lab earns nothing)
-        self._apply_single_token_outcome(target_state, "discovery", outcome)
+        fed_tokens = self._apply_single_token_outcome(target_state, "discovery", outcome)
+        self.db.update_tokens_earned(fed_entry.display_id, fed_tokens)
 
         # Update the original claim's status if overturned
         if outcome["outcome"] == "destroyed":
@@ -737,182 +488,12 @@ class PerpetualEngine:
                 _log(f"  Chain collapse: {len(collapsed)} entries flagged")
 
         _log(f"  Federal Lab outcome: {outcome['outcome']} (target: {target['display_id']})")
-        inverted_assumption = "Not explicitly labeled by Federal Lab output"
-        for line in challenge_text.splitlines():
-            if line.strip().upper().startswith("ASSUMPTION INVERTED:"):
-                parsed = line.split(":", 1)[1].strip()
-                if parsed:
-                    inverted_assumption = parsed
-                break
-
         return {
             "domain": domain,
             "target_display_id": target["display_id"],
             "lab_entry_display_id": fed_entry.display_id,
-            "inverted_assumption": inverted_assumption,
             "outcome": outcome["outcome"],
         }
-
-    def _count_recursive_dependents(self, display_id: str) -> int:
-        """Count unique recursive dependents of an entry (potential chain-collapse impact)."""
-        visited = set()
-        queue = [display_id]
-        max_depth = int(self.config.get("chain_collapse_max_depth", 10))
-        depth_map = {display_id: 0}
-
-        while queue:
-            current = queue.pop(0)
-            depth = depth_map.get(current, 0)
-            if depth >= max_depth:
-                continue
-            for dep_id in self.db.get_entry_dependents(current):
-                if dep_id in visited:
-                    continue
-                visited.add(dep_id)
-                queue.append(dep_id)
-                depth_map[dep_id] = depth + 1
-        return len(visited)
-
-    def _run_court_appeal_vote(
-        self,
-        claim_text: str,
-        challenge_text: str,
-        rebuttal_text: str,
-        outcome: dict,
-        domain: str,
-    ) -> Dict[str, object]:
-        """Three-judge appeal vote. Returns counts and vote records."""
-        judges = ["Originalist", "Pragmatist", "Protectionist"]
-        records = []
-        overturn = 0
-        uphold = 0
-
-        for philosophy in judges:
-            response = self.models.complete(
-                task_type="court_judges",
-                system_prompt=(
-                    f"You are a Court Judge with {philosophy} philosophy. "
-                    "Decide appeal vote only. Return one line starting with OVERTURN:, UPHOLD:, or ABSTAIN:."
-                ),
-                user_prompt=(
-                    f"DOMAIN: {domain}\n"
-                    f"CURRENT OUTCOME: {outcome.get('outcome', '')} ({outcome.get('ruling_type', '')})\n\n"
-                    f"CLAIM:\n{claim_text}\n\n"
-                    f"CHALLENGE:\n{challenge_text}\n\n"
-                    f"REBUTTAL:\n{rebuttal_text}\n\n"
-                    "Vote OVERTURN or UPHOLD the current ruling."
-                ),
-                max_tokens=180,
-            ).content or ""
-
-            text = response.strip().upper()
-            vote = "ABSTAIN"
-            if text.startswith("OVERTURN"):
-                vote = "OVERTURN"
-                overturn += 1
-            elif text.startswith("UPHOLD"):
-                vote = "UPHOLD"
-                uphold += 1
-            records.append({"judge": philosophy, "vote": vote, "reasoning": response.strip()})
-
-        return {
-            "overturn": overturn,
-            "uphold": uphold,
-            "margin": abs(overturn - uphold),
-            "records": records,
-        }
-
-    def _maybe_run_supreme_court_appeal(
-        self,
-        state: State,
-        entry_claim_text: str,
-        challenge_text: str,
-        rebuttal_text: str,
-        newness_result: dict,
-        domain: str,
-        approaches: Dict[str, str],
-        outcome: dict,
-        appeal_target_id: Optional[str],
-    ) -> dict:
-        """
-        Supreme Court (Opus) is invoked ONLY when:
-        1) Senator files appeal for a destroyed claim,
-        2) Court appeal vote is tied/within 1 vote,
-        3) Chain collapse would affect 3+ dependent claims.
-        """
-        if outcome.get("outcome") != "destroyed":
-            return outcome
-        if state.token_budget < APPEAL_COST_TOKENS:
-            return outcome
-
-        state.deduct_tokens(APPEAL_COST_TOKENS)
-        potential_dependents = (
-            self._count_recursive_dependents(appeal_target_id) if appeal_target_id else 0
-        )
-        vote = self._run_court_appeal_vote(
-            claim_text=entry_claim_text,
-            challenge_text=challenge_text,
-            rebuttal_text=rebuttal_text,
-            outcome=outcome,
-            domain=domain,
-        )
-        close_vote = vote["margin"] <= 1
-        invoke_supreme = close_vote and potential_dependents >= 3
-
-        appeal_record = {
-            "state": state.name,
-            "domain": domain,
-            "appeal_target": appeal_target_id,
-            "filed": True,
-            "vote": vote,
-            "potential_dependents": potential_dependents,
-            "invoked_supreme_court": invoke_supreme,
-        }
-        self.cycle_log_data["governance"]["supreme_court"].append(appeal_record)
-
-        if not invoke_supreme:
-            return outcome
-
-        supreme_outcome = determine_outcome(
-            entry_claim_text,
-            challenge_text,
-            rebuttal_text,
-            newness_result,
-            domain,
-            approaches,
-            self.models,
-            constitution_context=self.constitution_text,
-            state_tier=state.tier,
-            task_type="supreme_court",
-        )
-        supreme_outcome["appeal_final"] = True
-        supreme_outcome["reasoning"] = (
-            f"{supreme_outcome.get('reasoning', '').strip()} "
-            "Supreme Court ruling is final — no further appeal."
-        ).strip()
-        self.supreme_court_rulings.append(
-            {
-                "cycle": self.cycle,
-                "state": state.name,
-                "domain": domain,
-                "appeal_target": appeal_target_id,
-                "outcome": supreme_outcome.get("outcome"),
-            }
-        )
-        return supreme_outcome
-
-    def _count_surviving_citations(self, citations: List[str]) -> int:
-        """Count citations that currently reference surviving archive claims."""
-        if not citations:
-            return 0
-        count = 0
-        for cid in citations:
-            if not cid:
-                continue
-            entry = self.db.get_archive_entry(cid)
-            if entry and entry.get("status") in {"surviving", "survived"}:
-                count += 1
-        return count
 
     # ─── END-OF-CYCLE (STEP 19) ──────────────────────────────────
 
@@ -932,36 +513,16 @@ class PerpetualEngine:
         self._check_tier_advancement()
         # 19f. Probation and dissolution
         self._check_probation_and_dissolution()
-        # 19g. Executive election and term management
-        self._check_executive_election()
         # Refresh domain health after all system-level operations (federal lab,
         # abstraction, cities/towns) so domain_health.json reflects final cycle state.
         for domain in self._get_all_domains():
             self._compute_domain_health(domain)
-        # 19h. Write cycle log
+        # 19g. Write cycle log
         self._write_cycle_log()
-        # 19i. Update domain_health.json
+        # 19h. Update domain_health.json
         self._update_domain_health_file()
-        # 19j. Export archive
+        # 19i. Export archive
         self._export_archive()
-        # 19k. Console cycle summary
-        self._log_cycle_summary()
-
-    def _log_cycle_summary(self):
-        entries = self.db.get_archive_entries()
-        cycle_entries = [e for e in entries if int(e.get("cycle_created", 0) or 0) == self.cycle and e.get("entry_type") == "claim"]
-        survived = sum(1 for e in cycle_entries if e.get("status") == "surviving")
-        partial = sum(1 for e in cycle_entries if e.get("status") == "partial")
-        destroyed = sum(1 for e in cycle_entries if e.get("status") in {"destroyed", "retracted"})
-
-        all_claims = [e for e in entries if e.get("entry_type") == "claim"]
-        rolling_survived = sum(1 for e in all_claims if e.get("status") in {"surviving", "partial"})
-        rolling_survival = (rolling_survived / len(all_claims) * 100.0) if all_claims else 0.0
-
-        _log(
-            f"Cycle {self.cycle} complete: {survived} survived, {partial} partial, {destroyed} destroyed "
-            f"| Rolling survival: {rolling_survival:.0f}%"
-        )
 
     def _check_city_formation(self):
         """
@@ -998,10 +559,9 @@ class PerpetualEngine:
                 analysis_entry = city.run_analysis(cluster_claims)
                 self.db.save_archive_entry(analysis_entry)
                 for cid in cluster:
-                    self.db.update_referenced_by(cid, analysis_entry.display_id)
+                    self._process_citation(cid, analysis_entry.display_id)
 
                 state.cities.append(city)
-                state.earn_tokens(TOKEN_VALUES.get("city_published", 1000))
                 _log(f"  City formed: {city_id} ({len(cluster)} claims)")
 
                 # Content: new_city event
@@ -1058,7 +618,6 @@ class PerpetualEngine:
                 self.db.save_archive_entry(proposal_entry)
 
                 state.towns.append(town)
-                state.earn_tokens(TOKEN_VALUES.get("town_published", 500))
                 _log(f"  Town formed: {town_id}")
 
                 self.content_gen.evaluate_and_generate({
@@ -1116,7 +675,6 @@ class PerpetualEngine:
                 source_entity=f"System (Cycle {self.cycle})",
                 cycle_created=self.cycle,
                 status="surviving",
-                archive_tier="main",
                 claim_type="foundation",
                 raw_claim_text=principles_text,
                 citations=[c["display_id"] for c in top_claims],
@@ -1171,7 +729,7 @@ class PerpetualEngine:
             target_tier = current_tier + 1
             tier_info = V2_TIERS.get(target_tier, {})
             threshold = tier_info.get("surviving_claims", 999999)
-            surviving = self.db.get_surviving_claims_count(state.name, tier_filter="main")
+            surviving = self.db.get_surviving_claims_count(state.name)
 
             if surviving < threshold:
                 continue
@@ -1192,7 +750,6 @@ class PerpetualEngine:
             if qualifies:
                 state.tier = target_tier
                 self.db.update_state_tier(state.name, target_tier)
-                state.earn_tokens(TOKEN_VALUES.get("tier_advancement", 10000))
                 _log(f"  {state.name} → Tier {target_tier} ({tier_info.get('name', '?')})")
 
                 self.content_gen.evaluate_and_generate({
@@ -1305,7 +862,7 @@ class PerpetualEngine:
                 context=(
                     f"{candidate.name} has budget=0 and {DISSOLUTION_TRIGGER}+ consecutive probation cycles. "
                     f"Domain: {candidate.domain}. "
-                    f"Surviving claims: {self.db.get_surviving_claims_count(candidate.name, tier_filter='main')}"
+                    f"Surviving claims: {self.db.get_surviving_claims_count(candidate.name)}"
                 ),
             )
             if vote_text.upper().strip().startswith("YES"):
@@ -1339,7 +896,7 @@ class PerpetualEngine:
             "exchange": {
                 "state_name": state.name,
                 "domain": state.domain,
-                "surviving_claims": self.db.get_surviving_claims_count(state.name, tier_filter="main"),
+                "surviving_claims": self.db.get_surviving_claims_count(state.name),
                 "final_budget": state.token_budget,
             },
         })
@@ -1353,24 +910,6 @@ class PerpetualEngine:
             "exchange": {"state_name": state.name, "domain": state.domain},
         })
 
-
-    def _apply_unverified_numeric_drama_bonus(self, outcome: dict, challenge_text: str, science_gate: dict):
-        """+1 drama when a challenge likely targets an unverified numeric assertion."""
-        unverified = [s.lower() for s in (science_gate or {}).get("unverified_assertions", []) if isinstance(s, str)]
-        if not unverified:
-            return
-        challenge_lower = (challenge_text or "").lower()
-        if not challenge_lower.strip():
-            return
-
-        targeted = any(
-            numeric and (numeric in challenge_lower or any(tok in challenge_lower for tok in re.findall(r"\d+(?:\.\d+)?", numeric)))
-            for numeric in unverified
-        )
-        if targeted and outcome.get("outcome") in ("destroyed", "retracted", "partial"):
-            scores = outcome.setdefault("scores", {})
-            scores["drama"] = min(10, int(scores.get("drama", 0)) + 1)
-
     # ─── ARCHIVE ENTRY BUILDER ────────────────────────────────────
 
     def _build_archive_entry(
@@ -1382,10 +921,8 @@ class PerpetualEngine:
         norm: dict,
         premises: dict,
         outcome: dict,
-        science_gate: Optional[dict] = None,
         challenger_entity: str = "",
         lab_hypothesis: Optional[str] = None,
-        auto_filled_gap: bool = False,
     ) -> ArchiveEntry:
         display_id = self.db.next_display_id()
         out = outcome["outcome"]
@@ -1396,16 +933,6 @@ class PerpetualEngine:
             "destroyed": "destroyed",
         }
         status = status_map.get(out, "surviving")
-        archive_tier_map = {
-            "surviving": "main",
-            "partial": "quarantine",
-            "founding": "quarantine",
-            "destroyed": "graveyard",
-            "retracted": "graveyard",
-        }
-        archive_tier = archive_tier_map.get(status, "quarantine")
-
-        science_gate = science_gate or {}
 
         return ArchiveEntry(
             entry_id=str(uuid.uuid4()),
@@ -1415,7 +942,6 @@ class PerpetualEngine:
             source_entity=f"{state.name} Researcher",
             cycle_created=self.cycle,
             status=status,
-            archive_tier=archive_tier,
             claim_type=norm.get("claim_type", "discovery"),
             position=norm.get("position", ""),
             reasoning_chain=norm.get("reasoning_chain", []),
@@ -1429,7 +955,6 @@ class PerpetualEngine:
             implicit_assumptions=premises.get("implicit_assumptions", []),
             challenger_entity=challenger_entity,
             outcome=out,
-            ruling_type=outcome.get("ruling_type", ""),
             outcome_reasoning=outcome.get("reasoning", ""),
             open_questions=outcome.get("open_questions", []),
             drama_score=outcome["scores"].get("drama", 0),
@@ -1438,43 +963,82 @@ class PerpetualEngine:
             citations=norm.get("citations", []),
             stability_score=1,
             tokens_earned=0,
-            unverified_numerics=science_gate.get("unverified_assertions", []),
-            auto_filled_gap=auto_filled_gap,
         )
 
     # ─── TOKEN OUTCOMES ───────────────────────────────────────────
+
+    def _apply_cycle_cost(self, active_states: List[State]):
+        """Deduct per-cycle operating cost from each active State."""
+        cycle_cost = int(self.config.get("cycle_cost", 0) or 0)
+        if cycle_cost <= 0:
+            return
+        for state in active_states:
+            state.deduct_tokens(cycle_cost)
+
+    def _record_token_event(self, state: State, amount: int, reason: str):
+        """Persist non-claim token changes so ledger sums match state budgets."""
+        event_entry = ArchiveEntry(
+            entry_id=str(uuid.uuid4()),
+            display_id=self.db.next_display_id(),
+            entry_type="token_event",
+            source_state=state.name,
+            source_entity=f"{state.name} Treasury",
+            cycle_created=self.cycle,
+            status="surviving",
+            claim_type="foundation",
+            position=f"TOKEN_EVENT: {reason}",
+            reasoning_chain=[],
+            conclusion=reason,
+            keywords=["token_event", reason],
+            raw_claim_text=f"Token event: {reason}",
+            outcome="survived",
+            outcome_reasoning="",
+            tokens_earned=amount,
+        )
+        self.db.save_archive_entry(event_entry)
+
+    def _process_citation(self, cited_display_id: str, citing_display_id: str):
+        """
+        Update citation graph and award one-time Discovery first-citation bonus.
+        """
+        cited = self.db.get_archive_entry(cited_display_id)
+        if not cited:
+            return
+
+        existing_refs = cited.get("referenced_by", []) or []
+        is_first_citation = len(existing_refs) == 0 and citing_display_id not in existing_refs
+
+        self.db.update_referenced_by(cited_display_id, citing_display_id)
+
+        if (
+            is_first_citation
+            and (cited.get("claim_type") or "").lower() == "discovery"
+            and cited.get("source_state")
+        ):
+            bonus = TOKEN_VALUES.get("discovery_first_cited", 3000)
+            discoverer = self.state_manager.get_state(cited["source_state"])
+            if discoverer:
+                discoverer.earn_tokens(bonus)
+            self.db.update_tokens_earned(cited_display_id, bonus)
 
     def _apply_token_outcomes(
         self,
         sa: State, a_norm: dict, a_outcome: dict,
         sb: State, b_norm: dict, b_outcome: dict,
-    ) -> Dict[str, Dict[str, int]]:
+    ) -> Dict[str, int]:
         """
         Apply token rewards/penalties for both States based on their outcomes.
-        A's Critic challenged B's claim. B's Critic challenged A's claim.
+        Claim rewards are recorded on claim entries; critic rewards/penalties are
+        recorded as separate token_event entries.
         """
-        # A's claim (challenged by B)
         a_claim_tokens = self._apply_single_token_outcome(sa, a_norm.get("claim_type", "discovery"), a_outcome)
-        # B's challenge on A
-        b_challenge_tokens = self._apply_challenge_tokens(sb, a_outcome)
-
-        # B's claim (challenged by A)
         b_claim_tokens = self._apply_single_token_outcome(sb, b_norm.get("claim_type", "discovery"), b_outcome)
-        # A's challenge on B
-        a_challenge_tokens = self._apply_challenge_tokens(sa, b_outcome)
 
-        return {
-            sa.name: {
-                "claim_tokens": a_claim_tokens,
-                "challenge_tokens": a_challenge_tokens,
-                "net_tokens": a_claim_tokens + a_challenge_tokens,
-            },
-            sb.name: {
-                "claim_tokens": b_claim_tokens,
-                "challenge_tokens": b_challenge_tokens,
-                "net_tokens": b_claim_tokens + b_challenge_tokens,
-            },
-        }
+        # Critic outcomes are separate economic events
+        self._apply_challenge_tokens(sb, a_outcome)
+        self._apply_challenge_tokens(sa, b_outcome)
+
+        return {sa.name: a_claim_tokens, sb.name: b_claim_tokens}
 
     def _apply_single_token_outcome(
         self, state: State, claim_type: str, outcome: dict
@@ -1502,29 +1066,15 @@ class PerpetualEngine:
         """Earn/deduct tokens for the challenging State based on rival's outcome."""
         out = rival_outcome["outcome"]
         if out == "destroyed":
-            # Prefer the canonical challenge reward key while preserving
-            # compatibility with older configs.
-            amount = TOKEN_VALUES.get(
-                "challenge_succeeded",
-                TOKEN_VALUES.get("rival_destroyed_by_critic", 1000),
-            )
+            amount = TOKEN_VALUES.get("rival_destroyed_by_critic", 1000)
             challenger_state.earn_tokens(amount)
-            return amount
-        elif out == "partial":
-            amount = TOKEN_VALUES.get("rival_narrowed_by_critic", 800)
-            challenger_state.earn_tokens(amount)
-            return amount
-        elif out == "retracted":
-            # Retracted is partial success for challenger
-            amount = TOKEN_VALUES.get("rival_narrowed_by_critic", 800)
-            challenger_state.earn_tokens(amount)
+            self._record_token_event(challenger_state, amount, "rival_destroyed_by_critic")
             return amount
         elif out in ("survived", "founding"):
-            amount = TOKEN_VALUES.get("challenge_failed", -1000)
-            challenger_state.deduct_tokens(abs(amount))
-            return amount
-        else:
-            log(f"[WARNING] Unknown outcome in _apply_challenge_tokens: {out}")
+            amount = abs(TOKEN_VALUES.get("challenge_failed", -1000))
+            challenger_state.deduct_tokens(amount)
+            self._record_token_event(challenger_state, -amount, "challenge_failed")
+            return -amount
         return 0
 
     # ─── STABILITY & DOMAIN HEALTH ────────────────────────────────
@@ -1538,8 +1088,7 @@ class PerpetualEngine:
 
     def _compute_domain_health(self, domain: str) -> dict:
         """Compute DMI metrics and save to DB."""
-        domain_rows = [r for r in self.db.get_all_active_states() if r.get("domain") == domain]
-        domain_states = {s.get("state_name") for s in domain_rows}
+        domain_states = {s.get("state_name") for s in self.db.get_all_active_states() if s.get("domain") == domain}
         all_entries = [
             e for e in self.db.get_all_archive_entries()
             if e.get("source_state") in domain_states and e.get("entry_type") == "claim"
@@ -1549,9 +1098,7 @@ class PerpetualEngine:
         surviving = sum(1 for c in all_entries if c.get("status") == "surviving")
         partial = sum(1 for c in all_entries if c.get("status") == "partial")
         destroyed = sum(1 for c in all_entries if c.get("status") == "destroyed")
-        total_pipeline = sum(int(r.get("total_pipeline_claims", 0) or 0) for r in domain_rows)
-        surviving_pipeline = sum(int(r.get("surviving_pipeline_claims", 0) or 0) for r in domain_rows)
-        survival_rate = surviving_pipeline / total_pipeline if total_pipeline > 0 else 0.0
+        survival_rate = surviving / total if total > 0 else 0.0
 
         principles = self.db.get_principle_count(domain)
         compression_ratio = principles / max(surviving, 1)
@@ -1564,8 +1111,9 @@ class PerpetualEngine:
         cities = self.db.get_active_cities_in_domain(domain)
         towns = self.db.get_active_towns_in_domain(domain)
 
+        state_rows = [r for r in self.db.get_all_active_states() if r.get("domain") == domain]
         cred = []
-        for row in domain_rows[:2]:
+        for row in state_rows[:2]:
             t = row.get("total_pipeline_claims", 0)
             s_count = row.get("surviving_pipeline_claims", 0)
             cred.append(round(s_count / t, 3) if t > 0 else 1.0)
@@ -1578,45 +1126,6 @@ class PerpetualEngine:
                 cited = self.db.get_archive_entry(cid)
                 if cited and cited.get("source_state") not in domain_states:
                     cross_domain_citations += 1
-
-        failure_distribution = {}
-        for row in domain_rows:
-            for ruling, count in (row.get("total_rejections_by_type") or {}).items():
-                failure_distribution[ruling] = failure_distribution.get(ruling, 0) + int(count)
-
-        cycle_values = [
-            int(row.get("cycles_to_first_survival"))
-            for row in domain_rows
-            if row.get("cycles_to_first_survival") is not None
-        ]
-        cycles_to_first_survival = (
-            round(sum(cycle_values) / len(cycle_values), 2)
-            if cycle_values else 0.0
-        )
-
-        def _topic_key(entry: dict) -> str:
-            position = (entry.get("position") or "").strip().lower()
-            if position:
-                return position[:180]
-            raw = (entry.get("raw_claim_text") or "").strip().lower()
-            return raw.splitlines()[0][:180] if raw else ""
-
-        topic_attempts = {}
-        for entry in sorted(all_entries, key=lambda e: e.get("display_id", "#000")):
-            key = _topic_key(entry)
-            if not key:
-                continue
-            rec = topic_attempts.setdefault(key, {"attempts": 0, "survived": False, "depth": None})
-            rec["attempts"] += 1
-            if not rec["survived"] and entry.get("status") == "surviving":
-                rec["survived"] = True
-                rec["depth"] = rec["attempts"]
-
-        revision_depth_values = [rec["depth"] for rec in topic_attempts.values() if rec.get("depth")]
-        revision_depth = (
-            round(sum(revision_depth_values) / len(revision_depth_values), 2)
-            if revision_depth_values else 0.0
-        )
 
         contradiction_trend = "increasing" if destroyed > (surviving + partial) else "stable"
         maturity_phase = self._get_maturity_phase(
@@ -1635,9 +1144,6 @@ class PerpetualEngine:
             "partial_claims": partial,
             "destroyed_claims": destroyed,
             "survival_rate": round(survival_rate, 3),
-            "cycles_to_first_survival": cycles_to_first_survival,
-            "revision_depth": revision_depth,
-            "failure_distribution": failure_distribution,
             "credibility_a": cred[0],
             "credibility_b": cred[1],
             "compression_ratio": round(compression_ratio, 3),
@@ -1671,255 +1177,6 @@ class PerpetualEngine:
             return "Stabilizing Foundation"
         return "Volatile Exploration"
 
-
-    def _check_executive_election(self):
-        """Run Executive elections every 10 cycles and enforce term locking."""
-        if self.active_executive and self.cycle > self.active_executive.get("term_ends_cycle", 0):
-            self._clear_executive_parameters()
-
-        if self.cycle % EXECUTIVE_ELECTION_INTERVAL != 0:
-            return
-
-        election = self._run_executive_election()
-        if election:
-            self.cycle_log_data["governance"]["executive"] = election
-
-    def _clear_executive_parameters(self):
-        self.config["cycle_cost"] = self._default_cycle_cost
-        TOKEN_VALUES.clear()
-        TOKEN_VALUES.update(copy.deepcopy(self._default_token_values))
-        for tier, threshold in self._default_tier_thresholds.items():
-            if tier in V2_TIERS:
-                V2_TIERS[tier]["surviving_claims"] = threshold
-        self.active_executive = None
-
-    def _collect_system_metrics(self) -> Dict[str, object]:
-        active_states = self.state_manager.get_all_active_states()
-        domains = self._get_all_domains()
-        domain_health = {
-            domain: self.db.get_domain_health(domain, latest_only=True) or {}
-            for domain in domains
-        }
-
-        total_surviving = sum(
-            self.db.get_surviving_claims_count(state.name, tier_filter="main") for state in active_states
-        )
-
-        return {
-            "cycle": self.cycle,
-            "active_states": len(active_states),
-            "domains": domain_health,
-            "total_surviving_claims": total_surviving,
-            "avg_survival_rate": (
-                sum((d.get("survival_rate", 0.0) or 0.0) for d in domain_health.values()) / len(domain_health)
-                if domain_health
-                else 0.0
-            ),
-            "current_parameters": {
-                "cycle_cost": self.config.get("cycle_cost", self._default_cycle_cost),
-                "token_values": dict(TOKEN_VALUES),
-                "tier_thresholds": {
-                    str(tier): data.get("surviving_claims", 0)
-                    for tier, data in V2_TIERS.items() if tier > 0
-                },
-            },
-        }
-
-    def _run_executive_election(self) -> Optional[Dict]:
-        active_states = self.state_manager.get_all_active_states()
-        metrics = self._collect_system_metrics()
-        history = self.db.get_elections()
-        candidates = self._generate_executive_candidates(metrics, history)
-        if not candidates:
-            return {"skipped": True, "reason": "candidate_generation_failed"}
-
-        vote_records = []
-        tally: Dict[str, int] = {c["name"]: 0 for c in candidates}
-
-        for senator in active_states:
-            vote = self._senator_vote_for_executive(senator, candidates, metrics)
-            selected = vote.get("candidate")
-            if selected not in tally:
-                selected = candidates[0]["name"]
-            tally[selected] += 1
-            vote_records.append({
-                "senator": senator.name,
-                "vote": selected,
-                "reasoning": vote.get("reasoning", "")
-            })
-
-        winner_name = max(tally.items(), key=lambda kv: kv[1])[0]
-        winner_candidate = next(c for c in candidates if c["name"] == winner_name)
-        term_ends = self.cycle + EXECUTIVE_TERM_CYCLES
-        election_id = f"exec_{self.cycle}_{uuid.uuid4().hex[:8]}"
-
-        self.db.save_election_result(
-            election_id=election_id,
-            cycle=self.cycle,
-            winner=winner_name,
-            platform=winner_candidate["platform"],
-            votes=vote_records,
-            term_ends_cycle=term_ends,
-        )
-
-        self._apply_executive_platform(winner_candidate["platform"], term_ends)
-
-        _log(f"  Executive election winner: {winner_name} ({tally[winner_name]}/{len(active_states)} votes)")
-        return {
-            "election_id": election_id,
-            "cycle": self.cycle,
-            "winner": winner_name,
-            "candidates": candidates,
-            "votes": vote_records,
-            "vote_tally": tally,
-            "term_ends_cycle": term_ends,
-            "platform": winner_candidate["platform"],
-        }
-
-    def _generate_executive_candidates(self, metrics: Dict[str, object], history: List[Dict]) -> List[Dict]:
-        candidates = []
-
-        def build(name: str, mandate: str) -> Optional[Dict]:
-            response = self.models.complete(
-                task_type="executive_election",
-                system_prompt=(
-                    "You are an Executive candidate for Atlantis governance. "
-                    "Produce strict JSON only."
-                ),
-                user_prompt=(
-                    f"Constitutional constraints: only adjust cycle_cost, token_values, tier_thresholds. "
-                    f"Do not alter constitutional or non-amendable clauses.\n"
-                    f"Role: {name}. Mandate: {mandate}.\n"
-                    f"System metrics JSON:\n{json.dumps(metrics, indent=2)}\n\n"
-                    f"Election history JSON:\n{json.dumps(history[-5:], indent=2)}\n\n"
-                    "Return JSON object with keys: summary (string), platform (object). "
-                    "platform must include cycle_cost (int), token_values (object of ints), tier_thresholds (object tier->int)."
-                ),
-                max_tokens=800,
-            )
-            raw = (response.content or "").strip()
-            try:
-                parsed = json.loads(raw)
-                platform = parsed.get("platform") or {}
-                summary = parsed.get("summary", "")
-            except json.JSONDecodeError:
-                parsed = {}
-                summary = ""
-                platform = {}
-
-            sanitized = self._sanitize_platform(platform)
-            if not summary:
-                if name == "Synthesis":
-                    summary = "Balance all domains with moderate parameter changes anchored to constitutional defaults."
-                else:
-                    summary = "Boost underperforming domains via lower cycle cost and stronger survival incentives."
-
-            if not platform and name == "Challenger":
-                sanitized["cycle_cost"] = max(100, int(self.config.get("cycle_cost", self._default_cycle_cost) * 0.9))
-                for key in ("discovery_survived", "foundation_survived", "challenge_succeeded"):
-                    if key in sanitized["token_values"]:
-                        sanitized["token_values"][key] = int(sanitized["token_values"][key] * 1.1)
-
-            return {
-                "name": name,
-                "summary": summary,
-                "platform": sanitized,
-                "raw": raw,
-            }
-
-        is_first = len(history) == 0
-        synth = build("Synthesis", "Balance all domains and preserve constitutional intent while optimizing performance.")
-        chall = build("Challenger", "Favor underperforming domains and correct weakest system metrics.")
-        if synth:
-            candidates.append(synth)
-        if chall:
-            candidates.append(chall)
-
-        if not is_first and self.active_executive:
-            incumbent = {
-                "name": "Incumbent",
-                "summary": "Continue current executive platform with iterative refinement based on term outcomes.",
-                "platform": copy.deepcopy(self.active_executive.get("platform", {})),
-                "raw": "",
-            }
-            candidates.insert(0, incumbent)
-
-        return candidates
-
-    def _sanitize_platform(self, platform: Dict) -> Dict:
-        cycle_cost = int(platform.get("cycle_cost", self._default_cycle_cost))
-        cycle_cost = max(100, cycle_cost)
-
-        token_updates = platform.get("token_values") or {}
-        token_values = dict(self._default_token_values)
-        for key, value in token_updates.items():
-            if key in token_values:
-                token_values[key] = int(value)
-
-        tier_updates = platform.get("tier_thresholds") or {}
-        tier_thresholds = {str(t): v for t, v in self._default_tier_thresholds.items()}
-        for tier, value in tier_updates.items():
-            tier_key = str(tier)
-            if tier_key in tier_thresholds:
-                tier_thresholds[tier_key] = max(1, int(value))
-
-        return {
-            "cycle_cost": cycle_cost,
-            "token_values": token_values,
-            "tier_thresholds": tier_thresholds,
-        }
-
-    def _senator_vote_for_executive(self, senator: State, candidates: List[Dict], metrics: Dict[str, object]) -> Dict[str, str]:
-        options = "\n".join(
-            f"- {c['name']}: {c['summary']}\n  PLATFORM: {json.dumps(c['platform'])}"
-            for c in candidates
-        )
-        response = senator.models.complete(
-            task_type="researcher_claims",
-            system_prompt=senator.senator_config.system_prompt,
-            user_prompt=(
-                "Executive election vote. You are one Senator with one vote.\n"
-                f"Current system metrics:\n{json.dumps(metrics, indent=2)}\n\n"
-                f"Candidate platforms:\n{options}\n\n"
-                "Reply in JSON with keys candidate and reasoning. Candidate must exactly match one option."
-            ),
-            max_tokens=300,
-        )
-        raw = (response.content or "").strip()
-        try:
-            parsed = json.loads(raw)
-            return {
-                "candidate": str(parsed.get("candidate", "")).strip(),
-                "reasoning": str(parsed.get("reasoning", "")).strip(),
-            }
-        except json.JSONDecodeError:
-            pick = candidates[0]["name"]
-            for c in candidates:
-                if c["name"].lower() in raw.lower():
-                    pick = c["name"]
-                    break
-            return {"candidate": pick, "reasoning": raw}
-
-    def _apply_executive_platform(self, platform: Dict, term_ends_cycle: int):
-        self.config["cycle_cost"] = int(platform.get("cycle_cost", self._default_cycle_cost))
-
-        TOKEN_VALUES.clear()
-        TOKEN_VALUES.update(dict(platform.get("token_values", self._default_token_values)))
-
-        thresholds = platform.get("tier_thresholds", {})
-        for tier, data in V2_TIERS.items():
-            if tier == 0:
-                continue
-            key = str(tier)
-            if key in thresholds:
-                data["surviving_claims"] = int(thresholds[key])
-
-        self.active_executive = {
-            "platform": copy.deepcopy(platform),
-            "term_ends_cycle": term_ends_cycle,
-        }
-
-
     # ─── ARCHIVE EXPORT ───────────────────────────────────────────
 
     def _write_cycle_log(self):
@@ -1940,28 +1197,6 @@ class PerpetualEngine:
             f"- Senate quorum: {quorum.get('active_states', 0)}/{quorum.get('minimum', SENATE_MIN_QUORUM)} active States"
             f" ({'SUSPENDED' if quorum.get('suspended') else 'ACTIVE'})\n"
         )
-
-        executive = governance.get("executive")
-        if executive:
-            if executive.get("skipped"):
-                lines.append(f"- Executive election: skipped ({executive.get('reason', 'unknown')})\n")
-            else:
-                lines.append(
-                    f"- Executive election: winner {executive.get('winner', '?')} | term ends cycle {executive.get('term_ends_cycle', '?')}\n"
-                )
-
-                lines.append("  - Candidate platforms:\n")
-                for candidate in executive.get("candidates", []):
-                    lines.append(
-                        f"    - {candidate.get('name', '?')}: {candidate.get('summary', '')}\n"
-                        f"      platform: {json.dumps(candidate.get('platform', {}), ensure_ascii=False)}\n"
-                    )
-
-                lines.append("  - Vote records:\n")
-                for record in executive.get("votes", []):
-                    lines.append(
-                        f"    - {record.get('senator', '?')}: {record.get('vote', '?')} — {record.get('reasoning', '')}\n"
-                    )
 
         senate_votes = governance.get("senate_votes", [])
         if senate_votes:
@@ -1989,50 +1224,18 @@ class PerpetualEngine:
                     f"**Challenge**\n{pair_result.get('a_challenge', '')}\n\n"
                     f"**Rebuttal**\n{pair_result.get('a_rebuttal', '')}\n\n"
                     f"**Outcome**: {pair_result.get('a_outcome', '?')}\n"
-                    f"**Judge reasoning**: {pair_result.get('a_judge_reasoning', '').strip() or 'No judge reasoning recorded.'}\n"
                     f"**Scores**: drama={pair_result.get('a_scores', {}).get('drama', 0)}, "
                     f"novelty={pair_result.get('a_scores', {}).get('novelty', 0)}, "
                     f"depth={pair_result.get('a_scores', {}).get('depth', 0)}\n"
-                    f"**Tokens**: claim={pair_result.get('a_tokens', {}).get('claim_tokens', 0)}, "
-                    f"challenge={pair_result.get('a_tokens', {}).get('challenge_tokens', 0)}, "
-                    f"net={pair_result.get('a_tokens', {}).get('net_tokens', 0)}\n"
                     f"\n### Exchange B ({pair_result.get('b_entry', '?')})\n"
                     f"**Claim**\n{pair_result.get('b_claim', '')}\n\n"
                     f"**Challenge**\n{pair_result.get('b_challenge', '')}\n\n"
                     f"**Rebuttal**\n{pair_result.get('b_rebuttal', '')}\n\n"
                     f"**Outcome**: {pair_result.get('b_outcome', '?')}\n"
-                    f"**Judge reasoning**: {pair_result.get('b_judge_reasoning', '').strip() or 'No judge reasoning recorded.'}\n"
                     f"**Scores**: drama={pair_result.get('b_scores', {}).get('drama', 0)}, "
                     f"novelty={pair_result.get('b_scores', {}).get('novelty', 0)}, "
                     f"depth={pair_result.get('b_scores', {}).get('depth', 0)}\n"
-                    f"**Tokens**: claim={pair_result.get('b_tokens', {}).get('claim_tokens', 0)}, "
-                    f"challenge={pair_result.get('b_tokens', {}).get('challenge_tokens', 0)}, "
-                    f"net={pair_result.get('b_tokens', {}).get('net_tokens', 0)}\n"
                 )
-
-        domains_seen = []
-        for pair_result in self.cycle_log_data.get("pairs", []):
-            pair_name = pair_result.get("pair", "")
-            if " vs " not in pair_name:
-                continue
-            left_state = pair_name.split(" vs ", 1)[0]
-            state = self.state_manager.get_state(left_state)
-            if state and state.domain not in domains_seen:
-                domains_seen.append(state.domain)
-
-        for domain in domains_seen:
-            domain_health = self.db.get_domain_health(domain, latest_only=True) or {}
-            lines.append(
-                f"\n## Domain Health — {domain}\n"
-                f"- Surviving claims: {domain_health.get('surviving_claims', 0)}\n"
-                f"- Survival rate: {domain_health.get('survival_rate', 0.0)}\n"
-                f"- Avg cycles to first survival: {domain_health.get('cycles_to_first_survival', 0.0)}\n"
-                f"- Revision depth: {domain_health.get('revision_depth', 0.0)}\n"
-                f"- Failure distribution: {json.dumps(domain_health.get('failure_distribution', {}), ensure_ascii=False)}\n"
-                f"- Credibility (State A): {domain_health.get('credibility_a', 1.0)}\n"
-                f"- Credibility (State B): {domain_health.get('credibility_b', 1.0)}\n"
-                f"- Maturity phase: {domain_health.get('maturity_phase', 'unknown')}\n"
-            )
 
         fed = self.cycle_log_data.get("federal_lab")
         if fed:
@@ -2043,7 +1246,6 @@ class PerpetualEngine:
                     f"\n## Federal Lab\n"
                     f"- Domain: {fed.get('domain', '?')}\n"
                     f"- Target: `{fed.get('target_display_id', '?')}`\n"
-                    f"- Inverted assumption: {fed.get('inverted_assumption', 'not captured')}\n"
                     f"- Lab entry: `{fed.get('lab_entry_display_id', '?')}`\n"
                     f"- Outcome: **{fed.get('outcome', '?')}**\n"
                 )
@@ -2052,9 +1254,7 @@ class PerpetualEngine:
         if content_files:
             lines.append(f"\n## Content Generated ({len(content_files)} files)\n")
             for f in content_files:
-                suffix = Path(f).suffix.lower().lstrip(".")
-                fmt = suffix or "unknown"
-                lines.append(f"- [{fmt}] {f}\n")
+                lines.append(f"- {f}\n")
 
         path.write_text("".join(lines), encoding="utf-8")
 
@@ -2074,9 +1274,6 @@ class PerpetualEngine:
                     "partial": 0,
                     "destroyed": 0,
                     "survival_rate": 0.0,
-                    "cycles_to_first_survival": 0.0,
-                    "revision_depth": 0.0,
-                    "failure_distribution": {},
                     "compression_ratio": 0.0,
                     "lab_survival_rate": 0.0,
                     "active_cities": 0,
@@ -2088,7 +1285,7 @@ class PerpetualEngine:
 
     def _export_archive(self):
         """
-        Rebuild output/archive.md (human-readable, grouped by archive tier).
+        Rebuild output/archive.md (human-readable, domain+cycle order).
         Rebuild output/archive.json (programmatic access).
         """
         all_entries = self.db.get_all_archive_entries()
@@ -2096,70 +1293,27 @@ class PerpetualEngine:
         # Sort by display_id (which encodes insertion order)
         all_entries.sort(key=lambda e: e.get("display_id", "#000"))
 
+        # Markdown archive
         md_lines = ["# Atlantis V2 — Archive\n", f"_Last updated: cycle {self.cycle}_\n\n"]
-        tier_sections = [
-            ("main", "## Main Archive (Surviving)\n\n"),
-            ("quarantine", "## Quarantine (Partial/Under Review)\n\n"),
-            ("graveyard", "## Graveyard (Destroyed/Retracted)\n\n"),
-        ]
-
-        for tier, heading in tier_sections:
-            tier_entries = [e for e in all_entries if e.get("archive_tier") == tier]
-            md_lines.append(heading)
-            if not tier_entries:
-                md_lines.append("_No entries in this tier._\n\n")
-                continue
-
-            for e in tier_entries:
-                status = e.get("status", "?")
-                did = e.get("display_id", "?")
-                source = e.get("source_state", "?")
-                entity = e.get("source_entity", "?")
-                cltype = e.get("claim_type", "?")
-                outcome = e.get("outcome", "")
-                outcome_reasoning = e.get("outcome_reasoning", "")
-                citations = e.get("citations") or []
-
-                scores = {
-                    "Novelty": e.get("novelty_score"),
-                    "Impact": e.get("impact_score"),
-                    "Depth": e.get("depth_score"),
-                    "Drama": e.get("drama_score"),
-                    "Stability": e.get("stability_score"),
-                    "Tokens": e.get("tokens_earned"),
-                }
-                score_line = " | ".join(
-                    f"{label}: {value}" for label, value in scores.items() if value is not None
-                )
-
-                md_lines.append(
-                    f"### {did} [{status.upper()}]\n"
-                    f"**Source State**: {source}  |  **Entity**: {entity}\n"
-                    f"**Claim Type**: {cltype}  |  **Cycle**: {e.get('cycle_created', '?')}\n\n"
-                    f"#### Claim\n{e.get('raw_claim_text', '')}\n\n"
-                )
-                if e.get("raw_challenge_text"):
-                    md_lines.append(f"#### Challenge\n{e.get('raw_challenge_text', '')}\n\n")
-                if e.get("raw_rebuttal_text"):
-                    md_lines.append(f"#### Rebuttal\n{e.get('raw_rebuttal_text', '')}\n\n")
-                if outcome:
-                    md_lines.append(f"#### Outcome\n- Status: {outcome}\n")
-                    if outcome_reasoning:
-                        md_lines.append(f"- Judge reasoning: {outcome_reasoning}\n")
-                    md_lines.append("\n")
-
-                md_lines.append("#### Scores\n")
-                md_lines.append(f"{score_line if score_line else 'No scores recorded.'}\n\n")
-
-                md_lines.append("#### Citations\n")
-                if citations:
-                    for citation in citations:
-                        md_lines.append(f"- {citation}\n")
-                    md_lines.append("\n")
-                else:
-                    md_lines.append("- None\n\n")
-
-                md_lines.append("---\n\n")
+        for e in all_entries:
+            status = e.get("status", "?")
+            did = e.get("display_id", "?")
+            source = e.get("source_state", "?")
+            entity = e.get("source_entity", "?")
+            cltype = e.get("claim_type", "?")
+            outcome = e.get("outcome", "")
+            md_lines.append(
+                f"## {did} [{status.upper()}]\n"
+                f"**Source**: {source} / {entity}  |  **Type**: {cltype}  |  **Cycle**: {e.get('cycle_created', '?')}\n\n"
+                f"### Claim\n{e.get('raw_claim_text', '')}\n\n"
+            )
+            if e.get("raw_challenge_text"):
+                md_lines.append(f"### Challenge\n{e.get('raw_challenge_text', '')}\n\n")
+            if e.get("raw_rebuttal_text"):
+                md_lines.append(f"### Rebuttal\n{e.get('raw_rebuttal_text', '')}\n\n")
+            if outcome:
+                md_lines.append(f"_Outcome: {outcome}_\n\n")
+            md_lines.append("---\n\n")
 
         (self.output_dir / "archive.md").write_text("".join(md_lines), encoding="utf-8")
 
@@ -2201,10 +1355,10 @@ class PerpetualEngine:
     # ─── HELPERS ─────────────────────────────────────────────────
 
     def _build_archive_context(self, domain: str, state_name: str) -> str:
-        """Summary of main-tier claims in domain for Researcher's citable context."""
-        claims = self.db.get_main_archive_claims(domain=domain)
+        """Summary of surviving claims in domain for Researcher's context."""
+        claims = self.db.get_surviving_claims(domain=domain)
         if not claims:
-            return "(no citable main-archive claims in domain yet)"
+            return "(no surviving claims in domain yet)"
         lines = []
         for c in claims[:15]:
             lines.append(
@@ -2214,10 +1368,15 @@ class PerpetualEngine:
         return "\n".join(lines)
 
     def _get_meta_learning(self, state_name: str) -> str:
-        """Last 3-5 graveyard claims from this State with judge reasoning."""
-        recent = self.db.get_graveyard_claims(state_name=state_name, limit=5)
+        """Last 3-5 destroyed claims from this State with judge reasoning."""
+        destroyed = [
+            e for e in self.db.get_surviving_claims(state_name=state_name)
+            if e.get("status") == "destroyed"
+        ]
+        destroyed.sort(key=lambda e: e.get("display_id", ""), reverse=True)
+        recent = destroyed[:5]
         if not recent:
-            return "(no graveyard claims yet — this is your first cycles)"
+            return "(no destroyed claims yet — this is your first cycles)"
         lines = []
         for e in recent:
             lines.append(
@@ -2245,38 +1404,19 @@ class PerpetualEngine:
         return "\n".join(questions[:5]) or "(no specific research directions yet)"
 
     def _get_recently_destroyed(self, state_name: str) -> str:
-        """Recently graveyarded claims for Lab hypothesis context."""
-        destroyed = self.db.get_graveyard_claims(state_name=state_name, limit=3)
+        """Recently destroyed claims for Lab hypothesis context."""
+        destroyed = [
+            e for e in self.db.get_surviving_claims(state_name=state_name)
+            if e.get("status") == "destroyed"
+        ]
+        destroyed.sort(key=lambda e: e.get("display_id", ""), reverse=True)
         if not destroyed:
             return "(no destroyed claims)"
         return "\n".join(
             f"{e.get('display_id', '?')}: {e.get('raw_claim_text', '')[:200]}"
-            for e in destroyed
+            for e in destroyed[:3]
         )
 
-
-    def _get_previous_claim_positions(self, state_name: str) -> str:
-        """Summarize this State's previous claim POSITION lines for novelty prompting."""
-        claims = self.db.get_surviving_claims(state_name=state_name)
-        claims.sort(key=lambda e: e.get("display_id", ""))
-        if not claims:
-            return "(none yet — this is your first claim cycle)"
-
-        summaries = []
-        for claim in claims:
-            raw = claim.get("raw_claim_text", "")
-            position = ""
-            for line in raw.splitlines():
-                line_upper = line.strip().upper()
-                # Extract either POSITION (old format) or HYPOTHESIS (new format)
-                if line_upper.startswith("POSITION:") or line_upper.startswith("HYPOTHESIS:"):
-                    position = line.strip()
-                    break
-            if not position:
-                position = f"POSITION: {raw.strip().splitlines()[0][:180]}" if raw.strip() else "POSITION: (empty claim text)"
-            summaries.append(f"{claim.get('display_id', '?')}: {position}")
-
-        return "\n".join(summaries[-8:])
     def _get_last_3_claims(self, state_name: str) -> List[str]:
         """Last 3 raw claim texts from this State (for anti-loop detection)."""
         claims = self.db.get_surviving_claims(state_name=state_name)
