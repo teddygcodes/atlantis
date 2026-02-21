@@ -517,3 +517,7 @@ export const STATS = {
   validated: 9,
   refuted: 9,
 };
+export const DEBATES = HYPOTHESES;
+export type Debate = Hypothesis;
+export const CLAIMS = DEBATES;
+export type Claim = Debate;
