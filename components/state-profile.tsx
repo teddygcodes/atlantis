@@ -86,7 +86,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
 
   return (
     <div
-      className="scroll-reveal"
+      className="scroll-reveal w-full max-w-2xl"
       style={{ animationDelay: `${index * 80}ms` }}
     >
       <button
@@ -320,6 +320,7 @@ export function StateProfile({ slug }: { slug: string }) {
   );
 
   return (
+    <div style={{ textAlign: "center" }}>
     <section ref={containerRef} className="state-profile-centered">
       {/* ── HERO ZONE ── */}
       <div className="scroll-reveal mb-6 text-center">
@@ -666,7 +667,7 @@ export function StateProfile({ slug }: { slug: string }) {
           </h2>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col items-center gap-4">
           {stateClaims.map((claim, i) => (
             <DebateCard key={claim.id} claim={claim} index={i} />
           ))}
@@ -706,7 +707,7 @@ export function StateProfile({ slug }: { slug: string }) {
             No surviving claims yet.
           </p>
         ) : (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col items-center gap-6">
             {survivingClaims.map((claim, i) => (
               <div
                 key={claim.id}
@@ -782,7 +783,7 @@ export function StateProfile({ slug }: { slug: string }) {
             No destroyed claims.
           </p>
         ) : (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col items-center gap-6">
             {destroyedClaims.map((claim, i) => (
               <div
                 key={claim.id}
@@ -843,5 +844,6 @@ export function StateProfile({ slug }: { slug: string }) {
 
       <div style={{ height: "60px" }} />
     </section>
+    </div>
   );
 }
