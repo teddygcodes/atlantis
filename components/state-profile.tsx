@@ -136,7 +136,6 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
 
         {/* Claim text */}
         <p
-          className="text-center"
           style={{
             fontFamily: "var(--font-body)",
             fontSize: "18px",
@@ -145,6 +144,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
             lineHeight: "1.8",
             textDecoration: claim.ruling === "DESTROYED" ? "line-through" : "none",
             textDecorationColor: "#dc262640",
+            textAlign: "center",
           }}
         >
           {claim.position}
@@ -186,7 +186,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
             }}
           >
             {/* Challenge */}
-            <div className="text-center">
+            <div>
               <SectionLabel>CHALLENGE</SectionLabel>
               <p
                 style={{
@@ -195,6 +195,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
                   fontWeight: 600,
                   color: "#e5e5e5",
                   lineHeight: "1.9",
+                  textAlign: "center",
                 }}
               >
                 {claim.challenge}
@@ -204,7 +205,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
             <div className="mx-auto h-px w-16" style={{ backgroundColor: "#1c1c1c" }} />
 
             {/* Rebuttal */}
-            <div className="text-center">
+            <div>
               <SectionLabel>REBUTTAL</SectionLabel>
               <p
                 style={{
@@ -213,6 +214,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
                   fontWeight: 600,
                   color: "#e5e5e5",
                   lineHeight: "1.9",
+                  textAlign: "center",
                 }}
               >
                 {claim.rebuttal}
@@ -222,7 +224,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
             <div className="mx-auto h-px w-16" style={{ backgroundColor: "#1c1c1c" }} />
 
             {/* Verdict */}
-            <div className="text-center">
+            <div>
               <SectionLabel>VERDICT</SectionLabel>
               <p
                 style={{
@@ -231,6 +233,7 @@ function DebateCard({ claim, index }: { claim: Claim; index: number }) {
                   fontWeight: 600,
                   color: "#f5f5f5",
                   lineHeight: "1.9",
+                  textAlign: "center",
                 }}
               >
                 {claim.verdict}
@@ -372,6 +375,7 @@ export function StateProfile({ slug }: { slug: string }) {
             fontStyle: "italic",
             color: "#a3a3a3",
             lineHeight: "1.8",
+            textAlign: "center",
           }}
         >
           &ldquo;{state.approach}&rdquo;
@@ -503,13 +507,13 @@ export function StateProfile({ slug }: { slug: string }) {
             </span>
           </div>
           <p
-            className="text-center"
             style={{
               fontFamily: "var(--font-body)",
               fontSize: "20px",
               fontWeight: 600,
               color: "#f5f5f5",
               lineHeight: "1.8",
+              textAlign: "center",
             }}
           >
             {latestClaim.position}
@@ -605,7 +609,6 @@ export function StateProfile({ slug }: { slug: string }) {
                     {rulingBadge(claim.ruling)}
                   </div>
                   <p
-                    className="text-center"
                     style={{
                       fontFamily: "var(--font-body)",
                       fontSize: "18px",
@@ -615,6 +618,7 @@ export function StateProfile({ slug }: { slug: string }) {
                       textDecoration:
                         claim.ruling === "DESTROYED" ? "line-through" : "none",
                       textDecorationColor: "#dc262640",
+                      textAlign: "center",
                     }}
                   >
                     {claim.position}
@@ -628,7 +632,6 @@ export function StateProfile({ slug }: { slug: string }) {
         {/* Narrative */}
         <div className="mx-auto mt-12 max-w-2xl text-center">
           <p
-            className="text-center"
             style={{
               fontFamily: "var(--font-body)",
               fontSize: "18px",
@@ -636,6 +639,7 @@ export function StateProfile({ slug }: { slug: string }) {
               color: "#d4d4d4",
               lineHeight: "1.9",
               fontStyle: "italic",
+              textAlign: "center",
             }}
           >
             {state.learningArc}
@@ -728,13 +732,13 @@ export function StateProfile({ slug }: { slug: string }) {
                   {rulingBadge(claim.ruling)}
                 </div>
                 <p
-                  className="text-center"
                   style={{
                     fontFamily: "var(--font-body)",
                     fontSize: "18px",
                     fontWeight: 600,
                     color: "#e5e5e5",
                     lineHeight: "1.8",
+                    textAlign: "center",
                   }}
                 >
                   {claim.position}
@@ -804,7 +808,7 @@ export function StateProfile({ slug }: { slug: string }) {
                   {rulingBadge("DESTROYED")}
                 </div>
                 <p
-                  className="mb-3 text-center"
+                  className="mb-3"
                   style={{
                     fontFamily: "var(--font-body)",
                     fontSize: "17px",
@@ -813,12 +817,12 @@ export function StateProfile({ slug }: { slug: string }) {
                     lineHeight: "1.8",
                     textDecoration: "line-through",
                     textDecorationColor: "#dc262640",
+                    textAlign: "center",
                   }}
                 >
                   {claim.position}
                 </p>
                 <p
-                  className="text-center"
                   style={{
                     fontFamily: "var(--font-body)",
                     fontSize: "15px",
@@ -826,6 +830,7 @@ export function StateProfile({ slug }: { slug: string }) {
                     color: "#8a8a8a",
                     lineHeight: "1.8",
                     fontStyle: "italic",
+                    textAlign: "center",
                   }}
                 >
                   {claim.verdict}

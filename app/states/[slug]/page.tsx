@@ -11,7 +11,7 @@ export default async function StateProfilePage({
   return (
     <>
       <Navigation />
-      <main className="mx-auto max-w-[900px] px-6 pt-24 pb-20 md:pt-32">
+      <main className="mx-auto max-w-[900px] px-6 pt-24 pb-20 text-center md:pt-32">
         <StateProfile slug={slug} />
       </main>
     </>
