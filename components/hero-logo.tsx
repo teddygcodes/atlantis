@@ -151,7 +151,7 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
             width={560}
             height={560}
             className="object-contain drop-shadow-[0_0_100px_rgba(220,38,38,0.3)]"
-            style={{ width: "min(560px, 80vw)", height: "auto", maxWidth: "100%" }}
+            style={{ width: "min(560px, 80vw)", height: "auto" }}
             priority
             crossOrigin="anonymous"
           />
