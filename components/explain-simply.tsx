@@ -57,9 +57,12 @@ export function ExplainSimply({
       style={{ textAlign: "left", width: "100%" }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Button */}
-      <button
+      {/* Trigger - uses span instead of button to avoid nested <button> hydration errors */}
+      <span
+        role="button"
+        tabIndex={0}
         onClick={handleClick}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(e as unknown as React.MouseEvent); } }}
         style={{
           fontFamily: "var(--font-ibm-plex-mono)",
           fontSize: "10px",
@@ -85,7 +88,7 @@ export function ExplainSimply({
         }}
       >
         {open ? "HIDE EXPLANATION" : "WHAT DOES THIS MEAN?"}
-      </button>
+      </span>
 
       {/* Explanation card */}
       {open && (
