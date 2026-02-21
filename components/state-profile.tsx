@@ -25,11 +25,9 @@ function useScrollReveal() {
   return ref;
 }
 
-const RULING_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  REVISE: { bg: "rgba(245, 158, 11, 0.1)", text: "#f59e0b", label: "REVISE" },
-  PARTIAL: { bg: "rgba(34, 197, 94, 0.1)", text: "#22c55e", label: "PARTIAL" },
-  DESTROYED: { bg: "rgba(220, 38, 38, 0.1)", text: "#dc2626", label: "DESTROYED" },
-};
+function rulingColor(ruling: string): string {
+  return ruling === "DESTROYED" ? "#dc2626" : "#a3a3a3";
+}
 
 function SectionHeading({ title }: { title: string }) {
   return (
@@ -38,8 +36,8 @@ function SectionHeading({ title }: { title: string }) {
         className="mb-3"
         style={{
           fontFamily: "var(--font-serif)",
-          fontSize: "20px",
-          color: "#e5e5e5",
+          fontSize: "22px",
+          color: "#f5f5f5",
           letterSpacing: "0.2em",
         }}
       >
@@ -50,22 +48,41 @@ function SectionHeading({ title }: { title: string }) {
   );
 }
 
-function DebateCard({ claim }: { claim: Claim }) {
-  const [expanded, setExpanded] = useState(false);
-  const ruling = RULING_STYLES[claim.ruling];
-
+/* Dark card wrapper used everywhere */
+function DarkCard({
+  children,
+  className = "",
+  dimmed = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  dimmed?: boolean;
+}) {
   return (
     <div
-      className="scroll-reveal"
+      className={className}
       style={{
-        backgroundColor: claim.ruling === "DESTROYED" ? "#0a0a0a" : "#0e0e0e",
+        backgroundColor: dimmed ? "#0a0a0a" : "#0e0e0e",
         border: "1px solid #1c1c1c",
         borderRadius: "12px",
         padding: "24px",
-        opacity: claim.ruling === "DESTROYED" ? 0.7 : 1,
+        opacity: dimmed ? 0.7 : 1,
       }}
     >
-      {/* Top row: claim id + cycle + ruling badge */}
+      {children}
+    </div>
+  );
+}
+
+function DebateCard({ claim }: { claim: Claim }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <DarkCard
+      className="scroll-reveal"
+      dimmed={claim.ruling === "DESTROYED"}
+    >
+      {/* Top row: claim id + cycle + ruling */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span
@@ -94,13 +111,10 @@ function DebateCard({ claim }: { claim: Claim }) {
             fontFamily: "var(--font-mono)",
             fontSize: "10px",
             letterSpacing: "0.1em",
-            color: ruling.text,
-            backgroundColor: ruling.bg,
-            padding: "3px 10px",
-            borderRadius: "4px",
+            color: rulingColor(claim.ruling),
           }}
         >
-          {ruling.label}
+          {claim.ruling}
         </span>
       </div>
 
@@ -131,9 +145,14 @@ function DebateCard({ claim }: { claim: Claim }) {
           background: "none",
           border: "none",
           cursor: "pointer",
+          transition: "color 0.2s",
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = "#dc2626"; }}
-        onMouseLeave={(e) => { if (!expanded) e.currentTarget.style.color = "#525252"; }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "#dc2626";
+        }}
+        onMouseLeave={(e) => {
+          if (!expanded) e.currentTarget.style.color = "#525252";
+        }}
       >
         {expanded ? "COLLAPSE" : "VIEW DEBATE"}
         <span
@@ -163,7 +182,7 @@ function DebateCard({ claim }: { claim: Claim }) {
                 style={{
                   fontFamily: "var(--font-mono)",
                   fontSize: "9px",
-                  color: "#dc2626",
+                  color: "#a3a3a3",
                   letterSpacing: "0.25em",
                   textTransform: "uppercase" as const,
                 }}
@@ -189,7 +208,7 @@ function DebateCard({ claim }: { claim: Claim }) {
                 style={{
                   fontFamily: "var(--font-mono)",
                   fontSize: "9px",
-                  color: "#f59e0b",
+                  color: "#a3a3a3",
                   letterSpacing: "0.25em",
                   textTransform: "uppercase" as const,
                 }}
@@ -215,20 +234,22 @@ function DebateCard({ claim }: { claim: Claim }) {
                 style={{
                   fontFamily: "var(--font-mono)",
                   fontSize: "9px",
-                  color: ruling.text,
+                  color: "#a3a3a3",
                   letterSpacing: "0.25em",
                   textTransform: "uppercase" as const,
                 }}
               >
-                Verdict
+                Verdict &middot;{" "}
+                <span style={{ color: rulingColor(claim.ruling) }}>
+                  {claim.ruling}
+                </span>
               </span>
               <p
                 style={{
                   fontFamily: "var(--font-body)",
                   fontSize: "15px",
-                  color: "#e5e5e5",
+                  color: "#f5f5f5",
                   lineHeight: "1.8",
-                  fontStyle: claim.ruling === "DESTROYED" ? "italic" : "normal",
                 }}
               >
                 {claim.verdict}
@@ -237,14 +258,13 @@ function DebateCard({ claim }: { claim: Claim }) {
           </div>
         </div>
       </div>
-    </div>
+    </DarkCard>
   );
 }
 
 export function StateProfile({ slug }: { slug: string }) {
   const containerRef = useScrollReveal();
 
-  // Find the state by slug
   const state = STATES.find(
     (s) => s.name.toLowerCase().replace("_", "-") === slug
   );
@@ -264,19 +284,20 @@ export function StateProfile({ slug }: { slug: string }) {
     (c) => c.ruling === "REVISE" || c.ruling === "PARTIAL"
   );
   const destroyedClaims = stateClaims.filter((c) => c.ruling === "DESTROYED");
-  const latestClaim = stateClaims.reduce((a, b) => (a.cycle > b.cycle ? a : b), stateClaims[0]);
+  const latestClaim = stateClaims.reduce(
+    (a, b) => (a.cycle > b.cycle ? a : b),
+    stateClaims[0]
+  );
 
   const total = state.wins + state.partials + state.losses;
   const survivalPct =
     total > 0 ? Math.round(((state.wins + state.partials) / total) * 100) : 0;
 
-  // Tier calculation
   let tier = "IRON";
   if (survivalPct >= 80) tier = "GOLD";
   else if (survivalPct >= 60) tier = "SILVER";
   else if (survivalPct >= 40) tier = "BRONZE";
 
-  // Group claims by cycle for the Debates section
   const claimsByCycle = [1, 2, 3].map((cycle) =>
     stateClaims.filter((c) => c.cycle === cycle)
   );
@@ -287,17 +308,15 @@ export function StateProfile({ slug }: { slug: string }) {
       <div className="scroll-reveal mb-10">
         <Link
           href="/states"
-          className="inline-flex items-center gap-2 transition-colors duration-200"
+          className="inline-flex items-center gap-2 transition-colors duration-200 hover:opacity-70"
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: "11px",
             color: "#dc2626",
             letterSpacing: "0.15em",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = "#dc2626"; }}
         >
-          &larr; States
+          &larr; STATES
         </Link>
       </div>
 
@@ -308,7 +327,7 @@ export function StateProfile({ slug }: { slug: string }) {
           style={{
             fontFamily: "var(--font-serif)",
             fontSize: "36px",
-            color: "#e5e5e5",
+            color: "#f5f5f5",
             letterSpacing: "0.15em",
           }}
         >
@@ -343,15 +362,18 @@ export function StateProfile({ slug }: { slug: string }) {
 
         {/* Stats row */}
         <div className="flex flex-wrap items-center gap-8">
-          <div className="flex items-center gap-1.5" style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}>
-            <span style={{ color: "#525252" }}>W</span>
-            <span style={{ color: "#22c55e" }}>{state.wins}</span>
+          <div
+            className="flex items-center gap-1.5"
+            style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}
+          >
+            <span style={{ color: "#a3a3a3" }}>W</span>
+            <span style={{ color: "#f5f5f5" }}>{state.wins}</span>
             <span style={{ color: "#2a2a2a" }}>/</span>
-            <span style={{ color: "#525252" }}>P</span>
-            <span style={{ color: "#f59e0b" }}>{state.partials}</span>
+            <span style={{ color: "#a3a3a3" }}>P</span>
+            <span style={{ color: "#f5f5f5" }}>{state.partials}</span>
             <span style={{ color: "#2a2a2a" }}>/</span>
-            <span style={{ color: "#525252" }}>L</span>
-            <span style={{ color: "#737373" }}>{state.losses}</span>
+            <span style={{ color: "#a3a3a3" }}>L</span>
+            <span style={{ color: "#f5f5f5" }}>{state.losses}</span>
           </div>
           <span
             style={{
@@ -368,7 +390,7 @@ export function StateProfile({ slug }: { slug: string }) {
               fontFamily: "var(--font-mono)",
               fontSize: "10px",
               letterSpacing: "0.15em",
-              color: "#525252",
+              color: "#a3a3a3",
               border: "1px solid #1c1c1c",
               padding: "3px 10px",
               borderRadius: "4px",
@@ -385,34 +407,20 @@ export function StateProfile({ slug }: { slug: string }) {
       {/* 1. LEARNING ARC */}
       <div className="mb-20">
         <SectionHeading title="LEARNING ARC" />
-        <div className="scroll-reveal flex flex-col gap-6">
-          {claimsByCycle.map((cycleClaims, idx) => {
-            if (cycleClaims.length === 0) return null;
-            const claim = cycleClaims[0];
-            const ruling = RULING_STYLES[claim.ruling];
-            return (
-              <div key={idx} className="flex gap-5">
-                <div className="flex flex-col items-center">
-                  <div
-                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full"
-                    style={{ backgroundColor: "rgba(220, 38, 38, 0.1)", border: "1px solid rgba(220, 38, 38, 0.25)" }}
-                  >
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "#dc2626" }}>
-                      {idx + 1}
-                    </span>
-                  </div>
-                  {idx < 2 && (
-                    <div className="flex-1" style={{ width: "1px", backgroundColor: "rgba(220, 38, 38, 0.15)", minHeight: "40px" }} />
-                  )}
-                </div>
-                <div className="pb-2">
-                  <div className="mb-2 flex items-center gap-3">
+        <DarkCard className="scroll-reveal">
+          <div className="flex flex-col gap-6">
+            {claimsByCycle.map((cycleClaims, idx) => {
+              if (cycleClaims.length === 0) return null;
+              const claim = cycleClaims[0];
+              return (
+                <div key={idx}>
+                  <div className="mb-2 flex items-center gap-4">
                     <span
                       style={{
                         fontFamily: "var(--font-mono)",
                         fontSize: "10px",
-                        color: "#525252",
-                        letterSpacing: "0.15em",
+                        color: "#a3a3a3",
+                        letterSpacing: "0.2em",
                       }}
                     >
                       CYCLE {idx + 1}
@@ -420,15 +428,12 @@ export function StateProfile({ slug }: { slug: string }) {
                     <span
                       style={{
                         fontFamily: "var(--font-mono)",
-                        fontSize: "9px",
+                        fontSize: "10px",
                         letterSpacing: "0.1em",
-                        color: ruling.text,
-                        backgroundColor: ruling.bg,
-                        padding: "2px 8px",
-                        borderRadius: "3px",
+                        color: rulingColor(claim.ruling),
                       }}
                     >
-                      {ruling.label}
+                      {claim.ruling}
                     </span>
                   </div>
                   <p
@@ -441,59 +446,49 @@ export function StateProfile({ slug }: { slug: string }) {
                   >
                     {claim.position}
                   </p>
+                  {idx < claimsByCycle.filter((c) => c.length > 0).length - 1 && (
+                    <div
+                      className="mt-6"
+                      style={{ height: "1px", backgroundColor: "#1c1c1c" }}
+                    />
+                  )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
 
-        {/* Full learning arc narrative */}
-        <div
-          className="scroll-reveal mt-8"
-          style={{
-            backgroundColor: "#0e0e0e",
-            border: "1px solid #1c1c1c",
-            borderRadius: "12px",
-            padding: "24px",
-          }}
-        >
-          <span
-            className="mb-3 block"
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "9px",
-              color: "#dc2626",
-              letterSpacing: "0.25em",
-              textTransform: "uppercase" as const,
-            }}
-          >
-            Narrative
-          </span>
-          <p
-            style={{
-              fontFamily: "var(--font-body)",
-              fontSize: "16px",
-              color: "#a3a3a3",
-              lineHeight: "1.9",
-            }}
-          >
-            {state.learningArc}
-          </p>
-        </div>
+          {/* Narrative */}
+          <div className="mt-8 pt-6" style={{ borderTop: "1px solid #1c1c1c" }}>
+            <span
+              className="mb-3 block"
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "9px",
+                color: "#a3a3a3",
+                letterSpacing: "0.25em",
+                textTransform: "uppercase" as const,
+              }}
+            >
+              Narrative
+            </span>
+            <p
+              style={{
+                fontFamily: "var(--font-body)",
+                fontSize: "16px",
+                color: "#a3a3a3",
+                lineHeight: "1.9",
+              }}
+            >
+              {state.learningArc}
+            </p>
+          </div>
+        </DarkCard>
       </div>
 
       {/* 2. ACTIVE RESEARCH */}
       <div className="mb-20">
         <SectionHeading title="ACTIVE RESEARCH" />
-        <div
-          className="scroll-reveal"
-          style={{
-            backgroundColor: "#0e0e0e",
-            border: "1px solid #1c1c1c",
-            borderRadius: "12px",
-            padding: "24px",
-          }}
-        >
+        <DarkCard className="scroll-reveal">
           <div className="mb-3 flex items-center gap-3">
             <span
               style={{
@@ -506,7 +501,13 @@ export function StateProfile({ slug }: { slug: string }) {
             >
               {state.domain}
             </span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "#525252" }}>
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "10px",
+                color: "#525252",
+              }}
+            >
               {latestClaim.id} &middot; Cycle {latestClaim.cycle}
             </span>
           </div>
@@ -514,13 +515,13 @@ export function StateProfile({ slug }: { slug: string }) {
             style={{
               fontFamily: "var(--font-body)",
               fontSize: "17px",
-              color: "#e5e5e5",
+              color: "#f5f5f5",
               lineHeight: "1.8",
             }}
           >
             {latestClaim.position}
           </p>
-        </div>
+        </DarkCard>
       </div>
 
       {/* 3. DEBATES */}
@@ -536,7 +537,7 @@ export function StateProfile({ slug }: { slug: string }) {
                   style={{
                     fontFamily: "var(--font-mono)",
                     fontSize: "10px",
-                    color: "#525252",
+                    color: "#a3a3a3",
                     letterSpacing: "0.2em",
                   }}
                 >
@@ -571,35 +572,37 @@ export function StateProfile({ slug }: { slug: string }) {
         ) : (
           <div className="flex flex-col gap-4">
             {survivingClaims.map((claim) => (
-              <div
-                key={claim.id}
-                className="scroll-reveal"
-                style={{
-                  backgroundColor: "#0e0e0e",
-                  border: "1px solid #1c1c1c",
-                  borderRadius: "12px",
-                  padding: "24px",
-                }}
-              >
+              <DarkCard key={claim.id} className="scroll-reveal">
                 <div className="mb-3 flex items-center gap-3">
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "#525252", letterSpacing: "0.1em" }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "10px",
+                      color: "#525252",
+                      letterSpacing: "0.1em",
+                    }}
+                  >
                     {claim.id}
                   </span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "#525252", letterSpacing: "0.1em" }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "10px",
+                      color: "#525252",
+                      letterSpacing: "0.1em",
+                    }}
+                  >
                     CYCLE {claim.cycle}
                   </span>
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
-                      fontSize: "9px",
+                      fontSize: "10px",
                       letterSpacing: "0.1em",
-                      color: RULING_STYLES[claim.ruling].text,
-                      backgroundColor: RULING_STYLES[claim.ruling].bg,
-                      padding: "2px 8px",
-                      borderRadius: "3px",
+                      color: "#a3a3a3",
                     }}
                   >
-                    {RULING_STYLES[claim.ruling].label}
+                    {claim.ruling}
                   </span>
                 </div>
                 <p
@@ -612,7 +615,7 @@ export function StateProfile({ slug }: { slug: string }) {
                 >
                   {claim.position}
                 </p>
-              </div>
+              </DarkCard>
             ))}
           </div>
         )}
@@ -636,33 +639,34 @@ export function StateProfile({ slug }: { slug: string }) {
         ) : (
           <div className="flex flex-col gap-4">
             {destroyedClaims.map((claim) => (
-              <div
-                key={claim.id}
-                className="scroll-reveal"
-                style={{
-                  backgroundColor: "#0a0a0a",
-                  border: "1px solid #151515",
-                  borderRadius: "12px",
-                  padding: "24px",
-                  opacity: 0.7,
-                }}
-              >
+              <DarkCard key={claim.id} className="scroll-reveal" dimmed>
                 <div className="mb-3 flex items-center gap-3">
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "#525252", letterSpacing: "0.1em" }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "10px",
+                      color: "#525252",
+                      letterSpacing: "0.1em",
+                    }}
+                  >
                     {claim.id}
                   </span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "#525252", letterSpacing: "0.1em" }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "10px",
+                      color: "#525252",
+                      letterSpacing: "0.1em",
+                    }}
+                  >
                     CYCLE {claim.cycle}
                   </span>
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
-                      fontSize: "9px",
+                      fontSize: "10px",
                       letterSpacing: "0.1em",
                       color: "#dc2626",
-                      backgroundColor: "rgba(220, 38, 38, 0.1)",
-                      padding: "2px 8px",
-                      borderRadius: "3px",
                     }}
                   >
                     DESTROYED
@@ -690,7 +694,7 @@ export function StateProfile({ slug }: { slug: string }) {
                 >
                   {claim.verdict}
                 </p>
-              </div>
+              </DarkCard>
             ))}
           </div>
         )}
@@ -700,15 +704,7 @@ export function StateProfile({ slug }: { slug: string }) {
       <div className="mb-20">
         <SectionHeading title="CITIES & TOWNS" />
         <div className="scroll-reveal flex flex-col gap-6 md:flex-row">
-          <div
-            className="flex-1"
-            style={{
-              backgroundColor: "#0e0e0e",
-              border: "1px solid #1c1c1c",
-              borderRadius: "12px",
-              padding: "24px",
-            }}
-          >
+          <DarkCard className="flex-1">
             <span
               className="mb-3 block"
               style={{
@@ -731,16 +727,8 @@ export function StateProfile({ slug }: { slug: string }) {
             >
               No cities formed yet.
             </p>
-          </div>
-          <div
-            className="flex-1"
-            style={{
-              backgroundColor: "#0e0e0e",
-              border: "1px solid #1c1c1c",
-              borderRadius: "12px",
-              padding: "24px",
-            }}
-          >
+          </DarkCard>
+          <DarkCard className="flex-1">
             <span
               className="mb-3 block"
               style={{
@@ -763,11 +751,10 @@ export function StateProfile({ slug }: { slug: string }) {
             >
               No towns formed yet.
             </p>
-          </div>
+          </DarkCard>
         </div>
       </div>
 
-      {/* Bottom spacer */}
       <div style={{ height: "40px" }} />
     </section>
   );
