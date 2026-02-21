@@ -169,10 +169,10 @@ export function HeroLogo({ onEnter }: { onEnter: () => void }) {
         />
 
         <p
-          className="hero-fade-in-delay-2 mb-16 max-w-lg text-center text-2xl leading-relaxed text-muted"
+          className="hero-fade-in-delay-2 mb-16 whitespace-nowrap text-center text-lg leading-relaxed text-muted sm:text-xl md:text-2xl"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
-          Where ideas are tested. Only validated knowledge survives.
+          Only validated knowledge survives.
         </p>
 
         <button

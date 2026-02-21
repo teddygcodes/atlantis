@@ -33,11 +33,6 @@ const SECTIONS: {
     title: "Graveyard",
     description: "Ideas that did not survive",
   },
-  {
-    id: "About",
-    title: "About",
-    description: "The civilization is learning",
-  },
 ];
 
 interface SectionGridProps {
@@ -67,13 +62,11 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
     return () => observer.disconnect();
   }, []);
 
-  /* Row assignments for staggered cascade:
-     Row 0 = Chronicle (full width, tall)
+  /* Row assignments:
+     Row 0 = Chronicle (full width, hero tile)
      Row 1 = States + Archive
-     Row 2 = Debates + Graveyard
-     Row 3 = About (full width, shorter) */
-  const rowMap = [0, 1, 1, 2, 2, 3];
-  const heightMap = ["320px", "260px", "260px", "260px", "260px", "180px"];
+     Row 2 = Debates + Graveyard */
+  const rowMap = [0, 1, 1, 2, 2];
 
   return (
     <section className="mx-auto max-w-5xl px-6 py-28 md:py-40">
@@ -88,7 +81,7 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
       </p>
 
       <div ref={gridRef} className="flex flex-col gap-4">
-        {/* Row 0: Chronicle — full width hero tile */}
+        {/* Row 0: Chronicle -- full width hero tile */}
         {renderTile(SECTIONS[0], 0)}
 
         {/* Row 1: States + Archive */}
@@ -102,9 +95,6 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
           {renderTile(SECTIONS[3], 3)}
           {renderTile(SECTIONS[4], 4)}
         </div>
-
-        {/* Row 3: About — full width, compact */}
-        {renderTile(SECTIONS[5], 5)}
       </div>
     </section>
   );
@@ -118,29 +108,29 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
     const colDelay = index === 2 || index === 4 ? 0.1 : 0;
     const rowDelay = row * 0.2;
     const totalDelay = rowDelay + colDelay;
-    const minH = heightMap[index];
     const isChronicle = index === 0;
-    const isAbout = index === 5;
 
     return (
       <button
         key={section.id}
         data-row={row}
         onClick={() => onNavigate(section.id)}
-        className="section-door group relative flex cursor-pointer flex-col overflow-hidden rounded-sm border text-left"
+        className="section-door group relative flex cursor-pointer items-center justify-center overflow-hidden border text-center"
         style={{
-          minHeight: minH,
+          minHeight: isChronicle ? "280px" : "260px",
           borderColor: "rgba(255,255,255,0.06)",
           backgroundColor: "#0a0a0a",
+          borderRadius: "12px",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
           opacity: isVisible ? 1 : 0,
           transform: isVisible ? "translateY(0)" : "translateY(50px)",
-          transition: `opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1) ${totalDelay}s, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1) ${totalDelay}s`,
+          transition: `opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1) ${totalDelay}s, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1) ${totalDelay}s, box-shadow 0.3s ease, border-color 0.3s ease`,
         }}
       >
         {/* Animated red left border */}
         <div
           className="pointer-events-none absolute inset-y-0 left-0 w-[2px] origin-top scale-y-0 transition-transform duration-[400ms] ease-out group-hover:scale-y-100"
-          style={{ backgroundColor: "rgba(220,38,38,0.6)" }}
+          style={{ backgroundColor: "rgba(220,38,38,0.6)", borderRadius: "12px 0 0 12px" }}
         />
 
         {/* Animated red top border */}
@@ -149,72 +139,59 @@ export function SectionGrid({ onNavigate }: SectionGridProps) {
           style={{
             backgroundColor: "rgba(220,38,38,0.5)",
             transitionDelay: "0.08s",
+            borderRadius: "12px 12px 0 0",
           }}
         />
 
-        {/* Content */}
-        <div
-          className={`relative z-10 flex h-full flex-col ${
-            isAbout ? "justify-center p-10 md:p-12" : "justify-end p-10 md:p-12"
-          }`}
-        >
-          <div>
-            <h3
-              className={`mb-3 tracking-[0.12em] text-foreground/90 transition-all duration-300 group-hover:translate-x-2 group-hover:text-foreground ${
-                isChronicle
-                  ? "text-[32px] md:text-[40px]"
-                  : isAbout
-                    ? "text-[22px] md:text-[26px]"
-                    : "text-[26px] md:text-[30px]"
-              }`}
-              style={{ fontFamily: "var(--font-cinzel)" }}
-            >
-              {section.title}
-            </h3>
+        {/* Content -- centered */}
+        <div className="relative z-10 flex flex-col items-center px-10 py-10 md:px-12 md:py-12">
+          <h3
+            className={`mb-4 tracking-[0.12em] text-foreground/90 transition-all duration-300 group-hover:text-foreground ${
+              isChronicle
+                ? "text-[28px] md:text-[36px]"
+                : "text-[24px] md:text-[28px]"
+            }`}
+            style={{ fontFamily: "var(--font-cinzel)" }}
+          >
+            {section.title}
+          </h3>
 
-            <p
-              className={`transition-colors duration-300 group-hover:[color:#a3a3a3] ${
-                isChronicle
-                  ? "mb-10 text-[18px] md:text-[20px]"
-                  : isAbout
-                    ? "mb-6 text-[15px] md:text-[16px]"
-                    : "mb-8 text-[16px] md:text-[17px]"
-              }`}
+          <p
+            className="mb-8 max-w-md text-[16px] transition-colors duration-300 group-hover:[color:#a3a3a3]"
+            style={{
+              fontFamily: "var(--font-cormorant)",
+              color: "#737373",
+              lineHeight: "1.6",
+            }}
+          >
+            {section.description}
+          </p>
+
+          {/* Enter arrow */}
+          <div className="flex items-center gap-2 transition-all duration-300 group-hover:gap-4">
+            <span
+              className="text-[9px] uppercase tracking-[0.3em] transition-colors duration-300 group-hover:text-[#dc2626]/70"
               style={{
-                fontFamily: "var(--font-cormorant)",
-                color: "#737373",
-                lineHeight: "1.6",
+                fontFamily: "var(--font-ibm-plex-mono)",
+                color: "#333333",
               }}
             >
-              {section.description}
-            </p>
-
-            {/* Enter arrow */}
-            <div className="flex items-center gap-2 transition-all duration-300 group-hover:gap-4">
-              <span
-                className="text-[9px] uppercase tracking-[0.3em] transition-colors duration-300 group-hover:text-[#dc2626]/70"
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  color: "#333333",
-                }}
-              >
-                Enter
-              </span>
-              <svg
-                width="20"
-                height="12"
-                viewBox="0 0 20 12"
-                fill="none"
-                className="transition-all duration-300 group-hover:translate-x-2 group-hover:text-[#dc2626]/70"
-                style={{ color: "#333333" }}
-              >
-                <path
-                  d="M0 6h16m0 0l-4-4.5m4 4.5l-4 4.5"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                />
-              </svg>
-            </div>
+              Enter
+            </span>
+            <svg
+              width="20"
+              height="12"
+              viewBox="0 0 20 12"
+              fill="none"
+              className="transition-all duration-300 group-hover:translate-x-2 group-hover:text-[#dc2626]/70"
+              style={{ color: "#333333" }}
+            >
+              <path
+                d="M0 6h16m0 0l-4-4.5m4 4.5l-4 4.5"
+                stroke="currentColor"
+                strokeWidth="1"
+              />
+            </svg>
           </div>
         </div>
       </button>
