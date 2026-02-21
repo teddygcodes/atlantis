@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { CLAIMS, type Claim } from "@/lib/data";
 
-function useScrollReveal() {
+function useScrollReveal(deps: unknown[] = []) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -20,7 +20,8 @@ function useScrollReveal() {
       observer.observe(child)
     );
     return () => observer.disconnect();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
   return ref;
 }
 
@@ -33,8 +34,8 @@ const DOMAIN_FILTERS = [
 type DomainFilter = (typeof DOMAIN_FILTERS)[number];
 
 export function Archive() {
-  const containerRef = useScrollReveal();
   const [filter, setFilter] = useState<DomainFilter>("All");
+  const containerRef = useScrollReveal([filter]);
 
   const survivingClaims = CLAIMS.filter(
     (c) => c.ruling === "REVISE" || c.ruling === "PARTIAL"
