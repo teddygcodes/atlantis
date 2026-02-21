@@ -23,7 +23,7 @@ export default function Home() {
   return (
     <div className="min-h-screen">
       <Navigation activeTab={activeTab} onTabChange={handleTabChange} />
-      <main className="mx-auto max-w-7xl px-6 py-12">
+      <main className="mx-auto max-w-5xl px-6 py-16 md:py-24">
         {activeTab === "Chronicle" && <Chronicle />}
         {activeTab === "States" && <States />}
         {activeTab === "Archive" && <Archive />}

@@ -4,16 +4,16 @@ import { CHRONICLE_ENTRIES } from "@/lib/data";
 
 export function Chronicle() {
   return (
-    <section>
-      <header className="mb-16 animate-fade-in-up">
+    <section className="mx-auto max-w-[800px] py-8">
+      <header className="mb-20 animate-fade-in-up">
         <h1
-          className="mb-4 text-4xl tracking-[0.2em] text-foreground md:text-5xl"
+          className="mb-6 text-2xl tracking-[0.2em] text-foreground md:text-3xl"
           style={{ fontFamily: "var(--font-cinzel)" }}
         >
           Chronicle
         </h1>
         <p
-          className="max-w-2xl text-xl leading-relaxed text-muted"
+          className="text-lg leading-[1.8] text-muted md:text-xl"
           style={{ fontFamily: "var(--font-cormorant)" }}
         >
           A record of what happened. Each cycle brings new claims, new
@@ -21,37 +21,50 @@ export function Chronicle() {
         </p>
       </header>
 
-      <div className="relative ml-4 md:ml-8">
+      <div className="relative pl-8 md:pl-10">
         {/* Timeline line */}
-        <div className="absolute left-0 top-0 h-full w-px bg-accent" />
+        <div
+          className="absolute left-0 top-0 h-full"
+          style={{ width: "1px", backgroundColor: "#dc2626" }}
+        />
 
-        <div className="flex flex-col gap-16">
+        <div className="flex flex-col gap-20">
           {CHRONICLE_ENTRIES.map((entry, index) => (
             <article
               key={entry.cycle}
-              className={`animate-fade-in-up relative pl-10 md:pl-14 animation-delay-${(index + 1) * 100}`}
+              className={`animate-fade-in-up relative animation-delay-${(index + 1) * 100}`}
             >
-              {/* Timeline marker */}
-              <div className="absolute left-0 top-1 flex -translate-x-1/2 items-center justify-center">
-                <div className="h-3 w-3 rounded-full border-2 border-accent bg-background" />
+              {/* Timeline marker - red circle */}
+              <div
+                className="absolute top-[6px] flex items-center justify-center"
+                style={{ left: "-32px", width: "9px", height: "9px" }}
+              >
+                <div
+                  className="rounded-full"
+                  style={{
+                    width: "9px",
+                    height: "9px",
+                    backgroundColor: "#dc2626",
+                  }}
+                />
               </div>
 
               <span
-                className="mb-2 inline-block text-xs tracking-[0.25em] text-accent"
+                className="mb-3 inline-block text-[11px] uppercase tracking-[0.25em] text-accent"
                 style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
               >
-                CYCLE {entry.cycle}
+                Cycle {entry.cycle}
               </span>
 
               <h2
-                className="mb-4 text-2xl tracking-wide text-foreground md:text-3xl"
+                className="mb-5 text-xl tracking-wide text-foreground md:text-2xl"
                 style={{ fontFamily: "var(--font-cinzel)" }}
               >
                 {entry.title}
               </h2>
 
               <p
-                className="max-w-3xl text-lg leading-relaxed text-muted"
+                className="text-lg leading-[1.8] text-muted"
                 style={{ fontFamily: "var(--font-cormorant)" }}
               >
                 {entry.narrative}
@@ -61,8 +74,18 @@ export function Chronicle() {
         </div>
 
         {/* Timeline end marker */}
-        <div className="absolute bottom-0 left-0 -translate-x-1/2">
-          <div className="h-2 w-2 rotate-45 bg-accent" />
+        <div
+          className="absolute bottom-0"
+          style={{ left: "-3px" }}
+        >
+          <div
+            className="rotate-45"
+            style={{
+              width: "7px",
+              height: "7px",
+              backgroundColor: "#dc2626",
+            }}
+          />
         </div>
       </div>
     </section>
