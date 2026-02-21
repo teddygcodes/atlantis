@@ -138,17 +138,19 @@ body {
 
 /* Section door hover glow */
 .section-door {
-  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
-  transition: box-shadow 0.7s cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 0.5s,
-              opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0),
+              inset 0 0 0 0 rgba(220, 38, 38, 0);
+  transition: box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.3s ease,
+              opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .section-door:hover {
-  box-shadow: 0 0 40px -8px rgba(220, 38, 38, 0.12),
-              0 0 80px -16px rgba(220, 38, 38, 0.06);
-  border-color: rgba(220, 38, 38, 0.35);
+  box-shadow: 0 0 60px -10px rgba(220, 38, 38, 0.12),
+              0 0 120px -20px rgba(220, 38, 38, 0.06),
+              inset 0 1px 0 0 rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.25);
 }
 
 /* Debate step animation */
