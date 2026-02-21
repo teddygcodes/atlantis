@@ -31,7 +31,7 @@ export function Debates() {
   return (
     <section ref={containerRef} className="text-center">
       {/* Page header - centered */}
-      <div className="scroll-reveal mx-auto mb-12 text-center" style={{ paddingTop: "64px" }}>
+      <div className="scroll-reveal mx-auto mb-6 text-center" style={{ paddingTop: "24px" }}>
         <h2
           className="mb-4"
           style={{
@@ -57,7 +57,7 @@ export function Debates() {
       </div>
 
       {/* Cycle selector - lifted up closer to header */}
-      <div className="scroll-reveal mx-auto mb-16 mt-6 flex max-w-[900px] items-center justify-center gap-3">
+      <div className="scroll-reveal mx-auto mb-10 mt-2 flex max-w-[900px] items-center justify-center gap-3">
         {CYCLE_FILTERS.map((cycle) => (
           <button
             key={cycle}
