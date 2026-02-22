@@ -215,7 +215,7 @@ class State:
         base += (
             f"{claim_type_hint}"
             "Use this structure:\n\n"
-            "RESEARCH TYPE: [Hypothesis|Extension|Challenge]\n"
+            "RESEARCH TYPE: [Foundation|Discovery|Extension|Challenge]\n"
             "HYPOTHESIS: [one sentence — testable prediction]\n"
             "OPERATIONAL DEF: [key terms defined measurably]\n"
             "STEP 1: [evidence/reasoning]\n"
@@ -227,7 +227,7 @@ class State:
             "CITATIONS: [#IDs from knowledge base, or real literature references]\n"
             "KEYWORDS: [3-5 terms]\n\n"
             "IMPORTANT FORMAT REQUIREMENTS:\n"
-            "- Extension claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [what this doesn't cover]\n"
+            "- Extension claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [what this claim does not cover]\n"
             "- Foundation claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [limits], CITATIONS: #[archive IDs]"
         )
         response = self.models.complete(
