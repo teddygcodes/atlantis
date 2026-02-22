@@ -1488,6 +1488,7 @@ class PerpetualEngine:
                 critic_cycle_map[key] = {
                     "issued": 0,
                     "upheld": 0,
+                    "partial": 0,
                     "overruled": 0,
                 }
 
@@ -1500,21 +1501,26 @@ class PerpetualEngine:
             # Challenge upheld if claim was destroyed or retracted
             if outcome in ("destroyed", "retracted"):
                 data["upheld"] += 1
-            # Challenge overruled if claim survived
-            elif outcome in ("survived", "partial"):
+            # Partial outcomes: critic forced narrowing (counts as impact, not precision)
+            elif outcome == "partial":
+                data["partial"] += 1
+            # Challenge overruled if claim fully survived
+            elif outcome == "survived":
                 data["overruled"] += 1
 
         # Build snapshot dicts
         for (critic, cycle), data in critic_cycle_map.items():
             total = data["issued"]
             upheld = data["upheld"]
+            partial_count = data["partial"]
             overruled = data["overruled"]
 
-            # Impact rate: challenges that changed outcome / total
-            # (destroyed + retracted are impact, survived/partial are not)
-            impact_rate = upheld / total if total > 0 else 0.0
+            # Impact rate: challenges that changed outcome (destroyed/retracted/partial) / total
+            # Measures: how often the critic forces ANY change
+            impact_rate = (upheld + partial_count) / total if total > 0 else 0.0
 
-            # Precision rate: challenges upheld / total challenges
+            # Precision rate: challenges fully upheld (destroyed/retracted only) / total
+            # Measures: how often the critic achieves FULL destruction
             precision_rate = upheld / total if total > 0 else 0.0
 
             snapshots.append({
@@ -1522,6 +1528,7 @@ class PerpetualEngine:
                 "cycle": cycle,
                 "challenges_issued": total,
                 "challenges_upheld": upheld,
+                "challenges_partial": partial_count,
                 "challenges_overruled": overruled,
                 "impact_rate": round(impact_rate, 3),
                 "precision_rate": round(precision_rate, 3),
@@ -1758,10 +1765,13 @@ class PerpetualEngine:
         # Aggregate stats across all cycles
         total_issued = sum(s["challenges_issued"] for s in critic_snapshots)
         total_upheld = sum(s["challenges_upheld"] for s in critic_snapshots)
+        total_partial = sum(s["challenges_partial"] for s in critic_snapshots)
         total_overruled = sum(s["challenges_overruled"] for s in critic_snapshots)
 
         # Compute overall rates
-        impact_rate = (total_upheld / total_issued * 100) if total_issued > 0 else 0
+        # Impact rate: challenges that caused ANY change (upheld + partial)
+        impact_rate = ((total_upheld + total_partial) / total_issued * 100) if total_issued > 0 else 0
+        # Precision rate: challenges that achieved FULL destruction (upheld only)
         precision_rate = (total_upheld / total_issued * 100) if total_issued > 0 else 0
 
         # Get judge feedback on challenges (from archive entries where this critic challenged)
@@ -1788,19 +1798,26 @@ class PerpetualEngine:
         # Build profile text (target ~150 tokens, ~600 chars)
         profile_parts = []
         profile_parts.append(
-            f"{critic_entity}: {total_issued} challenges issued, {total_upheld} upheld ({impact_rate:.0f}% impact rate)."
+            f"{critic_entity}: {total_issued} challenges issued, {total_upheld} destroyed"
         )
 
-        if total_overruled > 0:
-            profile_parts.append(f"{total_overruled} challenges overruled.")
+        # Show partial count if present (claims narrowed but not destroyed)
+        if total_partial > 0:
+            profile_parts[-1] += f", {total_partial} narrowed"
 
-        # Precision assessment
+        # Show impact rate (upheld + partial)
+        profile_parts[-1] += f" ({impact_rate:.0f}% impact rate)."
+
+        if total_overruled > 0:
+            profile_parts.append(f"{total_overruled} overruled.")
+
+        # Precision assessment (upheld / total)
         if precision_rate >= 70:
-            profile_parts.append("High precision targeting.")
+            profile_parts.append(f"High precision: {precision_rate:.0f}% fully destroyed.")
         elif precision_rate >= 40:
-            profile_parts.append("Moderate precision.")
+            profile_parts.append(f"Moderate precision: {precision_rate:.0f}% fully destroyed.")
         else:
-            profile_parts.append("Lower precision rate.")
+            profile_parts.append(f"Lower precision: {precision_rate:.0f}% fully destroyed.")
 
         # Judge feedback
         if feedback_summary:
