@@ -1,0 +1,20 @@
+{
+  "system": "ATLANTIS",
+  "version": "2.0.0",
+  "mode": "PRODUCTION",
+  "mock": false,
+  "dry_run": false,
+  "config": {
+    "founding_era_target_pairs": 10,
+    "phase0_research_cycles": 1,
+    "founding_era_max_cycles": 5,
+    "governance_cycles": 3,
+    "initial_token_budget": 50000,
+    "cycle_cost": 3000,
+    "federal_lab_activation_cycle": 5,
+    "federal_lab_min_claims": 10,
+    "abstraction_pass_interval": 5,
+    "abstraction_max_claims_per_domain": 20,
+    "chain_collapse_max_depth": 10
+  }
+}

@@ -37,7 +37,9 @@
       "Bash(git rm:*)",
       "Bash(xargs -I {} git push origin --delete {})",
       "Bash(git fetch:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(git clone:*)",
+      "Bash(git stash:*)"
     ]
   }
 }

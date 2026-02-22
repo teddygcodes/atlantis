@@ -1,0 +1,106 @@
+{
+  "mode": "api",
+  "total_calls": 499,
+  "cache_hits": 44,
+  "total_input_tokens": 713394,
+  "total_output_tokens": 309308,
+  "total_tokens": 1022702,
+  "estimated_cost_usd": 5.1744,
+  "cache_hit_rate": 0.08,
+  "rate_limit_waits": 0,
+  "model_router_cost_usd": 4.773006,
+  "cost_by_model_tier": {
+    "haiku": {
+      "calls": 241,
+      "input_tokens": 198229,
+      "output_tokens": 106303,
+      "cost_usd": 0.182436
+    },
+    "sonnet": {
+      "calls": 302,
+      "input_tokens": 515165,
+      "output_tokens": 203005,
+      "cost_usd": 4.59057
+    },
+    "opus": {
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0
+    }
+  },
+  "cost_by_task_type": {
+    "founder_research": {
+      "calls": 20,
+      "input_tokens": 2598,
+      "output_tokens": 15973,
+      "cost_usd": 0.020616
+    },
+    "federal_lab": {
+      "calls": 63,
+      "input_tokens": 8453,
+      "output_tokens": 4675,
+      "cost_usd": 0.095484
+    },
+    "researcher_claims": {
+      "calls": 60,
+      "input_tokens": 70804,
+      "output_tokens": 71989,
+      "cost_usd": 1.292247
+    },
+    "normalization": {
+      "calls": 60,
+      "input_tokens": 85248,
+      "output_tokens": 35901,
+      "cost_usd": 0.066188
+    },
+    "premise_decomposition": {
+      "calls": 63,
+      "input_tokens": 77126,
+      "output_tokens": 30145,
+      "cost_usd": 0.056963
+    },
+    "critic_challenges": {
+      "calls": 60,
+      "input_tokens": 94860,
+      "output_tokens": 45922,
+      "cost_usd": 0.97341
+    },
+    "researcher_rebuttals": {
+      "calls": 63,
+      "input_tokens": 165262,
+      "output_tokens": 48563,
+      "cost_usd": 1.224231
+    },
+    "rebuttal_newness": {
+      "calls": 63,
+      "input_tokens": 18961,
+      "output_tokens": 4697,
+      "cost_usd": 0.010611
+    },
+    "judge": {
+      "calls": 56,
+      "input_tokens": 175786,
+      "output_tokens": 31856,
+      "cost_usd": 1.005198
+    },
+    "content_generation": {
+      "calls": 16,
+      "input_tokens": 10625,
+      "output_tokens": 17905,
+      "cost_usd": 0.025038
+    },
+    "anti_loop": {
+      "calls": 18,
+      "input_tokens": 3449,
+      "output_tokens": 1352,
+      "cost_usd": 0.002552
+    },
+    "executive_summary": {
+      "calls": 1,
+      "input_tokens": 222,
+      "output_tokens": 330,
+      "cost_usd": 0.000468
+    }
+  }
+}
