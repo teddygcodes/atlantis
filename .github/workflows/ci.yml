@@ -29,7 +29,13 @@ jobs:
       - name: Compile Python files
         run: |
           echo "Compiling all Python files..."
-          python -m py_compile $(find . -name "*.py" -not -path "./venv/*" -not -path "./.venv/*" -not -path "./env/*")
+          find . -name "*.py" \
+            -not -path "./venv/*" \
+            -not -path "./.venv/*" \
+            -not -path "./env/*" \
+            -not -path "./node_modules/*" \
+            -not -path "./docs/*" \
+            -exec python -m py_compile {} \;
           echo "✓ All Python files compiled successfully"
 
       - name: Run pytest (if tests exist)
