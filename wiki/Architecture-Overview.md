@@ -8,10 +8,10 @@
 │   Founder   │      │   Founding   │      │   Autonomous        │
 │   Research  │      │     Era      │      │   Governance        │
 └─────────────┘      └──────────────┘      └─────────────────────┘
-     3 cycles             10 cycles              Indefinite
+      1 cycle              Instant               Indefinite
 
- 20 Founders          Senate votes on           Perpetual rival
- research freely      rival pair formation      challenge cycles
+ 20 Founders          Direct rival pair         Perpetual rival
+ research freely      formation (demo mode)     challenge cycles
 ```
 
 ### Phase 0: Founder Research
@@ -19,10 +19,10 @@
 - Free-form deposits to archive (no validation pressure)
 - Builds foundational knowledge corpus
 - Profiles stored for later Tier 2/3 validation panels
-- **Output:** ~60 founding entries, 20 stored profiles
+- **Output:** 20 founding entries, 20 stored profiles
 
 ### Phase 1: Founding Era
-- Senate votes on rival pair proposals (60% supermajority required)
+- Demo mode forms rival pairs directly (no multi-cycle Senate voting)
 - Target: 10 domain pairs formed (20 rival States total)
 - Each State: Researcher + Critic + Senator + Lab agents
 - Initial token budget: 50,000 per State
