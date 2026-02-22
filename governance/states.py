@@ -645,17 +645,36 @@ def validate_claim(
             # Use whichever format is present
             main_statement_match = position_match or hypothesis_match
             main_statement_text = main_statement_match.group(1)
-            has_operational_definition = bool(re.search(
+
+            # Check for operational definition in two ways:
+            # 1. Explicit OPERATIONAL DEF section (new format)
+            # 2. Embedded in POSITION/HYPOTHESIS line (old format)
+            has_explicit_operational_def = bool(re.search(
+                r"^\s*OPERATIONAL\s+DEF(?:INITION)?\s*[:\-]\s*.+$",
+                claim_text,
+                re.IGNORECASE | re.MULTILINE,
+            ))
+            has_embedded_operational_def = bool(re.search(
                 r"\b(defined as|operational(?:ly)?|measured by|quantified by|observed as|when\s+measured|by\s+tracking)\b",
                 main_statement_text,
                 re.IGNORECASE,
             ))
-            if not has_operational_definition:
+
+            if not (has_explicit_operational_def or has_embedded_operational_def):
                 msg = "Discovery POSITION/HYPOTHESIS should include an operational definition"
                 if strict_empirical:
                     errors.append(msg)
                 else:
                     warnings.append(msg)
+
+        # Check for testability in two ways:
+        # 1. Explicit PREDICTION section (new format)
+        # 2. Testable language in STEP lines (old format)
+        has_prediction_section = bool(re.search(
+            r"^\s*PREDICTION\s*[:\-]\s*.+$",
+            claim_text,
+            re.IGNORECASE | re.MULTILINE,
+        ))
 
         step_lines = re.findall(r"^\s*STEP\s*\d+\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
         has_testable_step = any(re.search(
@@ -663,8 +682,9 @@ def validate_claim(
             s,
             re.IGNORECASE,
         ) for s in step_lines)
-        if not has_testable_step:
-            msg = "Discovery claims should include at least one falsifiable or testable implication in STEP lines"
+
+        if not (has_prediction_section or has_testable_step):
+            msg = "Discovery claims should include at least one falsifiable or testable implication in STEP lines or PREDICTION section"
             if strict_empirical:
                 errors.append(msg)
             else:
