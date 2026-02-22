@@ -212,6 +212,38 @@ def _build_states(hypotheses: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return states
 
 
+def _build_domain_pairs(states: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group rival states by domain into Alpha/Beta pairs."""
+    # Exclude "Founding Era" and group by domain
+    rival_states = [s for s in states if s["name"] != "Founding Era"]
+
+    by_domain: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for state in rival_states:
+        by_domain[state["domain"]].append(state)
+
+    pairs = []
+    for domain in sorted(by_domain.keys()):
+        domain_states = sorted(by_domain[domain], key=lambda s: s["name"])
+        if len(domain_states) >= 2:
+            # Find Alpha and Beta
+            alpha = next((s for s in domain_states if "Alpha" in s["name"]), domain_states[0])
+            beta = next((s for s in domain_states if "Beta" in s["name"]), domain_states[1])
+            pairs.append({
+                "domain": domain,
+                "alpha": alpha["name"],
+                "beta": beta["name"],
+            })
+        elif len(domain_states) == 1:
+            # Single state in domain (unusual but handle it)
+            pairs.append({
+                "domain": domain,
+                "alpha": domain_states[0]["name"],
+                "beta": None,
+            })
+
+    return pairs
+
+
 def _build_dispatches(hypotheses: list[dict[str, Any]]) -> list[dict[str, Any]]:
     dramatic = sorted([h for h in hypotheses if h["drama"] >= 7], key=lambda x: (x["drama"], x["depth"], x["novelty"]), reverse=True)
     dispatches = []
@@ -257,6 +289,7 @@ def generate_ts(entries: list[dict[str, Any]]) -> str:
     chronicle = [_build_cycle_narrative(cycle, cycles[cycle]) for cycle in sorted(cycles)]
 
     states = _build_states(hypotheses)
+    domain_pairs = _build_domain_pairs(states)
     dispatches = _build_dispatches(hypotheses)
     news_items = _build_news(hypotheses)
 
@@ -288,6 +321,14 @@ def generate_ts(entries: list[dict[str, Any]]) -> str:
         "}",
         "",
         "export const STATES: StateEntity[] = " + _to_ts_literal(states) + ";",
+        "",
+        "export interface DomainPair {",
+        "  domain: Domain;",
+        "  alpha: string;",
+        "  beta: string | null;",
+        "}",
+        "",
+        "export const DOMAIN_PAIRS: DomainPair[] = " + _to_ts_literal(domain_pairs) + ";",
         "",
         "export interface Hypothesis {",
         "  id: string;",

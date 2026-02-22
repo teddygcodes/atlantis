@@ -200,6 +200,55 @@ export const STATES: StateEntity[] = [
   }
 ];
 
+export interface DomainPair {
+  domain: Domain;
+  alpha: string;
+  beta: string | null;
+}
+
+export const DOMAIN_PAIRS: DomainPair[] = [
+  {
+    "domain": "Biology",
+    "alpha": "Biology_Alpha",
+    "beta": "Biology_Beta"
+  },
+  {
+    "domain": "Finance",
+    "alpha": "Finance_Alpha",
+    "beta": "Finance_Beta"
+  },
+  {
+    "domain": "Geography",
+    "alpha": "Geography_Alpha",
+    "beta": "Geography_Beta"
+  },
+  {
+    "domain": "Mathematics",
+    "alpha": "Mathematics_Alpha",
+    "beta": "Mathematics_Beta"
+  },
+  {
+    "domain": "Medicine",
+    "alpha": "Medicine_Alpha",
+    "beta": "Medicine_Beta"
+  },
+  {
+    "domain": "Philosophy",
+    "alpha": "Philosophy_Alpha",
+    "beta": "Philosophy_Beta"
+  },
+  {
+    "domain": "Physics",
+    "alpha": "Physics_Alpha",
+    "beta": "Physics_Beta"
+  },
+  {
+    "domain": "Technology",
+    "alpha": "Technology_Alpha",
+    "beta": "Technology_Beta"
+  }
+];
+
 export interface Hypothesis {
   id: string;
   domain: Domain;
@@ -216,6 +265,12 @@ export interface Hypothesis {
   drama: number;
   novelty: number;
   depth: number;
+  validation?: {
+    all_passed: boolean;
+    flags: string[];
+    warnings: string[];
+    info: string[];
+  };
 }
 
 export const HYPOTHESES: Hypothesis[] = [

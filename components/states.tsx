@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { STATES, type StateEntity } from "@/lib/data";
+import { STATES, DOMAIN_PAIRS, type StateEntity } from "@/lib/data";
 
 function useScrollReveal() {
   const ref = useRef<HTMLDivElement>(null);
@@ -31,14 +31,22 @@ const DOMAIN_COLORS: Record<string, string> = {
   Mathematics: "#3b82f6",
 };
 
-const PAIRS = [
-  { domain: "CONSCIOUSNESS", a: STATES[0], b: STATES[1] },
-  { domain: "CAUSATION", a: STATES[2], b: STATES[3] },
-  { domain: "MATHEMATICS", a: STATES[4], b: STATES[5] },
-];
-
 export function States() {
   const containerRef = useScrollReveal();
+
+  // Build pairs from DOMAIN_PAIRS data
+  const pairs = DOMAIN_PAIRS.map(pair => {
+    const alpha = STATES.find(s => s.name === pair.alpha);
+    const beta = pair.beta ? STATES.find(s => s.name === pair.beta) : null;
+    return {
+      domain: pair.domain.toUpperCase(),
+      a: alpha!,
+      b: beta!,
+    };
+  }).filter(p => p.a && p.b);  // Filter out incomplete pairs
+
+  const rivalStatesCount = pairs.length * 2;
+  const domainsCount = pairs.length;
 
   return (
     <section ref={containerRef}>
@@ -63,7 +71,7 @@ export function States() {
             color: "#d4d4d4",
           }}
         >
-          Six entities. Three domains. Each one learning from its failures.
+          {rivalStatesCount} rival states. {domainsCount} domains. Each one learning from its failures.
         </p>
       </div>
 
@@ -72,7 +80,7 @@ export function States() {
 
       {/* Domain groups */}
       <div className="mx-auto flex max-w-[900px] flex-col items-center px-6">
-        {PAIRS.map((pair, pairIdx) => (
+        {pairs.map((pair, pairIdx) => (
           <div key={pair.domain}>
             {/* Domain divider: ——— DOMAIN ——— */}
             <div className="scroll-reveal flex items-center justify-center gap-4" style={{ marginBottom: "32px" }}>
@@ -100,7 +108,7 @@ export function States() {
             <StateCard state={pair.b} index={pairIdx * 2 + 1} />
 
             {/* 48px gap between domain groups */}
-            {pairIdx < PAIRS.length - 1 && <div style={{ height: "48px" }} />}
+            {pairIdx < pairs.length - 1 && <div style={{ height: "48px" }} />}
           </div>
         ))}
       </div>
