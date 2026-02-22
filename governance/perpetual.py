@@ -298,6 +298,9 @@ class PerpetualEngine:
             objective_notes=b_validation["summary"]
         )
 
+        self._apply_anchor_flag_penalty(sa, a_outcome, a_validation)
+        self._apply_anchor_flag_penalty(sb, b_outcome, b_validation)
+
         # Step 15: Build ArchiveEntry objects and deposit
         a_entry = self._build_archive_entry(
             state=sa, raw=a_raw, challenge=b_challenge, rebuttal=a_rebuttal,
@@ -1146,6 +1149,16 @@ class PerpetualEngine:
             amount = abs(TOKEN_VALUES.get("challenge_failed", -1000))
             challenger_state.deduct_tokens(amount)
             self._record_token_event(challenger_state, -amount, "challenge_failed")
+            return -amount
+        return 0
+
+    def _apply_anchor_flag_penalty(self, state: State, outcome: dict, validation: dict) -> int:
+        """Penalize surviving claims that raised objective anchor flags."""
+        if outcome.get("outcome") == "survived" and not validation.get("all_passed", True):
+            amount = abs(TOKEN_VALUES.get("anchor_flagged_but_survived", -200))
+            state.deduct_tokens(amount)
+            self._record_token_event(state, -amount, "anchor_flagged_but_survived")
+            print(f"    {state.name} penalized -200 tokens (anchor flags on surviving claim)")
             return -amount
         return 0
 
