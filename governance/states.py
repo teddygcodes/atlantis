@@ -97,6 +97,7 @@ class ArchiveEntry:
     challenger_entity: str = ""
     outcome: str = ""
     ruling_type: str = ""
+    rejection_reason: str = ""                   # DEPENDENCY_FAILURE|MAGNITUDE_IMPLAUSIBLE|etc (destroyed/retracted only)
     outcome_reasoning: str = ""
     open_questions: List[str] = field(default_factory=list)
     drama_score: int = 0
@@ -1181,9 +1182,18 @@ def determine_outcome(
             f"If drama_score < 4 AND novelty_score < 4, the claim is routine and should receive "
             f"'destroyed' with ruling_type REJECT_SCOPE unless it demonstrates clear advancement "
             f"over existing archive entries.\n\n"
+            f"REQUIRED: If outcome is 'retracted' or 'destroyed', you MUST provide rejection_reason "
+            f"(one of the following):\n"
+            f"- DEPENDENCY_FAILURE: upstream claim insufficiently grounded\n"
+            f"- MAGNITUDE_IMPLAUSIBLE: predicted effect size inconsistent with known constraints\n"
+            f"- PARAMETER_UNJUSTIFIED: key constants chosen arbitrarily without derivation\n"
+            f"- EXPERIMENTAL_BOUNDS: existing measurements would have detected claimed effect\n"
+            f"- LOGIC_FAILURE: reasoning chain contains logical error\n"
+            f"- SCOPE_EXCEEDED: claim extends beyond what evidence supports\n\n"
             f"Return JSON:\n"
             f'{{"outcome": "survived|partial|retracted|destroyed",\n'
             f' "ruling_type": "SURVIVED|REJECT_FACT|REJECT_LOGIC|REJECT_SCOPE|REJECT_CITATION|REJECT_CLARITY|REVISE",\n'
+            f' "rejection_reason": "DEPENDENCY_FAILURE|MAGNITUDE_IMPLAUSIBLE|PARAMETER_UNJUSTIFIED|EXPERIMENTAL_BOUNDS|LOGIC_FAILURE|SCOPE_EXCEEDED (required for destroyed/retracted)",\n'
             f' "reasoning": "2-3 sentences",\n'
             f' "open_questions": ["question raised by exchange", ...],\n'
             f' "scores": {{"drama": 1-10, "novelty": 1-10, "depth": 1-10}}}}'
@@ -1194,6 +1204,7 @@ def determine_outcome(
     result = _parse_json_response(response.content, default={
         "outcome": "survived",
         "ruling_type": "SURVIVED",
+        "rejection_reason": None,
         "reasoning": "Unable to parse judge response.",
         "open_questions": [],
         "scores": {"drama": 3, "novelty": 3, "depth": 3},
@@ -1224,6 +1235,35 @@ def determine_outcome(
     valid_outcomes = {"survived", "partial", "destroyed", "retracted"}
     if result.get("outcome") not in valid_outcomes:
         result["outcome"] = "survived"
+
+    # Validate rejection_reason (required for destroyed/retracted)
+    valid_rejection_reasons = {
+        "DEPENDENCY_FAILURE",
+        "MAGNITUDE_IMPLAUSIBLE",
+        "PARAMETER_UNJUSTIFIED",
+        "EXPERIMENTAL_BOUNDS",
+        "LOGIC_FAILURE",
+        "SCOPE_EXCEEDED",
+    }
+    rejection_reason = result.get("rejection_reason", "").upper() if result.get("rejection_reason") else None
+
+    if result["outcome"] in {"destroyed", "retracted"}:
+        # Rejection reason is required for destroyed/retracted outcomes
+        if not rejection_reason or rejection_reason not in valid_rejection_reasons:
+            # Default based on ruling_type if not provided or invalid
+            reason_mapping = {
+                "REJECT_FACT": "EXPERIMENTAL_BOUNDS",
+                "REJECT_LOGIC": "LOGIC_FAILURE",
+                "REJECT_SCOPE": "SCOPE_EXCEEDED",
+                "REJECT_CITATION": "DEPENDENCY_FAILURE",
+                "REJECT_CLARITY": "PARAMETER_UNJUSTIFIED",
+            }
+            rejection_reason = reason_mapping.get(ruling_type, "LOGIC_FAILURE")
+
+        result["rejection_reason"] = rejection_reason
+    else:
+        # Not required for survived/partial
+        result["rejection_reason"] = None
 
     return result
 

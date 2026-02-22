@@ -1029,6 +1029,8 @@ class PerpetualEngine:
             implicit_assumptions=premises.get("implicit_assumptions", []),
             challenger_entity=challenger_entity,
             outcome=out,
+            ruling_type=outcome.get("ruling_type", ""),
+            rejection_reason=outcome.get("rejection_reason", ""),
             outcome_reasoning=outcome.get("reasoning", ""),
             open_questions=outcome.get("open_questions", []),
             drama_score=outcome["scores"].get("drama", 0),
