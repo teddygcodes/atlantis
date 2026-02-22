@@ -19,6 +19,8 @@ import re
 import json
 from typing import List, Dict, Optional, Tuple
 
+from governance.anchors import DOMAIN_ANCHORS
+
 
 # ─── UNIVERSAL VALIDATORS (all domains) ────────────────────────────
 
@@ -422,6 +424,17 @@ def run_objective_validation(
     # Domain-specific validators
     domain_checks = DOMAIN_VALIDATORS.get(domain, [])
     for check_fn in domain_checks:
+        result = check_fn(claim_text)
+        if result["severity"] == "flag":
+            flags.extend(result["notes"])
+        elif result["severity"] == "warning":
+            warnings.extend(result["notes"])
+        else:
+            info.extend(result["notes"])
+
+    # Real-world anchors (domain-specific computational/factual checks)
+    anchor_checks = DOMAIN_ANCHORS.get(domain, [])
+    for check_fn in anchor_checks:
         result = check_fn(claim_text)
         if result["severity"] == "flag":
             flags.extend(result["notes"])
