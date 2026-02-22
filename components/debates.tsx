@@ -3,6 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import { HYPOTHESES, type Hypothesis } from "@/lib/data";
 import { ExplainSimply } from "@/components/explain-button";
+import {
+  SCROLL_REVEAL_THRESHOLD_DEFAULT,
+  SCROLL_REVEAL_ROOT_MARGIN_STANDARD,
+} from "@/lib/constants";
 
 const CYCLE_FILTERS = [1, 2, 3] as const;
 
@@ -20,7 +24,7 @@ export function Debates() {
           if (entry.isIntersecting) entry.target.classList.add("is-visible");
         });
       },
-      { threshold: 0.1, rootMargin: "0px 0px -60px 0px" }
+      { threshold: SCROLL_REVEAL_THRESHOLD_DEFAULT, rootMargin: SCROLL_REVEAL_ROOT_MARGIN_STANDARD }
     );
     el.querySelectorAll(".scroll-reveal").forEach((child) =>
       observer.observe(child)

@@ -3,6 +3,10 @@
 import { useRef, useEffect, useState } from "react";
 import Link from "next/link";
 import type { NavItem } from "@/lib/data";
+import {
+  SCROLL_REVEAL_THRESHOLD_DETAILED,
+  SCROLL_REVEAL_ROOT_MARGIN_COMPACT,
+} from "@/lib/constants";
 
 const SECTIONS: {
   id: NavItem;
@@ -56,7 +60,7 @@ export function SectionGrid() {
           }
         });
       },
-      { threshold: 0.08, rootMargin: "0px 0px -40px 0px" }
+      { threshold: SCROLL_REVEAL_THRESHOLD_DETAILED, rootMargin: SCROLL_REVEAL_ROOT_MARGIN_COMPACT }
     );
 
     const sentinels = gridRef.current?.querySelectorAll("[data-row]");

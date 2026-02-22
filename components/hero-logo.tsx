@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
+import {
+  PARTICLE_ATTRACTION_DISTANCE,
+  PARTICLE_ATTRACTION_FORCE,
+  PARTICLE_VELOCITY_DECAY,
+  PARTICLE_PULSE_OPACITY_VARIATION,
+  PARTICLE_MIN_OPACITY,
+} from "@/lib/constants";
 
 interface Particle {
   x: number;
@@ -78,19 +85,19 @@ function ParticleField() {
         const dx = mouse.x - p.x;
         const dy = mouse.y - p.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 150) {
-          const force = (150 - dist) / 150;
-          p.vx -= (dx / dist) * force * 0.02;
-          p.vy -= (dy / dist) * force * 0.02;
+        if (dist < PARTICLE_ATTRACTION_DISTANCE) {
+          const force = (PARTICLE_ATTRACTION_DISTANCE - dist) / PARTICLE_ATTRACTION_DISTANCE;
+          p.vx -= (dx / dist) * force * PARTICLE_ATTRACTION_FORCE;
+          p.vy -= (dy / dist) * force * PARTICLE_ATTRACTION_FORCE;
         }
 
-        p.vx *= 0.99;
-        p.vy *= 0.99;
+        p.vx *= PARTICLE_VELOCITY_DECAY;
+        p.vy *= PARTICLE_VELOCITY_DECAY;
 
-        const pulseOpacity = p.opacity + Math.sin(p.pulse) * 0.15;
+        const pulseOpacity = p.opacity + Math.sin(p.pulse) * PARTICLE_PULSE_OPACITY_VARIATION;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(220, 38, 38, ${Math.max(0.03, pulseOpacity)})`;
+        ctx.fillStyle = `rgba(220, 38, 38, ${Math.max(PARTICLE_MIN_OPACITY, pulseOpacity)})`;
         ctx.fill();
       }
 

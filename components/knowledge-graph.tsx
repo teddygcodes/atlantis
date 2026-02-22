@@ -2,6 +2,15 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { HYPOTHESES, type Hypothesis } from "@/lib/data";
+import {
+  GRAPH_FORCE_ITERATIONS,
+  GRAPH_EDGE_DISTANCE_LOCAL,
+  GRAPH_EDGE_DISTANCE_NONLOCAL,
+  GRAPH_SPRING_FORCE,
+  GRAPH_REPULSION_FORCE,
+  GRAPH_GRAVITY_FORCE,
+  GRAPH_NODE_PADDING,
+} from "@/lib/constants";
 
 interface GraphNode {
   id: string;
@@ -93,7 +102,7 @@ function buildAndLayoutGraph(
 
   // Run force simulation synchronously to completion
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-  const iterations = 150;  // Reduced from 300 for performance
+  const iterations = GRAPH_FORCE_ITERATIONS;
 
   for (let iter = 0; iter < iterations; iter++) {
     const alpha = 1 - iter / iterations;
@@ -105,9 +114,9 @@ function buildAndLayoutGraph(
         const dx = nodes[j].x - nodes[i].x;
         const dy = nodes[j].y - nodes[i].y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const minDist = nodes[i].radius + nodes[j].radius + 40;
+        const minDist = nodes[i].radius + nodes[j].radius + GRAPH_NODE_PADDING;
         if (dist < minDist) {
-          const force = ((minDist - dist) / dist) * 0.5 * decay;
+          const force = ((minDist - dist) / dist) * GRAPH_REPULSION_FORCE * decay;
           const fx = dx * force;
           const fy = dy * force;
           nodes[i].x -= fx;
@@ -126,8 +135,8 @@ function buildAndLayoutGraph(
       const dx = t.x - s.x;
       const dy = t.y - s.y;
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const idealDist = edge.isLocal ? 100 : 150;
-      const force = (dist - idealDist) * 0.02 * decay;
+      const idealDist = edge.isLocal ? GRAPH_EDGE_DISTANCE_LOCAL : GRAPH_EDGE_DISTANCE_NONLOCAL;
+      const force = (dist - idealDist) * GRAPH_SPRING_FORCE * decay;
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
       s.x += fx;
@@ -138,8 +147,8 @@ function buildAndLayoutGraph(
 
     // Center gravity
     for (const node of nodes) {
-      node.x += (cx - node.x) * 0.02 * decay;
-      node.y += (cy - node.y) * 0.02 * decay;
+      node.x += (cx - node.x) * GRAPH_GRAVITY_FORCE * decay;
+      node.y += (cy - node.y) * GRAPH_GRAVITY_FORCE * decay;
     }
   }
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { HeroLogo } from "@/components/hero-logo";
 import { SectionGrid } from "@/components/section-grid";
+import { PAGE_SCROLL_THRESHOLD } from "@/lib/constants";
 
 export default function Home() {
   const [enteredWorld, setEnteredWorld] = useState(false);
@@ -14,7 +15,7 @@ export default function Home() {
   useEffect(() => {
     if (enteredWorld) return;
     const handleScroll = () => {
-      if (window.scrollY > window.innerHeight * 0.5) {
+      if (window.scrollY > window.innerHeight * PAGE_SCROLL_THRESHOLD) {
         setEnteredWorld(true);
       }
     };

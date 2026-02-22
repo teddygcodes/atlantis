@@ -5,6 +5,10 @@ import Link from "next/link";
 import { STATES, HYPOTHESES, type StateEntity, type Hypothesis } from "@/lib/data";
 import { ExplainSimply } from "@/components/explain-button";
 import { KnowledgeGraph } from "@/components/knowledge-graph";
+import {
+  SCROLL_REVEAL_THRESHOLD_DETAILED,
+  SCROLL_REVEAL_ROOT_MARGIN_COMPACT,
+} from "@/lib/constants";
 
 function useScrollReveal() {
   const ref = useRef<HTMLDivElement>(null);
@@ -17,7 +21,7 @@ function useScrollReveal() {
           if (entry.isIntersecting) entry.target.classList.add("is-visible");
         });
       },
-      { threshold: 0.08, rootMargin: "0px 0px -40px 0px" }
+      { threshold: SCROLL_REVEAL_THRESHOLD_DETAILED, rootMargin: SCROLL_REVEAL_ROOT_MARGIN_COMPACT }
     );
     el.querySelectorAll(".scroll-reveal").forEach((child) =>
       observer.observe(child)
