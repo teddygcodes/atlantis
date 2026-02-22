@@ -1389,6 +1389,8 @@ class PerpetualEngine:
         for e in all_entries:
             state = e.get("source_state", "")
             cycle = e.get("cycle_created", 0)
+            entry_type = e.get("entry_type", "")
+
             if not state or state == "Founding Era":
                 continue
 
@@ -1405,6 +1407,15 @@ class PerpetualEngine:
                 }
 
             data = state_cycle_map[key]
+
+            # Handle token_event entries separately (they're not claims)
+            if entry_type == "token_event":
+                tokens = e.get("tokens_earned", 0)
+                if tokens != 0:  # Include both positive and negative deltas
+                    data["token_deltas"].append(tokens)
+                continue  # Don't count as attempted claim
+
+            # Count regular claim entries
             data["attempted"] += 1
 
             outcome = e.get("outcome", "")
@@ -1426,11 +1437,6 @@ class PerpetualEngine:
                     data["anchor_flags"] += len(flags)
                 except (json.JSONDecodeError, TypeError):
                     pass
-
-            # Track tokens earned
-            tokens = e.get("tokens_earned", 0)
-            if tokens:
-                data["token_deltas"].append(tokens)
 
             # Collect judge feedback
             reasoning = e.get("outcome_reasoning", "")
