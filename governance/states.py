@@ -185,6 +185,7 @@ class State:
         cycle_number: int = 0,
         previous_claims_summary: str = "",
         lab_hypothesis: Optional[str] = None,
+        performance_context: str = "",
     ) -> str:
         """
         Researcher decides: formalize Lab hypothesis or produce own claim.
@@ -200,6 +201,12 @@ class State:
             f"ARCHIVE CONTEXT (MAIN archive only; citable):\n{archive_context}\n\n"
             f"META-LEARNING (graveyard claims; learn but do not cite):\n{meta_learning}\n\n"
         )
+        if performance_context:
+            base += (
+                f"PERFORMANCE CONTEXT:\n{performance_context}\n\n"
+                "This context informs you of recent patterns. It does NOT prescribe actions. "
+                "The Constitution and judge remain the authority.\n\n"
+            )
         if lab_hypothesis:
             base += (
                 f"LAB HYPOTHESIS (optional — you may formalize this):\n{lab_hypothesis}\n\n"

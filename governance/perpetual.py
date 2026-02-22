@@ -182,6 +182,10 @@ class PerpetualEngine:
         a_lab = sa.produce_lab_hypothesis(open_q, self._get_recently_destroyed(sa.name))
         b_lab = sb.produce_lab_hypothesis(open_q, self._get_recently_destroyed(sb.name))
 
+        # Generate performance profiles for both States
+        a_performance = self._generate_state_performance_profile(sa.name)
+        b_performance = self._generate_state_performance_profile(sb.name)
+
         # Step 1-2: Both States produce claims
         a_raw = sa.produce_claim(
             archive_context=a_ctx,
@@ -189,6 +193,7 @@ class PerpetualEngine:
             cycle_number=self.cycle,
             previous_claims_summary="",
             lab_hypothesis=a_lab,
+            performance_context=a_performance,
         )
         b_raw = sb.produce_claim(
             archive_context=b_ctx,
@@ -196,6 +201,7 @@ class PerpetualEngine:
             cycle_number=self.cycle,
             previous_claims_summary="",
             lab_hypothesis=b_lab,
+            performance_context=b_performance,
         )
         _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
         _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
@@ -414,11 +420,15 @@ class PerpetualEngine:
         meta = self._get_meta_learning(sa.name)
 
         for state in (sa, sb):
+            # Generate performance profile for this State
+            performance = self._generate_state_performance_profile(state.name)
+
             raw = state.produce_claim(
                 archive_context=self._build_archive_context(pair.domain, state.name),
                 meta_learning=self._get_meta_learning(state.name),
                 cycle_number=self.cycle,
                 previous_claims_summary="",
+                performance_context=performance,
             )
             display_id = self.db.next_display_id()
             entry = ArchiveEntry(
@@ -1606,6 +1616,132 @@ class PerpetualEngine:
         # Sort by domain name
         metrics.sort(key=lambda x: x["domain"])
         return metrics
+
+    def _generate_state_performance_profile(self, state_name: str) -> str:
+        """
+        Generate a ~200 token descriptive performance profile for a State.
+        Uses recent cycle data to inform researcher without prescribing actions.
+        Profile is DESCRIPTIVE ONLY — informs what happened, not what to do.
+        """
+        # Get all entries for this State
+        all_entries = self.db.get_all_archive_entries()
+        state_entries = [e for e in all_entries if e.get("source_state") == state_name]
+
+        if not state_entries:
+            return f"{state_name}: No claims submitted yet. First cycle."
+
+        # Compute survival stats
+        total_claims = len(state_entries)
+        survived = len([e for e in state_entries if e.get("outcome") in ("survived", "partial")])
+        retracted = len([e for e in state_entries if e.get("outcome") == "retracted"])
+        destroyed = len([e for e in state_entries if e.get("outcome") == "destroyed"])
+
+        survival_rate = (survived / total_claims * 100) if total_claims > 0 else 0
+
+        # Collect rejection reasons from retracted/destroyed claims
+        rejection_reasons = []
+        for e in state_entries:
+            outcome = e.get("outcome", "")
+            if outcome in ("retracted", "destroyed"):
+                reason = e.get("rejection_reason", "")
+                if reason:
+                    rejection_reasons.append(reason)
+
+        # Count anchor flags
+        total_anchor_flags = 0
+        for e in state_entries:
+            validation = e.get("validation_json")
+            if validation:
+                try:
+                    val_data = json.loads(validation) if isinstance(validation, str) else validation
+                    flags = val_data.get("flags", [])
+                    total_anchor_flags += len(flags)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        # Get token trajectory (compare last cycle snapshot to overall)
+        state_snapshots = [
+            s for s in self._build_state_snapshots()
+            if s["state_id"] == state_name
+        ]
+        token_trajectory = "stable"
+        token_delta_total = 0
+        if state_snapshots:
+            # Sum all token deltas to see overall trend
+            token_delta_total = sum(s["token_delta"] for s in state_snapshots)
+            if token_delta_total > 1000:
+                token_trajectory = "gaining"
+            elif token_delta_total < -1000:
+                token_trajectory = "declining"
+
+        # Extract judge feedback themes (condensed)
+        judge_feedback = []
+        for e in state_entries:
+            reasoning = e.get("outcome_reasoning", "")
+            if reasoning and len(reasoning) > 20:
+                # Extract key phrases (simple keyword extraction)
+                judge_feedback.append(reasoning)
+
+        # Condense feedback to key themes (take first 2-3 feedback items, summarize)
+        feedback_summary = ""
+        if judge_feedback:
+            # Take most recent feedback (last 2)
+            recent_feedback = judge_feedback[-2:]
+            # Join and truncate to ~150 chars
+            feedback_text = " | ".join(recent_feedback)
+            feedback_summary = feedback_text[:150] + ("..." if len(feedback_text) > 150 else "")
+
+        # Compute domain average survival rate for comparison
+        # Infer domain from state name (e.g., "Physics_Alpha" → "Physics")
+        domain = state_name.split("_")[0] if "_" in state_name else state_name
+        domain_entries = [
+            e for e in all_entries
+            if e.get("source_state", "").startswith(domain) and e.get("source_state") != "Founding Era"
+        ]
+        domain_survived = len([e for e in domain_entries if e.get("outcome") in ("survived", "partial")])
+        domain_total = len(domain_entries)
+        domain_survival_rate = (domain_survived / domain_total * 100) if domain_total > 0 else 0
+
+        comparison = "at domain average"
+        if survival_rate > domain_survival_rate + 10:
+            comparison = "above domain average"
+        elif survival_rate < domain_survival_rate - 10:
+            comparison = "below domain average"
+
+        # Build profile text (target ~200 tokens, ~800 chars)
+        profile_parts = []
+        profile_parts.append(f"{state_name}: {survived} of {total_claims} claims survived ({survival_rate:.0f}%).")
+
+        if retracted > 0 or destroyed > 0:
+            failure_count = retracted + destroyed
+            failure_text = f"{failure_count} retracted/destroyed"
+            if rejection_reasons:
+                # Show up to 3 unique reasons
+                unique_reasons = list(set(rejection_reasons[:3]))
+                failure_text += f" ({', '.join(unique_reasons)})"
+            profile_parts.append(failure_text + ".")
+
+        if total_anchor_flags > 0:
+            profile_parts.append(f"{total_anchor_flags} anchor flags.")
+        else:
+            profile_parts.append("0 anchor flags.")
+
+        # Token trajectory
+        if token_trajectory == "gaining":
+            profile_parts.append(f"Token budget gaining (+{token_delta_total:,} this run).")
+        elif token_trajectory == "declining":
+            profile_parts.append(f"Token budget declining ({token_delta_total:,} this run).")
+        else:
+            profile_parts.append("Token budget stable.")
+
+        # Judge feedback
+        if feedback_summary:
+            profile_parts.append(f"Judge feedback: {feedback_summary}")
+
+        # Comparison
+        profile_parts.append(f"{comparison.capitalize()} (domain: {domain_survival_rate:.0f}%).")
+
+        return " ".join(profile_parts)
 
     def _export_archive(self):
         """
