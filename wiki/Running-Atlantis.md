@@ -15,7 +15,7 @@
 
 ### System Requirements
 - **RAM:** 4GB minimum, 8GB recommended (for large archive processing)
-- **Disk:** 1GB free space (for output/ directory and node_modules/)
+- **Disk:** 1GB free space (for `runs/<timestamp>/` data and `node_modules/`)
 - **Network:** Stable internet connection (API calls, npm installs)
 
 ---
@@ -24,7 +24,7 @@
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/yourusername/atlantis.git
+git clone https://github.com/teddygcodes/atlantis.git
 cd atlantis
 ```
 
@@ -142,10 +142,11 @@ python3 __main__.py --demo-10-domains
 ```
 
 **Outputs:**
-- `output/atlantis.db` - SQLite database with full archive
-- `output/logs/cycle_N.md` - Human-readable cycle logs
-- `output/domain_health.json` - DMI metrics per domain
-- `output/cost_summary.json` - API cost tracking
+- `runs/<timestamp>/archive.json` - Machine-readable archive for this run
+- `runs/<timestamp>/archive.md` - Human-readable archive for this run
+- `runs/<timestamp>/domain_health.json` - DMI metrics per domain
+- `runs/<timestamp>/cost_summary.json` - API cost tracking
+- `runs/<timestamp>/logs/cycle_N.md` - Human-readable cycle logs
 
 ### Step 2: Generate Site Data
 ```bash
@@ -153,7 +154,7 @@ python3 generate_site_data.py
 ```
 
 **What it does:**
-- Reads `output/atlantis.db`
+- Reads latest `runs/<timestamp>/archive.json` (or a file passed via `--input`)
 - Extracts archive entries, states, debates, domain pairs
 - Exports TypeScript file: `lib/data.ts`
 
@@ -364,8 +365,8 @@ nano governance/states.py
 python3 __main__.py --demo-10-domains --force-clean
 
 # 3. Check output
-cat output/logs/cycle_1.md
-sqlite3 output/atlantis.db "SELECT COUNT(*) FROM archive_entries;"
+cat runs/<timestamp>/logs/cycle_1.md
+sqlite3 runs/<timestamp>/atlantis.db "SELECT COUNT(*) FROM archive_entries;"
 
 # 4. Generate frontend data
 python3 generate_site_data.py
@@ -403,10 +404,10 @@ npm start
 ## Logs and Debugging
 
 ### Important Log Files
-- `output/logs/cycle_N.md` - Full exchange records per cycle
-- `output/logs/api_errors.log` - LLM API failures
-- `output/cost_summary.json` - Cost tracking breakdown
-- `output/domain_health.json` - DMI metrics evolution
+- `runs/<timestamp>/logs/cycle_N.md` - Full exchange records per cycle
+- `runs/<timestamp>/logs/api_errors.log` - LLM API failures
+- `runs/<timestamp>/cost_summary.json` - Cost tracking breakdown
+- `runs/<timestamp>/domain_health.json` - DMI metrics evolution
 
 ### Enable Verbose Logging
 ```bash
@@ -421,7 +422,7 @@ python3 __main__.py --demo-10-domains --verbose
 
 ### Database Queries (Debugging)
 ```bash
-sqlite3 output/atlantis.db
+sqlite3 runs/<timestamp>/atlantis.db
 
 # Check claim counts by status
 SELECT status, COUNT(*) FROM archive_entries GROUP BY status;
@@ -441,9 +442,9 @@ SELECT display_id, validation_json FROM archive_entries WHERE validation_json IS
 ## Next Steps
 
 After successful run:
-1. Explore **[Knowledge Tiers](Knowledge-Tiers.md)** - Understand State progression
-2. Read **[Token Economy](Token-Economy.md)** - Learn budget mechanics
-3. Check **[Model Routing](Model-Routing.md)** - Optimize API costs
-4. Review **[Roadmap](Roadmap.md)** - See what's coming in v2.3
+1. Explore **[Knowledge Tiers](Knowledge-Tiers)** - Understand State progression
+2. Read **[Token Economy](Token-Economy)** - Learn budget mechanics
+3. Check **[Model Routing](Model-Routing)** - Optimize API costs
+4. Review **[Roadmap](Roadmap)** - See what's coming in v2.3
 
-For questions or issues: https://github.com/yourusername/atlantis/issues
+For questions or issues: https://github.com/teddygcodes/atlantis/issues
