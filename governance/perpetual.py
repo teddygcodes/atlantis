@@ -39,6 +39,7 @@ from governance.states import (
     check_reasoning_depth,
     determine_outcome,
 )
+from governance.validators import run_objective_validation
 from config.settings import (
     TOKEN_VALUES,
     REASONING_DEPTH_BY_TIER,
@@ -222,6 +223,27 @@ class PerpetualEngine:
             _log(f"  {sb.name} depth too shallow, need {b_min}")
             return {"pair": f"{sa.name} vs {sb.name}", "skipped": True, "reason": "depth_b"}
 
+        # Step 7.5: Objective validation (pre-judge factual checks)
+        archive_ids = {c.get("display_id") for c in self.db.get_surviving_claims() if c.get("display_id")}
+
+        a_validation = run_objective_validation(
+            claim_text=a_raw,
+            domain=pair.domain,
+            cited_ids=a_norm.get("citations", []),
+            archive_ids=archive_ids,
+            state_tier=sa.tier,
+        )
+        b_validation = run_objective_validation(
+            claim_text=b_raw,
+            domain=pair.domain,
+            cited_ids=b_norm.get("citations", []),
+            archive_ids=archive_ids,
+            state_tier=sb.tier,
+        )
+
+        _log(f"  {sa.name} objective validation: {'PASSED' if a_validation['all_passed'] else 'FLAGS RAISED'}")
+        _log(f"  {sb.name} objective validation: {'PASSED' if b_validation['all_passed'] else 'FLAGS RAISED'}")
+
         # Steps 8-9: Critics cross-challenge (A attacks B, B attacks A)
         a_challenge = sa.produce_challenge(b_raw, b_premises)
         b_challenge = sb.produce_challenge(a_raw, a_premises)
@@ -246,8 +268,14 @@ class PerpetualEngine:
 
         # Step 14: Judge determines outcomes (Sonnet)
         approaches = {sa.name: sa.approach, sb.name: sb.approach}
-        a_outcome = determine_outcome(a_raw, b_challenge, a_rebuttal, a_newness, pair.domain, approaches, self.models)
-        b_outcome = determine_outcome(b_raw, a_challenge, b_rebuttal, b_newness, pair.domain, approaches, self.models)
+        a_outcome = determine_outcome(
+            a_raw, b_challenge, a_rebuttal, a_newness, pair.domain, approaches, self.models,
+            objective_notes=a_validation["summary"]
+        )
+        b_outcome = determine_outcome(
+            b_raw, a_challenge, b_rebuttal, b_newness, pair.domain, approaches, self.models,
+            objective_notes=b_validation["summary"]
+        )
 
         # Step 15: Build ArchiveEntry objects and deposit
         a_entry = self._build_archive_entry(
@@ -335,6 +363,16 @@ class PerpetualEngine:
                 "drama": int(b_outcome["scores"].get("drama", 0)),
                 "novelty": int(b_outcome["scores"].get("novelty", 0)),
                 "depth": int(b_outcome["scores"].get("depth", 0)),
+            },
+            "a_validation": {
+                "all_passed": a_validation["all_passed"],
+                "flags": a_validation["flags"],
+                "warnings": a_validation["warnings"],
+            },
+            "b_validation": {
+                "all_passed": b_validation["all_passed"],
+                "flags": b_validation["flags"],
+                "warnings": b_validation["warnings"],
             },
         }
 

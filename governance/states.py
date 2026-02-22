@@ -1058,6 +1058,7 @@ def determine_outcome(
     claim_citations: Optional[List[str]] = None,
     surviving_citation_count: Optional[int] = None,
     task_type: str = "judge",
+    objective_notes: str = "",
 ) -> dict:
     """
     Judge determines outcome of claim exchange.
@@ -1135,6 +1136,7 @@ def determine_outcome(
             f"{tier_expectations}\n"
             f"SCORING RUBRIC:\n{SCORING_RUBRIC}\n\n"
             f"{skepticism_note}"
+            f"{objective_notes}\n\n" if objective_notes else ""
             f"Determine the outcome:\n"
             f"You should destroy claims that merely restate definitions, rely on thought experiments "
             f"without novel reasoning, or fail to advance beyond what previous claims already "
