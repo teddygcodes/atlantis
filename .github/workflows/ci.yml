@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile Python files
+        run: |
+          echo "Compiling all Python files..."
+          python -m py_compile $(find . -name "*.py" -not -path "./venv/*" -not -path "./.venv/*" -not -path "./env/*")
+          echo "✓ All Python files compiled successfully"
+
+      - name: Run pytest (if tests exist)
+        run: |
+          if [ -d "tests" ] && [ "$(ls -A tests/*.py 2>/dev/null)" ]; then
+            echo "Running pytest..."
+            pip install pytest
+            pytest tests/ -v
+          else
+            echo "No tests found in tests/ directory - skipping pytest"
+          fi
+
+  frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: |
+          echo "Building Next.js application..."
+          npm run build
+          echo "✓ Build completed successfully"
+
+      - name: Run security audit
+        run: |
+          echo "Running npm security audit..."
+          npm audit --audit-level=moderate || {
+            echo "⚠️  Security vulnerabilities found at moderate or higher level"
+            echo "Run 'npm audit fix' locally to resolve"
+            exit 1
+          }
+          echo "✓ No moderate or higher vulnerabilities found"
+
+      - name: Type check
+        run: |
+          echo "Running TypeScript type check..."
+          npx tsc --noEmit
+          echo "✓ Type check passed"
