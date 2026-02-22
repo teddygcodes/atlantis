@@ -303,11 +303,13 @@ class PerpetualEngine:
             state=sa, raw=a_raw, challenge=b_challenge, rebuttal=a_rebuttal,
             norm=a_norm, premises=a_premises, outcome=a_outcome,
             challenger_entity=f"{sb.name} Critic", lab_hypothesis=a_lab,
+            validation_result=a_validation,
         )
         b_entry = self._build_archive_entry(
             state=sb, raw=b_raw, challenge=a_challenge, rebuttal=b_rebuttal,
             norm=b_norm, premises=b_premises, outcome=b_outcome,
             challenger_entity=f"{sa.name} Critic", lab_hypothesis=b_lab,
+            validation_result=b_validation,
         )
 
         self.db.save_archive_entry(a_entry)
@@ -984,6 +986,7 @@ class PerpetualEngine:
         outcome: dict,
         challenger_entity: str = "",
         lab_hypothesis: Optional[str] = None,
+        validation_result: Optional[dict] = None,
     ) -> ArchiveEntry:
         display_id = self.db.next_display_id()
         out = outcome["outcome"]
@@ -994,6 +997,16 @@ class PerpetualEngine:
             "destroyed": "destroyed",
         }
         status = status_map.get(out, "surviving")
+
+        # Serialize validation result if present
+        validation_json = None
+        if validation_result:
+            validation_json = json.dumps({
+                "all_passed": validation_result.get("all_passed", True),
+                "flags": validation_result.get("flags", []),
+                "warnings": validation_result.get("warnings", []),
+                "info": validation_result.get("info", []),
+            })
 
         return ArchiveEntry(
             entry_id=str(uuid.uuid4()),
@@ -1024,6 +1037,7 @@ class PerpetualEngine:
             citations=norm.get("citations", []),
             stability_score=1,
             tokens_earned=0,
+            validation_json=validation_json,
         )
 
     # ─── TOKEN OUTCOMES ───────────────────────────────────────────

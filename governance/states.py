@@ -109,6 +109,7 @@ class ArchiveEntry:
     tokens_earned: int = 0
     unverified_numerics: List[str] = field(default_factory=list)
     auto_filled_gap: bool = False
+    validation_json: Optional[str] = None
     created_at: str = field(default_factory=_now)
 
 

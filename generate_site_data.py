@@ -130,6 +130,16 @@ def _to_hypothesis(entry: dict[str, Any]) -> dict[str, Any]:
         hyp["operational_def"] = op_def
     if prediction:
         hyp["prediction"] = prediction
+
+    # Include validation results if present
+    validation_json = entry.get("validation_json")
+    if validation_json:
+        try:
+            validation_data = json.loads(validation_json) if isinstance(validation_json, str) else validation_json
+            hyp["validation"] = validation_data
+        except (json.JSONDecodeError, TypeError):
+            pass  # Skip malformed validation data
+
     return hyp
 
 
@@ -295,6 +305,12 @@ def generate_ts(entries: list[dict[str, Any]]) -> str:
         "  drama: number;",
         "  novelty: number;",
         "  depth: number;",
+        "  validation?: {",
+        "    all_passed: boolean;",
+        "    flags: string[];",
+        "    warnings: string[];",
+        "    info: string[];",
+        "  };",
         "}",
         "",
         "export const HYPOTHESES: Hypothesis[] = " + _to_ts_literal(hypotheses) + ";",

@@ -91,6 +91,7 @@ class PersistenceLayer:
                 tokens_earned INTEGER DEFAULT 0,
                 unverified_numerics_json TEXT DEFAULT '[]',
                 auto_filled_gap INTEGER DEFAULT 0,
+                validation_json TEXT DEFAULT NULL,
                 created_at TEXT NOT NULL
             );
 
@@ -283,7 +284,7 @@ class PersistenceLayer:
                     drama_score, novelty_score, depth_score,
                     citations_json, referenced_by_json,
                     stability_score, impact_score, tokens_earned, unverified_numerics_json,
-                    auto_filled_gap, created_at
+                    auto_filled_gap, validation_json, created_at
                 ) VALUES (
                     :entry_id, :display_id, :entry_type, :source_state, :source_entity,
                     :cycle_created, :status, :archive_tier, :claim_type, :position, :reasoning_chain_json,
@@ -294,7 +295,7 @@ class PersistenceLayer:
                     :drama_score, :novelty_score, :depth_score,
                     :citations_json, :referenced_by_json,
                     :stability_score, :impact_score, :tokens_earned, :unverified_numerics_json,
-                    :auto_filled_gap, :created_at
+                    :auto_filled_gap, :validation_json, :created_at
                 )
             """, {
                 "entry_id": d.get("entry_id", ""),
@@ -332,6 +333,7 @@ class PersistenceLayer:
                 "tokens_earned": d.get("tokens_earned", 0),
                 "unverified_numerics_json": json.dumps(d.get("unverified_numerics", [])),
                 "auto_filled_gap": 1 if d.get("auto_filled_gap", False) else 0,
+                "validation_json": d.get("validation_json", None),
                 "created_at": d.get("created_at", _now()),
             })
         return d.get("display_id", "")
