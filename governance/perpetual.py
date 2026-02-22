@@ -174,8 +174,20 @@ class PerpetualEngine:
         b_lab = sb.produce_lab_hypothesis(open_q, self._get_recently_destroyed(sb.name))
 
         # Step 1-2: Both States produce claims
-        a_raw = sa.produce_claim(a_ctx, a_meta, a_lab)
-        b_raw = sb.produce_claim(b_ctx, b_meta, b_lab)
+        a_raw = sa.produce_claim(
+            archive_context=a_ctx,
+            meta_learning=a_meta,
+            cycle_number=self.cycle,
+            previous_claims_summary="",
+            lab_hypothesis=a_lab,
+        )
+        b_raw = sb.produce_claim(
+            archive_context=b_ctx,
+            meta_learning=b_meta,
+            cycle_number=self.cycle,
+            previous_claims_summary="",
+            lab_hypothesis=b_lab,
+        )
         _log(f"  DEBUG RAW CLAIM ({sa.name}):\n{a_raw}\n")
         _log(f"  DEBUG RAW CLAIM ({sb.name}):\n{b_raw}\n")
 
@@ -389,8 +401,10 @@ class PerpetualEngine:
 
         for state in (sa, sb):
             raw = state.produce_claim(
-                self._build_archive_context(pair.domain, state.name),
-                self._get_meta_learning(state.name),
+                archive_context=self._build_archive_context(pair.domain, state.name),
+                meta_learning=self._get_meta_learning(state.name),
+                cycle_number=self.cycle,
+                previous_claims_summary="",
             )
             display_id = self.db.next_display_id()
             entry = ArchiveEntry(
@@ -1407,12 +1421,8 @@ class PerpetualEngine:
 
     def _get_meta_learning(self, state_name: str) -> str:
         """Last 3-5 destroyed claims from this State with judge reasoning."""
-        destroyed = [
-            e for e in self.db.get_surviving_claims(state_name=state_name)
-            if e.get("status") == "destroyed"
-        ]
-        destroyed.sort(key=lambda e: e.get("display_id", ""), reverse=True)
-        recent = destroyed[:5]
+        # Use get_destroyed_claims which directly queries for status='destroyed'
+        recent = self.db.get_destroyed_claims(state_name=state_name, limit=5)
         if not recent:
             return "(no destroyed claims yet — this is your first cycles)"
         lines = []

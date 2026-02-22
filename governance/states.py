@@ -179,8 +179,8 @@ class State:
         self,
         archive_context: str,
         meta_learning: str,
-        cycle_number: int,
-        previous_claims_summary: str,
+        cycle_number: int = 0,
+        previous_claims_summary: str = "",
         lab_hypothesis: Optional[str] = None,
     ) -> str:
         """
