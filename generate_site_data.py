@@ -279,7 +279,14 @@ def _to_ts_literal(data: Any) -> str:
 
 
 def generate_ts(entries: list[dict[str, Any]]) -> str:
-    hypotheses = [_to_hypothesis(e) for e in entries if str(e.get("entry_type", "claim")) in {"claim", "analysis", "proposal"}]
+    # Filter out founding deposits (Phase 0) - they lack governance data (no challenge/rebuttal/ruling)
+    # Founding entries identified by: source_state == "Founding Era" OR status == "founding"
+    hypotheses = [
+        _to_hypothesis(e) for e in entries
+        if str(e.get("entry_type", "claim")) in {"claim", "analysis", "proposal"}
+        and e.get("source_state") != "Founding Era"
+        and e.get("status") != "founding"
+    ]
     hypotheses.sort(key=lambda x: (x["cycle"], x["id"]))
 
     domains = sorted({h["domain"] for h in hypotheses})
