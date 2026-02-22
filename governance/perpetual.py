@@ -998,15 +998,12 @@ class PerpetualEngine:
         }
         status = status_map.get(out, "surviving")
 
-        # Serialize validation result if present
-        validation_json = None
-        if validation_result:
-            validation_json = json.dumps({
-                "all_passed": validation_result.get("all_passed", True),
-                "flags": validation_result.get("flags", []),
-                "warnings": validation_result.get("warnings", []),
-                "info": validation_result.get("info", []),
-            })
+        validation_json = json.dumps({
+            "all_passed": validation_result["all_passed"],
+            "flags": validation_result["flags"],
+            "warnings": validation_result["warnings"],
+            "info": validation_result.get("info", []),
+        }) if validation_result else None
 
         return ArchiveEntry(
             entry_id=str(uuid.uuid4()),
