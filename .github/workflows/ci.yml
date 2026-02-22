@@ -43,7 +43,7 @@ jobs:
           if [ -d "tests" ] && [ "$(ls -A tests/*.py 2>/dev/null)" ]; then
             echo "Running pytest..."
             pip install pytest
-            pytest tests/ -v
+            PYTHONPATH=. pytest tests/ -v
           else
             echo "No tests found in tests/ directory - skipping pytest"
           fi
