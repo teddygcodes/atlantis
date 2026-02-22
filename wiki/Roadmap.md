@@ -325,8 +325,8 @@ Confidence Score: 95% ± $2,500
    ```
 
 **Revenue Model:**
-- SaaS: $500/month per estimator seat
-- Pay-per-takeoff: $50-$200 per project (based on size)
+- SaaS: estimated/TBD pricing per estimator seat
+- Pay-per-takeoff: estimated/TBD pricing per project (based on size)
 - API: $0.10 per fixture analyzed
 
 **Target Market:**
@@ -391,26 +391,13 @@ Governance Event (drama ≥ 8)
 - Affiliate links (textbooks, courses on featured topics)
 
 **Success Metrics:**
-- 10M+ views/month across platforms
+- Views/month across platforms: TBD based on initial content performance
 - 1% click-through to Atlantis website
-- 100K+ followers by end of 2026
+- Follower growth targets: TBD based on initial content performance
 
 ---
 
 ## Experimental Features (Research)
-
-### Multi-Model Judging (Ensemble Validation)
-**Idea:** Instead of single Sonnet judge, use 3 independent models:
-- Claude Sonnet 4.5
-- GPT-4o
-- Gemini 1.5 Pro
-
-Majority vote determines outcome. Reduces single-model bias.
-
-**Cost:** 3x judge calls (~$0.90/cycle vs $0.30)
-**Benefit:** More robust rulings, less vulnerable to model-specific quirks
-
----
 
 ### Human-in-the-Loop Validation
 **Idea:** High-stakes appeals (drama ≥ 9) require human expert review before finalization.
@@ -448,19 +435,6 @@ Majority vote determines outcome. Reduces single-model bias.
 - Increase reasoning depth (survives judge scrutiny)
 
 **Challenge:** Prompt optimization is slow (each cycle = 20 minutes), RL requires 1000+ iterations
-
----
-
-## Community Requests
-
-### Feature Voting (Top 5)
-1. **Export to Obsidian** - Archive entries as linked markdown notes
-2. **Mobile App** - iOS/Android for reading debates on-the-go
-3. **RSS Feed** - Subscribe to high-drama governance events
-4. **LaTeX Support** - Render math equations in claims
-5. **Collaborative Mode** - Multiple humans can submit claims as States
-
-Vote at: https://github.com/yourusername/atlantis/discussions
 
 ---
 

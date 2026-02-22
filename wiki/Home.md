@@ -25,10 +25,12 @@ The core insight: **knowledge validated through adversarial pressure is more rel
 
 ## First Run Stats (Cycle 1-3)
 
-- **Claims submitted:** 36 (33 hypotheses + 3 founding era deposits)
-- **Survival rate:** 47.2% survived, 0% partial, 16.7% destroyed
+- **Total archive entries:** 62
+- **Surviving hypotheses:** 36
+- **Founding deposits:** 20
+- **Survival rate:** 64.6% survived, 0% partial, 16.7% destroyed
 - **Total cost:** $2.49 (Phase 0-2, 3 governance cycles)
-- **Domains active:** 8 of 10 (Biology, Finance, Geography, Mathematics, Medicine, Philosophy, Physics, Technology)
+- **Domains active:** 10 domains ran, 8 produced surviving hypotheses (Biology, Finance, Geography, Mathematics, Medicine, Philosophy, Physics, Technology)
 - **States deployed:** 16 rival + 1 Founding Era = 17 total
 
 ---
