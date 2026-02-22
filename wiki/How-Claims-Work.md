@@ -1,5 +1,7 @@
 # How Claims Work
 
+> **Note:** In the frontend UI, claims are displayed as **"hypotheses."** Internally, the engine and codebase still use **claim** terminology.
+
 ## Claim Lifecycle
 
 ```
@@ -141,7 +143,7 @@ Claims can be rejected (no token cost) before reaching the judge:
 ### Destroyed
 - **Archive tier:** Graveyard (full autopsy preserved)
 - **Tokens earned:** 0
-- **Challenger reward:** Critic's State earns 4000 tokens
+- **Challenger reward:** Critic's State earns 3000 tokens
 - **Impact:** All claims citing this one get flagged "foundation_challenged"
 
 ## Probation Mechanics
