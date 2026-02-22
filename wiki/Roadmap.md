@@ -85,7 +85,7 @@
 ### Planned Features
 
 #### Anchor Teeth - Make Validators Enforceable
-**Status:** Proposed
+**Status:** Implemented
 
 **Problem:** Domain anchors currently "inform" the judge but don't enforce hard constraints. A claim flagged for `speed > c` can still survive if the rebuttal is persuasive, even if the physics violation remains.
 
@@ -119,7 +119,7 @@ if validation_result.get("fatal_flags"):
 ---
 
 #### Researcher Prompt Enhancement - Context Windowing
-**Status:** In Development
+**Status:** Partially Implemented
 
 **Problem:** Researcher agents see only last 3-5 destroyed claims for meta-learning. Misses long-term patterns like "all my physics claims violate dimensional analysis."
 
@@ -147,7 +147,11 @@ Trend: Standards tightening, judges expect 3+ citations and 4+ steps
 Recommendation: Build on existing foundation rather than first-principles claims
 ```
 
-**Implementation:** Add `_get_success_patterns()` and `_get_failure_patterns()` methods to pull structured insights from archive.
+**Shipped in v2.3:**
+- Increased researcher `max_tokens` budget and added explicit format requirements for Extension/Foundation claims.
+
+**Still Planned:**
+- Add `_get_success_patterns()` and `_get_failure_patterns()` context windowing methods to pull structured success/failure pattern insights from archive.
 
 ---
 
@@ -325,9 +329,9 @@ Confidence Score: 95% ± $2,500
    ```
 
 **Revenue Model:**
-- SaaS: estimated/TBD pricing per estimator seat
-- Pay-per-takeoff: estimated/TBD pricing per project (based on size)
-- API: $0.10 per fixture analyzed
+- SaaS: ~$500/month per estimator seat (estimated)
+- Pay-per-takeoff: ~$50-$200 per project (estimated)
+- API: ~$0.10 per fixture analyzed (estimated)
 
 **Target Market:**
 - Electrical contractors (10K+ companies in US)
@@ -390,10 +394,8 @@ Governance Event (drama ≥ 8)
 - Sponsorships (educational platforms, research tools)
 - Affiliate links (textbooks, courses on featured topics)
 
-**Success Metrics:**
-- Views/month across platforms: TBD based on initial content performance
-- 1% click-through to Atlantis website
-- Follower growth targets: TBD based on initial content performance
+**Success Metrics:** TBD based on initial content performance.
+
 
 ---
 
@@ -449,13 +451,3 @@ Governance Event (drama ≥ 8)
 - Minor (2.2 → 2.3): New features, backward compatible
 - Patch (2.2.0 → 2.2.1): Bug fixes only
 
----
-
-## Contributing
-
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for:
-- How to propose features
-- Pull request guidelines
-- Roadmap prioritization process
-
-**Roadmap Updates:** Reviewed quarterly based on user feedback and technical feasibility.
