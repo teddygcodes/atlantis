@@ -2,6 +2,8 @@
 
 ## 10 Domains, 20 Rival States
 
+Note: Example hypotheses below are illustrative. For actual validated hypotheses from engine runs, see [atlantiskb.com](https://atlantiskb.com).
+
 Atlantis operates across 10 research domains, each with two rival States representing opposing epistemological approaches. This structure ensures productive tension and prevents intellectual monoculture.
 
 ---
@@ -257,4 +259,4 @@ Each domain tracks maturity through the **Domain Maturity Index (DMI)**:
 4. **Intellectual Coverage:** Spans STEM, social sciences, humanities without redundancy
 5. **Anchor Diversity:** Each domain has unique computational validators (SymPy for Math, dimensional analysis for Physics, etc.)
 
-See [Objective Validators and Anchors](Objective-Validators-and-Anchors.md) for full anchor implementation details.
+See [Objective Validators and Anchors](Objective-Validators-and-Anchors) for full anchor implementation details.
