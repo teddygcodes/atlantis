@@ -191,6 +191,7 @@ class State:
         Researcher decides: formalize Lab hypothesis or produce own claim.
         Returns raw claim text.
         """
+        # === RESEARCHER_PROMPT_START ===
         base = (
             f"Domain: {self.domain}\nApproach: {self.approach}\n\n"
             f"CURRENT CYCLE: {cycle_number}\n"
@@ -240,6 +241,7 @@ class State:
             "- Extension claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [what this claim does not cover]\n"
             "- Foundation claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [limits], CITATIONS: #[archive IDs]"
         )
+        # === RESEARCHER_PROMPT_END ===
         response = self.models.complete(
             task_type="researcher_claims",
             system_prompt=self.researcher_config.system_prompt,
@@ -300,6 +302,7 @@ class State:
         )
         if critic_performance_context:
             print(f"  [LEARNING] {self.name} critic received {len(critic_performance_context)} chars of performance context")
+        # === CRITIC_PROMPT_START ===
         response = self.models.complete(
             task_type="critic_challenges",
             system_prompt=self.critic_config.system_prompt,
@@ -317,6 +320,7 @@ class State:
             ),
             max_tokens=800,
         )
+        # === CRITIC_PROMPT_END ===
         return response.content or ""
 
     def produce_rebuttal(
