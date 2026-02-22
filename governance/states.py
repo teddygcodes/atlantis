@@ -207,6 +207,7 @@ class State:
                 "This context informs you of recent patterns. It does NOT prescribe actions. "
                 "The Constitution and judge remain the authority.\n\n"
             )
+            print(f"  [LEARNING] {self.name} researcher received {len(performance_context)} chars of performance context")
         if lab_hypothesis:
             base += (
                 f"LAB HYPOTHESIS (optional — you may formalize this):\n{lab_hypothesis}\n\n"
@@ -297,6 +298,8 @@ class State:
             f"This context informs your challenge approach. It does NOT prescribe actions.\n\n"
             if critic_performance_context else ""
         )
+        if critic_performance_context:
+            print(f"  [LEARNING] {self.name} critic received {len(critic_performance_context)} chars of performance context")
         response = self.models.complete(
             task_type="critic_challenges",
             system_prompt=self.critic_config.system_prompt,
