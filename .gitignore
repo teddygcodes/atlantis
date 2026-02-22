@@ -77,3 +77,9 @@ build/
 yarn.lock
 pnpm-lock.yaml
 .pnpm-store/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# TypeScript build info
+tsconfig.tsbuildinfo
