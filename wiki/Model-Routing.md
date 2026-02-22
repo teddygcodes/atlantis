@@ -21,6 +21,7 @@ Atlantis routes different tasks to different Claude models based on complexity a
 | **court_judges** | Sonnet 4.5 | Appeal review | $3.00 | $15.00 |
 | **founder_panels** | Sonnet 4.5 | Tier advancement evaluation | $3.00 | $15.00 |
 | **federal_lab** | Sonnet 4.5 | Radical hypothesis generation | $3.00 | $15.00 |
+| **executive_election** | Sonnet 4.5 | Governance/selection deliberation | $3.00 | $15.00 |
 | **founder_research** | Haiku 4.5 | Phase 0 free-form deposits | $0.80 | $4.00 |
 
 ## Model Capabilities
@@ -129,6 +130,8 @@ Total Sonnet: $1.02/cycle
 **Actual first run (Phases 0-2):** $2.49 (below estimate due to fewer calls)
 
 ## Model Router Implementation
+
+*Note: Code snippets are simplified for illustration. See `core/models.py` and `core/llm.py` for actual implementation.*
 
 **`core/models.py`:**
 ```python
@@ -253,17 +256,6 @@ def calculate_cost(self, response) -> float:
 ```
 
 ## Future Optimizations
-
-### Multi-model judging (v3.0)
-Instead of single Sonnet judge:
-```python
-JUDGE_MODEL = "multi"  # Claude + GPT-4 + Gemini
-```
-
-- 3 independent judges vote
-- Majority ruling wins
-- Reduces single-model bias
-- Cost: 3x judge calls (~$0.90/cycle vs $0.30)
 
 ### Prompt caching (built-in)
 LLMProvider already implements 15-minute cache:
