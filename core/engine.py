@@ -135,7 +135,6 @@ class AtlantisEngine:
             content_gen=self.content_gen,
             config=self.config,
             output_dir=str(self.output_dir),
-            verbose=self.verbose,
         )
         perpetual.run_cycles(self.config["governance_cycles"])
 
