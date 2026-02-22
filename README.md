@@ -228,4 +228,4 @@ A full 10-domain, 3-cycle run costs approximately **$2.50**.
 
 ## License
 
-Proprietary. All rights reserved.
+MIT License. See LICENSE for details.
