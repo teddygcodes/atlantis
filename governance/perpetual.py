@@ -104,6 +104,10 @@ class PerpetualEngine:
             print(f"{'='*60}")
             self._run_cycle()
 
+        # Print final domain health summary at end of run
+        health_report = self._generate_comprehensive_domain_health()
+        self._print_domain_health_summary(health_report)
+
     # ─── MAIN CYCLE ──────────────────────────────────────────────
 
     def _run_cycle(self):
@@ -1357,29 +1361,16 @@ class PerpetualEngine:
         path.write_text("".join(lines), encoding="utf-8")
 
     def _update_domain_health_file(self):
-        """Write output/domain_health.json with latest metrics for all domains."""
-        domains = self._get_all_domains()
-        health = {}
-        for domain in domains:
-            row = self.db.get_domain_health(domain, latest_only=True)
-            if row:
-                health[domain] = row
-            else:
-                health[domain] = {
-                    "cycle": self.cycle,
-                    "total_entries": 0,
-                    "surviving": 0,
-                    "partial": 0,
-                    "destroyed": 0,
-                    "survival_rate": 0.0,
-                    "compression_ratio": 0.0,
-                    "lab_survival_rate": 0.0,
-                    "active_cities": 0,
-                    "active_towns": 0,
-                    "status": "no_eligible_claims",
-                }
+        """
+        Write comprehensive domain health report to runs/<timestamp>/domain_health.json.
+        Includes all metrics, critic performance, and warning flags.
+        Updated every cycle, but console summary only shown at run end.
+        """
+        health_report = self._generate_comprehensive_domain_health()
+
+        # Write to runs/<timestamp>/domain_health.json
         out_path = self.output_dir / "domain_health.json"
-        out_path.write_text(json.dumps(health, indent=2), encoding="utf-8")
+        out_path.write_text(json.dumps(health_report, indent=2), encoding="utf-8")
 
     def _build_state_snapshots(self) -> list:
         """
@@ -1742,6 +1733,160 @@ class PerpetualEngine:
         profile_parts.append(f"{comparison.capitalize()} (domain: {domain_survival_rate:.0f}%).")
 
         return " ".join(profile_parts)
+
+    def _generate_comprehensive_domain_health(self) -> dict:
+        """
+        Generate comprehensive domain health report for end-of-run analysis.
+        Includes all metrics, critic performance, and warning flags.
+        """
+        all_entries = self.db.get_all_archive_entries()
+        critic_snapshots = self._build_critic_snapshots()
+
+        # Group entries by domain
+        domain_data = {}
+        for e in all_entries:
+            # Infer domain from source_state
+            state = e.get("source_state", "")
+            if not state or state == "Founding Era":
+                continue
+
+            domain = state.split("_")[0] if "_" in state else state
+
+            if domain not in domain_data:
+                domain_data[domain] = {
+                    "total": 0,
+                    "survived": 0,
+                    "retracted": 0,
+                    "destroyed": 0,
+                    "anchor_flags": 0,
+                    "token_spend": 0,
+                    "cycles_active": set(),
+                }
+
+            data = domain_data[domain]
+            data["total"] += 1
+            data["cycles_active"].add(e.get("cycle_created", 0))
+
+            outcome = e.get("outcome", "")
+            if outcome in ("survived", "partial"):
+                data["survived"] += 1
+            elif outcome == "retracted":
+                data["retracted"] += 1
+            elif outcome == "destroyed":
+                data["destroyed"] += 1
+
+            # Count anchor flags
+            validation = e.get("validation_json")
+            if validation:
+                try:
+                    val_data = json.loads(validation) if isinstance(validation, str) else validation
+                    flags = val_data.get("flags", [])
+                    data["anchor_flags"] += len(flags)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # Track token spend
+            tokens = e.get("tokens_earned", 0)
+            data["token_spend"] += abs(tokens)  # Sum absolute value for spend tracking
+
+        # Build health report for each domain
+        health_report = {}
+        for domain, data in domain_data.items():
+            total = data["total"]
+            survived = data["survived"]
+            retracted = data["retracted"]
+            destroyed = data["destroyed"]
+            flags = data["anchor_flags"]
+
+            # Calculate rates
+            survival_rate = survived / total if total > 0 else 0.0
+            retraction_rate = retracted / total if total > 0 else 0.0
+            destruction_rate = destroyed / total if total > 0 else 0.0
+            anchor_flag_rate = flags / total if total > 0 else 0.0
+            avg_tokens_per_outcome = data["token_spend"] / total if total > 0 else 0.0
+
+            # Calculate critic metrics for this domain
+            domain_critics = [
+                s for s in critic_snapshots
+                if s["critic_id"].startswith(domain)
+            ]
+
+            critic_impact_rate = 0.0
+            critic_precision_rate = 0.0
+            if domain_critics:
+                critic_impact_rate = sum(c["impact_rate"] for c in domain_critics) / len(domain_critics)
+                critic_precision_rate = sum(c["precision_rate"] for c in domain_critics) / len(domain_critics)
+
+            # Determine warning flags
+            cycles_count = len(data["cycles_active"])
+            weak_critic_warning = survival_rate > 0.90 and cycles_count >= 3
+            format_issue_warning = survival_rate < 0.30
+            healthy = 0.40 <= survival_rate <= 0.85
+
+            health_report[domain] = {
+                "survival_rate": round(survival_rate, 3),
+                "retraction_rate": round(retraction_rate, 3),
+                "destruction_rate": round(destruction_rate, 3),
+                "anchor_flag_rate": round(anchor_flag_rate, 3),
+                "avg_tokens_per_outcome": round(avg_tokens_per_outcome, 1),
+                "critic_impact_rate": round(critic_impact_rate, 3),
+                "critic_precision_rate": round(critic_precision_rate, 3),
+                "total_claims": total,
+                "cycles_active": cycles_count,
+                "flags": {
+                    "weak_critic_warning": weak_critic_warning,
+                    "format_issue_warning": format_issue_warning,
+                    "healthy": healthy,
+                }
+            }
+
+        return health_report
+
+    def _print_domain_health_summary(self, health_report: dict):
+        """
+        Print console summary of domain health ranked by survival rate.
+        Shows warning flags for domains with issues.
+        """
+        print("\n" + "="*70)
+        print("  DOMAIN HEALTH SUMMARY")
+        print("="*70)
+
+        if not health_report:
+            print("  No domain data available.")
+            return
+
+        # Sort domains by survival rate (descending)
+        sorted_domains = sorted(
+            health_report.items(),
+            key=lambda x: x[1]["survival_rate"],
+            reverse=True
+        )
+
+        print(f"\n{'Domain':<20} {'Survival':<12} {'Flags':<30}")
+        print("-" * 70)
+
+        for domain, metrics in sorted_domains:
+            survival = metrics["survival_rate"]
+            flags = metrics["flags"]
+
+            # Build flag display
+            flag_indicators = []
+            if flags["healthy"]:
+                flag_indicators.append("✓ Healthy")
+            if flags["weak_critic_warning"]:
+                flag_indicators.append("⚠ Weak Critic")
+            if flags["format_issue_warning"]:
+                flag_indicators.append("⚠ Format Issues")
+
+            flag_str = ", ".join(flag_indicators) if flag_indicators else "—"
+
+            print(f"{domain:<20} {survival:>6.1%}       {flag_str}")
+
+        print("\n" + "="*70)
+        print(f"  Total domains: {len(health_report)}")
+        healthy_count = sum(1 for m in health_report.values() if m["flags"]["healthy"])
+        print(f"  Healthy domains: {healthy_count}/{len(health_report)}")
+        print("="*70 + "\n")
 
     def _export_archive(self):
         """
