@@ -125,6 +125,7 @@ TOKEN_VALUES = {
     "discovery_partial": 600,
     "challenge_succeeded": 6000,
     "challenge_failed": -1000,            # Clamped to 0 floor
+    "anchor_flagged_but_survived": -200,
     "retracted": 500,
     "destroyed": 0,
     "rival_destroyed_by_critic": 3000,
