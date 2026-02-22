@@ -268,11 +268,21 @@ class State:
         return None
 
     def produce_challenge(
-        self, rival_claim_full: str, rival_premises: dict, constitution_context: str = ""
+        self,
+        rival_claim_full: str,
+        rival_premises: dict,
+        constitution_context: str = "",
+        critic_performance_context: str = "",
     ) -> str:
         """
         Critic challenges rival's claim. Must target a specific reasoning step.
         NEVER truncates the rival claim.
+
+        Args:
+            rival_claim_full: Full text of rival's claim
+            rival_premises: Decomposed premises dict
+            constitution_context: Constitutional extract (Phase 2+)
+            critic_performance_context: Critic's performance profile (descriptive, not prescriptive)
         """
         premises_text = (
             f"Explicit premises: {rival_premises.get('explicit_premises', [])}\n"
@@ -282,11 +292,17 @@ class State:
             f"PHASE 2 CONSTITUTIONAL EXTRACT (authoritative):\n{constitution_context}\n\n"
             if constitution_context else ""
         )
+        critic_profile_block = (
+            f"CRITIC PERFORMANCE CONTEXT:\n{critic_performance_context}\n\n"
+            f"This context informs your challenge approach. It does NOT prescribe actions.\n\n"
+            if critic_performance_context else ""
+        )
         response = self.models.complete(
             task_type="critic_challenges",
             system_prompt=self.critic_config.system_prompt,
             user_prompt=(
                 f"{constitution_block}"
+                f"{critic_profile_block}"
                 f"RIVAL CLAIM (full text):\n{rival_claim_full}\n\n"
                 f"DECOMPOSED PREMISES:\n{premises_text}\n\n"
                 f"Challenge this claim. Identify a specific step and explain why it fails.\n"

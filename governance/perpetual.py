@@ -275,9 +275,13 @@ class PerpetualEngine:
         _log(f"  {sa.name} objective validation: {'PASSED' if a_validation['all_passed'] else 'FLAGS RAISED'}")
         _log(f"  {sb.name} objective validation: {'PASSED' if b_validation['all_passed'] else 'FLAGS RAISED'}")
 
+        # Generate critic performance profiles (Task 67)
+        a_critic_profile = self._generate_critic_performance_profile(sa.name)
+        b_critic_profile = self._generate_critic_performance_profile(sb.name)
+
         # Steps 8-9: Critics cross-challenge (A attacks B, B attacks A)
-        a_challenge = sa.produce_challenge(b_raw, b_premises)
-        b_challenge = sb.produce_challenge(a_raw, a_premises)
+        a_challenge = sa.produce_challenge(b_raw, b_premises, critic_performance_context=a_critic_profile)
+        b_challenge = sb.produce_challenge(a_raw, a_premises, critic_performance_context=b_critic_profile)
 
         # Step 10: Validate challenges
         a_ch_ok, _ = validate_challenge(a_challenge)
@@ -1731,6 +1735,76 @@ class PerpetualEngine:
 
         # Comparison
         profile_parts.append(f"{comparison.capitalize()} (domain: {domain_survival_rate:.0f}%).")
+
+        return " ".join(profile_parts)
+
+    def _generate_critic_performance_profile(self, state_name: str) -> str:
+        """
+        Generate ~150 token performance profile for a State's Critic agent.
+        Uses critic snapshot data to describe challenge effectiveness.
+        DESCRIPTIVE ONLY - does not prescribe actions.
+        """
+        # Get critic snapshots for this State's critic
+        # Critic entity name: "{state_name} Critic"
+        critic_entity = f"{state_name} Critic"
+        critic_snapshots = [
+            s for s in self._build_critic_snapshots()
+            if s["critic_id"] == critic_entity
+        ]
+
+        if not critic_snapshots:
+            return f"{critic_entity}: No challenges issued yet. First engagement."
+
+        # Aggregate stats across all cycles
+        total_issued = sum(s["challenges_issued"] for s in critic_snapshots)
+        total_upheld = sum(s["challenges_upheld"] for s in critic_snapshots)
+        total_overruled = sum(s["challenges_overruled"] for s in critic_snapshots)
+
+        # Compute overall rates
+        impact_rate = (total_upheld / total_issued * 100) if total_issued > 0 else 0
+        precision_rate = (total_upheld / total_issued * 100) if total_issued > 0 else 0
+
+        # Get judge feedback on challenges (from archive entries where this critic challenged)
+        all_entries = self.db.get_all_archive_entries()
+        critic_challenges = [
+            e for e in all_entries
+            if e.get("challenger_entity") == critic_entity
+        ]
+
+        # Extract judge feedback on challenge quality
+        judge_feedback_items = []
+        for e in critic_challenges:
+            reasoning = e.get("outcome_reasoning", "")
+            if reasoning and len(reasoning) > 20:
+                judge_feedback_items.append(reasoning)
+
+        # Condense feedback (last 1-2 items, truncate)
+        feedback_summary = ""
+        if judge_feedback_items:
+            recent_feedback = judge_feedback_items[-1:]  # Just most recent
+            feedback_text = " | ".join(recent_feedback)
+            feedback_summary = feedback_text[:120] + ("..." if len(feedback_text) > 120 else "")
+
+        # Build profile text (target ~150 tokens, ~600 chars)
+        profile_parts = []
+        profile_parts.append(
+            f"{critic_entity}: {total_issued} challenges issued, {total_upheld} upheld ({impact_rate:.0f}% impact rate)."
+        )
+
+        if total_overruled > 0:
+            profile_parts.append(f"{total_overruled} challenges overruled.")
+
+        # Precision assessment
+        if precision_rate >= 70:
+            profile_parts.append("High precision targeting.")
+        elif precision_rate >= 40:
+            profile_parts.append("Moderate precision.")
+        else:
+            profile_parts.append("Lower precision rate.")
+
+        # Judge feedback
+        if feedback_summary:
+            profile_parts.append(f"Judge notes: {feedback_summary}")
 
         return " ".join(profile_parts)
 
