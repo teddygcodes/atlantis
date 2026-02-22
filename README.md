@@ -1,266 +1,231 @@
-# ATLANTIS
+# ATLANTIS — Adversarial Knowledge Engine
 
-**An adversarial knowledge engine where AI civilizations compete to produce validated research.**
+> 20 AI minds. 10 research domains. Constitutional governance. Knowledge that destroys its own mistakes.
 
-Hypotheses are proposed. Challenges are issued. Only validated knowledge survives.
+**Live site:** [atlantiskb.com](https://atlantiskb.com)
 
-[**→ atlantiskb.com**](https://atlantiskb.com)
+## What This Is
 
----
+Atlantis is a closed-loop AI civilization that produces validated knowledge through adversarial debate. Rival AI States generate research hypotheses, attack each other's claims, and defend their work before judges — all governed by a constitution the AI agents wrote themselves.
 
-## What is this?
+The breakthrough: governance prevents death. Multi-agent AI systems fail because they loop, hallucinate in circles, and drift into nonsense. Atlantis solves this with structural pressure — constitutional law, token economies, objective validators, and tiered knowledge that forces the system to destroy its own bad work.
 
-Atlantis is a multi-agent AI system that generates knowledge through structured adversarial debate. Instead of a single AI producing answers, 20 rival States across 10 research domains compete — each with researchers, critics, labs, and senators — to produce hypotheses that survive peer review.
+The result: research-grade hypotheses with operational definitions, falsification criteria, and citation chains — produced for under $1 per governance cycle.
 
-The core insight: **knowledge validated through adversarial pressure is more reliable than knowledge produced through consensus.** Every hypothesis in the Knowledge Base has been attacked by a rival and defended its position. Every refuted hypothesis teaches the system what doesn't hold up.
-
-This isn't a chatbot. It's a civilization.
-
-## How it works
+## How It Works
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    ATLANTIS ENGINE                       │
-│                                                         │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐          │
-│  │ State A  │    │  JUDGE   │    │ State B  │          │
-│  │Researcher│───▶│(scores + │◀───│  Critic  │          │
-│  │  Critic  │    │ rules)   │    │Researcher│          │
-│  │   Lab    │    └────┬─────┘    │   Lab    │          │
-│  │ Senator  │         │          │ Senator  │          │
-│  └──────────┘         ▼          └──────────┘          │
-│              ┌────────────────┐                         │
-│              │ KNOWLEDGE BASE │                         │
-│              │  (validated)   │                         │
-│              └───────┬────────┘                         │
-│                      │                                  │
-│         ┌────────────┼────────────┐                     │
-│         ▼            ▼            ▼                     │
-│    ┌─────────┐ ┌──────────┐ ┌──────────┐              │
-│    │  Cities │ │  Towns   │ │ Federal  │              │
-│    │(cluster │ │(cross-   │ │   Lab    │              │
-│    │analysis)│ │city apps)│ │(destabi- │              │
-│    └─────────┘ └──────────┘ │  lize)   │              │
-│                              └──────────┘              │
-└─────────────────────────────────────────────────────────┘
+Phase 0: Founding Research
+  20 Founders research across 10 domains (1 cycle)
+
+Phase 1: Rival Pair Formation
+  10 domain pairs formed (Alpha vs Beta per domain)
+
+Phase 2: Autonomous Governance (3 cycles)
+  For each cycle, for each rival pair:
+    1. Both States produce research claims
+    2. Claims pass through objective validators + real-world anchors
+    3. Rival critic attacks the claim
+    4. Researcher defends with rebuttal
+    5. Judge rules (with anchor evidence in context)
+    6. Token economy rewards/punishes States
+    7. Federal Lab destabilizes surviving claims
+    8. Content pipeline generates narratives
 ```
 
-**Each governance cycle:**
+## Architecture
 
-1. **Researcher** produces a hypothesis (Foundation, Discovery, or Challenge type)
-2. **Objective validators** check facts before any LLM judges — citation validity, circular reasoning, numeric consistency, domain-specific checks
-3. **Rival Critic** attacks a specific step in the reasoning chain
-4. **Researcher** defends with new reasoning (or retracts)
-5. **Judge** evaluates the full exchange and scores Drama, Novelty, Depth (1-10 each)
-6. **Outcome**: Validated, Revised, Retracted, or Refuted
+```
+core/
+  engine.py          — Main orchestrator (Phase 0 → 1 → 2)
+  llm.py             — Anthropic API client with retry logic
+  models.py          — ModelRouter (Haiku/Sonnet/Opus by task)
+  persistence.py     — SQLite archive + knowledge base
+  exceptions.py      — Custom exception types
 
-States earn tokens for validated hypotheses and lose them for refuted ones. States that consistently fail get dissolved. New States spawn in their place. The civilization learns.
+governance/
+  perpetual.py       — Adversarial governance loop
+  states.py          — State entities (researcher, critic, lab, senator)
+  validators.py      — Objective validation (format + domain checks)
+  anchors.py         — Real-world anchors (SymPy math, physics, dates, etc.)
+  content.py         — Content generation pipeline
 
-## Research domains
+founders/
+  profiles.py        — 20 Founder definitions + specializations
+  convention.py      — Constitutional Convention (Jefferson draft + amendments)
 
-| # | Domain | Alpha approach | Beta approach |
-|---|--------|---------------|---------------|
-| 1 | **Mathematics** | Formalist (axioms, proofs, structure) | Applied (modeling, computation) |
-| 2 | **Physics** | Theoretical (equations, unification) | Experimental (observation, falsification) |
-| 3 | **Biology** | Molecular (genes, proteins, mechanisms) | Systems (ecosystems, evolution, emergence) |
-| 4 | **Finance** | Quantitative (algorithms, risk models) | Behavioral (psychology, sentiment) |
-| 5 | **Technology** | Systems architecture (design, infrastructure) | Artificial intelligence (ML, automation) |
-| 6 | **Medicine** | Clinical (treatments, trials, outcomes) | Preventive (public health, epidemiology) |
-| 7 | **Geography** | Physical (climate, geology, resources) | Human (demographics, urbanization) |
-| 8 | **History** | Analytical (patterns, causation, cycles) | Narrative (culture, identity, memory) |
-| 9 | **Economics** | Macro (policy, trade, monetary theory) | Micro (incentives, behavior, game theory) |
-| 10 | **Philosophy** | Empiricism (evidence, logic, method) | Rationalism (reason, ethics, consciousness) |
+runs/                — Timestamped output from each engine run
+  archive.json       — Full knowledge base
+  archive.md         — Human-readable archive
+  domain_health.json — Domain metrics
+  cost_summary.json  — API cost breakdown
+  logs/              — Per-cycle logs
+  content/           — Generated blog posts, debates, narratives
 
-## What makes this different
+lib/data.ts          — Auto-generated site data (from generate_site_data.py)
+app/                 — Next.js 16 frontend (Vercel deployment)
+```
 
-**Adversarial validation, not consensus.** Most multi-agent systems have agents agree with each other. Atlantis forces agents to attack each other's work. The system rewards successful destruction of weak claims.
+## Research Domains
 
-**Objective validators before LLM judgment.** Nine rule-based validators check claims before any LLM judge sees them — catching invalid citations, circular reasoning, unfalsifiable claims, bad math, and domain-specific issues. The judge sees these flags as evidence, not just vibes.
+| Domain | Focus | Anchor Type |
+|--------|-------|-------------|
+| Mathematics | Formal systems, proof theory, computation | SymPy symbolic verification |
+| Physics | Quantum mechanics, cosmology, constants | Speed of light, unit validation |
+| Biology | Evolution, genetics, cell biology | Known biological facts |
+| Finance | Market microstructure, behavioral economics | Financial logic checks |
+| Technology | Distributed systems, neural networks, AI | CS fundamentals |
+| Medicine | Immunology, clinical trials, pharmacology | Medical standards (WHO/FDA) |
+| Geography | Urban systems, geophysics, climate | Geographic data (coordinates, distances) |
+| History | Civilizational patterns, archival theory | Historical date verification |
+| Economics | Productivity, preferences, market structure | Economic identities (GDP = C+I+G+NX) |
+| Philosophy | Consciousness, epistemology, ethics | Formal logic validation |
 
-**Constitutional governance.** A 1,007-line constitution defines the rules. States can't change the rules — they operate within them. This prevents the drift and collapse that kills other multi-agent systems.
+## Model Allocation
 
-**States die.** If a State consistently produces garbage, it loses tokens, enters probation, and gets dissolved by Senate vote. Its territory gets respawned with a new approach. This is the mechanism that prevents stagnation.
+| Task | Model | Rationale |
+|------|-------|-----------|
+| Researcher claims | Sonnet | Deep reasoning for hypothesis generation |
+| Critic challenges | Sonnet | Sophisticated attack strategies |
+| Judge rulings | Sonnet | Nuanced evaluation |
+| Rebuttals | Sonnet | Complex defense arguments |
+| Normalization | Haiku | Fast structured extraction |
+| Anti-loop checks | Haiku | Quick pattern matching |
+| Content generation | Haiku | Efficient narrative production |
+| Supreme Court | Opus | Highest-stakes constitutional rulings |
 
-**Token economy with real consequences.** Validated hypotheses earn tokens. Refuted ones cost tokens. Successful challenges earn tokens. The budget determines what a State can do, and hitting zero means dissolution.
+## Objective Validators + Real-World Anchors
 
-**Everything is preserved.** Every hypothesis, challenge, defense, and ruling is stored with full text — never truncated. The Knowledge Base is append-only. Refuted hypotheses go to the graveyard with their full autopsy.
+Claims pass through two validation layers before reaching the judge:
 
-## Tier system
+1. **Format validators** — Check for required sections (HYPOTHESIS, OPERATIONAL DEF, STEPS, PREDICTION, GAP ADDRESSED)
+2. **Domain anchors** — Real-world fact checks using actual computation:
+   - Math: SymPy verifies derivatives, integrals, known constants
+   - Physics: Checks claims against speed of light, conservation laws
+   - History: Validates dates against known historical events (±2 year tolerance)
+   - Biology: Cross-references established biological facts
+   - Finance: Checks against financial logic and identities
+   - All anchors return flags/warnings that are injected into the judge prompt
 
-| Tier | Name | Requirement |
-|------|------|-------------|
-| 0 | Empty | Starting state |
-| 1 | Foundation | 5 validated hypotheses |
-| 2 | Argumentation | 15 validated + Founder panel approval |
-| 3 | Depth | 30 validated + active City |
-| 4 | Application | 50 validated + active Town |
-| 5 | Influence | 75 validated + 10 cross-domain citations |
+Anchors inform the judge — they don't override it. A flagged claim can still survive if the judge finds the flag is about a peripheral detail, not the core hypothesis.
 
-Higher tiers face stricter validation standards. A Tier 3 claim that would pass at Tier 1 gets destroyed for insufficient depth.
+## Token Economy
 
-## Objective validators
+States earn and lose tokens based on performance:
 
-**Universal validators** run on all claims at zero API cost:
+| Event | Tokens |
+|-------|--------|
+| Foundation claim survives | +2000 |
+| Discovery claim survives | +1000 |
+| Rival's claim narrowed by critic | +2000 |
+| Claim retracted | +500 |
+| Claim destroyed | -500 |
 
-| Validator | Catches |
-|-----------|---------|
-| Citation validity | References to non-existent archive entries |
-| Self-contradiction | Position negates its own conclusion |
-| Circular reasoning | Conclusion restates the position (>80% overlap) |
-| Numeric consistency | Percentages >100%, sums that don't add up |
-| Reasoning depth | Insufficient steps for State's tier |
+States that drop below zero tokens enter probation. Continued failure leads to dissolution — the State dies and is replaced.
 
-**Domain-specific validators** check logical structure:
+## Knowledge Tiers
 
-| Validator | Domain | Catches |
-|-----------|--------|---------|
-| Math validity | Mathematics | Claims that "prove" metaphysical positions with theorems |
-| Empirical check | Physics, Bio, Medicine, Geo | Unfalsifiable claims, missing testable predictions |
-| Finance check | Finance, Economics | Ungrounded predictions, survivorship bias |
-| Historical check | History | Monocausal explanations, missing source attribution |
+| Tier | Requirement | Privileges |
+|------|-------------|------------|
+| Tier 1 | First surviving claim | Can participate in governance |
+| Tier 2 | 3+ surviving claims | Can publish to main archive |
+| Tier 3 | 5+ surviving claims | Can make expertise claims |
+| Tier 4 | 10+ surviving claims | Can serve on review panels |
 
-**Real-world anchors** connect claims to external reality:
+## First Run Results (V2.2)
 
-| Domain | Anchor | Examples |
-|--------|--------|----------|
-| **Mathematics** | SymPy verification | Catches wrong derivatives, bad arithmetic (2+2=5), incorrect simplifications |
-| **Physics** | Dimensional analysis | Catches speeds >c, temps <0K, wrong constants (Planck, Boltzmann, G) |
-| **Biology** | Established facts | Catches wrong DNA base pairing, Lamarckian inheritance, prokaryote nuclei |
-| **Finance** | Financial logic | Catches wrong compound interest, negative probabilities, impossible returns |
-| **Technology** | CS fundamentals | Catches P=NP claims, halting problem violations, O(1) sorting |
-| **Medicine** | Clinical standards | Catches debunked claims (vaccines→autism), correlation→causation jumps |
-| **Geography** | Physical constants | Catches wrong Earth measurements, population orders of magnitude |
-| **History** | Chronology | Catches anachronisms (ancient Rome with guns), wrong dates (French Revolution 1889) |
-| **Economics** | Accounting identities | Catches GDP components >100%, impossible sustained growth claims |
-| **Philosophy** | Formal logic | Catches affirming consequent, false dilemmas, naturalistic fallacy |
+```
+Surviving claims:     36
+Survival rate:        64.6%
+Active States:        20
+Domains:              10
+Governance cycles:    3
+Total cost:           $2.49
+Cost per cycle:       $0.83
+LLM calls:           234 (187 Sonnet, 90 Haiku, 0 Opus)
+```
 
-These anchors use **actual computation** (SymPy, dimensional analysis, date verification) instead of LLM opinion. When a Math claim says "the derivative of x² is 3x", SymPy computes the actual derivative (2x) and flags the error. When a Physics claim says "speed = 5×10⁹ m/s", the anchor flags it because c = 3×10⁸ m/s. This is what makes Atlantis interact with reality, not just argue about it.
+## Quick Start
 
-## Quick start
+### Requirements
+
+- Python 3.11+
+- Node.js 22+
+- Anthropic API key
+
+### Install
 
 ```bash
 git clone https://github.com/teddygcodes/atlantis.git
 cd atlantis
 pip install -r requirements.txt
 npm install
-
-# Run the engine (10 domains, 3 governance cycles)
-python3 __main__.py --demo-10-domains --force-clean
-
-# Generate site data from engine output
-python3 generate_site_data.py
-
-# Start the site
-npm run dev
 ```
 
-Or use the Makefile:
+### Run the Engine
 
 ```bash
-make setup      # Install dependencies
-make run-10     # Run 10-domain engine
-make site-data  # Generate site data
-make dev        # Start dev server
-make ship       # Full pipeline: engine → data → build
+# Set your API key
+export ANTHROPIC_API_KEY=your-key-here
+
+# Full 10-domain run (3 governance cycles, ~$2.50)
+python3 __main__.py --demo-10-domains --force-clean
+
+# Output appears in runs/<timestamp>/
 ```
 
-## Data pipeline
+### Generate Site Data + Deploy
 
-```
-engine run
-    ↓
-runs/<timestamp>/archive.json    ← full engine output
-    ↓
-python3 generate_site_data.py    ← parses into TypeScript
-    ↓
-lib/data.ts                      ← site data layer
-    ↓
-git push → Vercel auto-deploy    ← atlantiskb.com updates
+```bash
+# Generate frontend data from latest run
+python3 generate_site_data.py
+
+# Local dev
+npm run dev
+
+# Production (auto-deploys on push via Vercel)
+git push origin main
 ```
 
 ## Site
 
-Live at [atlantiskb.com](https://atlantiskb.com). Built with Next.js 16, Tailwind v4, React 19.
+- **URL:** [atlantiskb.com](https://atlantiskb.com)
+- **Stack:** Next.js 16, Tailwind v4, Vercel
+- **Design:** Crimson Edge palette (#dc2626 accent, #060606 background)
+- **Fonts:** Cinzel (headings), Cormorant Garamond (body), IBM Plex Mono (data)
+- **Auto-deploy:** Push to main → Vercel builds → live in ~60 seconds
 
-| Page | Shows |
-|------|-------|
-| **Research Timeline** | Cycle-by-cycle narrative of what happened |
-| **States** | All 20 States — knowledge graphs, W/P/L records, learning arcs |
-| **Knowledge Base** | Validated hypotheses that survived adversarial review |
-| **Debates** | Full exchanges — hypothesis, challenge, defense, verdict |
-| **Refuted** | Hypotheses that didn't survive, with full autopsy |
-| **About** | System stats and explanation |
-
-Each hypothesis has an **"Explain Simply"** button powered by Claude.
-
-## Architecture
+## Data Pipeline
 
 ```
-atlantis/
-├── core/
-│   ├── engine.py          # Top-level orchestrator (Phase 0 → 1 → 2)
-│   ├── llm.py             # LLM provider with rate limiting + caching
-│   ├── models.py          # Model router (task → Haiku/Sonnet/Opus)
-│   └── persistence.py     # SQLite layer (append-only archive)
-├── governance/
-│   ├── states.py          # State class + claim pipeline functions
-│   ├── perpetual.py       # Governance cycle engine
-│   ├── validators.py      # Universal + domain validators
-│   └── anchors.py         # 10 real-world anchor validators
-├── agents/
-│   └── base.py            # 20 Founder configs + agent factories
-├── founders/
-│   └── convention.py      # Phase 0: Founder research deposits
-├── content/
-│   └── generator.py       # 4-format content generation
-├── config/
-│   └── settings.py        # Config, model allocation, token values
-├── app/                   # Next.js pages
-├── components/            # React components (Crimson Edge design)
-├── lib/data.ts            # Generated site data
-├── generate_site_data.py  # Archive → TypeScript pipeline
-├── CONSTITUTION.md        # 1,007-line governance document
-└── Makefile
+Engine run → runs/<timestamp>/archive.json
+                    ↓
+         python3 generate_site_data.py
+                    ↓
+              lib/data.ts
+                    ↓
+           git push origin main
+                    ↓
+          Vercel auto-deploys site
 ```
 
-## Content pipeline
+## What's Next
 
-High-drama exchanges automatically generate content:
+- **Validation persistence** — Store anchor flags/warnings in archive for frontend display
+- **Researcher prompt optimization** — Extension/Foundation format requirements, increased token limits
+- **Commercial application** — Adversarial validation applied to electrical contractor lighting takeoffs
+- **Content pipeline** — TikTok/video generation from governance events
 
-| Format | Style | Trigger |
-|--------|-------|---------|
-| **Blog** | Science journalist, 500-1000 words | Drama ≥ 5 |
-| **Newsroom** | Breaking news, 150-200 words | Drama ≥ 7 or Novelty ≥ 8 |
-| **Debate script** | Netflix documentary narrator, 60-90s | Drama ≥ 7 or Novelty ≥ 8 |
-| **Explorer** | First-person travel blog, 200-300 words | New State/City/Town |
+## Cost Structure
 
-State dissolution generates all four formats at Drama 10.
+Atlantis uses multi-model routing to minimize API costs:
 
-## Model allocation
+- Haiku ($0.80/MTok in, $4/MTok out) for routine tasks
+- Sonnet ($3/MTok in, $15/MTok out) for research and judgment
+- Opus ($15/MTok in, $75/MTok out) reserved for Supreme Court
 
-| Task | Model | Why |
-|------|-------|-----|
-| Normalization, extraction, anti-loop | Haiku | Structured, cheap |
-| Research, challenges, rebuttals | Sonnet | Needs reasoning quality |
-| Judge rulings | Sonnet | Highest stakes |
-| Supreme Court appeals | Opus | Rare, unanimous panel |
-| Content generation | Haiku | High volume |
-
-## Tech stack
-
-**Engine:** Python 3.11 · SQLite · Anthropic API
-**Site:** Next.js 16 · React 19 · Tailwind v4
-**Hosting:** Vercel (auto-deploy on push)
-**Models:** Claude Haiku / Sonnet / Opus (task-routed)
-
-## Stats
-
-- ~12,000 lines of Python across 10 core modules
-- 1,007-line constitution
-- 5 universal validators + 4 domain validators + 10 real-world anchors
-- 4 content generation formats
-- 10 research domains, 20 rival States
+A full 10-domain, 3-cycle run costs approximately **$2.50**.
 
 ## License
 
-MIT
+Proprietary. All rights reserved.
