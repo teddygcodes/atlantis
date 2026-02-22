@@ -150,7 +150,7 @@ LLM calls:           234 (187 Sonnet, 90 Haiku, 0 Opus)
 ### Requirements
 
 - Python 3.11+
-- Node.js 22+
+- Node.js 20+
 - Anthropic API key
 
 ### Install
