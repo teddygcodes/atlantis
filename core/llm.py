@@ -72,10 +72,6 @@ class LLMProvider:
     def __init__(self, api_key: Optional[str] = None, mode: str = "auto"):
         # Simplified: only check os.environ, let main entry point handle load_dotenv()
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
-        if not self.api_key:
-            raise ValueError(
-                "ANTHROPIC_API_KEY not found. Set in .env or pass directly."
-            )
         self.client = None
         self.mode = mode
 
@@ -84,6 +80,12 @@ class LLMProvider:
                 self.mode = "api"
             else:
                 self.mode = "local"
+
+        # Only require API key if we're actually going to use the API
+        if self.mode == "api" and not self.api_key:
+            raise ValueError(
+                "ANTHROPIC_API_KEY not found. Set in .env or pass directly."
+            )
 
         if self.mode == "api" and HAS_ANTHROPIC and self.api_key:
             self.client = anthropic.Anthropic(api_key=self.api_key)
