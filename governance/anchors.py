@@ -108,12 +108,18 @@ def check_physics_units(claim_text: str) -> dict:
         exponent = int(speed_match.group(2))
         speed = mantissa * (10 ** exponent)
         c = 3e8  # speed of light
-        if speed > c and "light" not in text_lower and "photon" not in text_lower:
-            notes.append(
-                f"PHYSICS FLAG: Claimed speed {speed:.2e} m/s exceeds speed of light "
-                f"(3×10⁸ m/s) for non-photonic entity."
-            )
-            return {"passed": False, "notes": notes, "severity": "flag"}
+        if speed > c:
+            # Only skip if the SUBJECT is light/photons, not just a mention of "light"
+            is_about_light = bool(re.search(
+                r"\b(photons?|light\s+(?:beam|pulse|ray|wave)s?)\s+(?:travel|mov|propagat)",
+                text_lower
+            ))
+            if not is_about_light:
+                notes.append(
+                    f"PHYSICS FLAG: Claimed speed {speed:.2e} m/s exceeds speed of light "
+                    f"(3×10⁸ m/s) for non-photonic entity."
+                )
+                return {"passed": False, "notes": notes, "severity": "flag"}
 
     # Temperature below absolute zero
     temp_match = re.search(r"(-\d+(?:\.\d+)?)\s*(?:K|kelvin)", claim_text, re.IGNORECASE)
