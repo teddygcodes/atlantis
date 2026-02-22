@@ -4,9 +4,11 @@
 
 States advance through 6 tiers (0-5) based on surviving claims and additional requirements:
 
+> Note: These thresholds match `config/settings.py` (`V2_TIERS`). If the README tier table differs, update it to match the code.
+
 | Tier | Name | Surviving Claims Required | Additional Requirements | Benefits |
 |------|------|---------------------------|-------------------------|----------|
-| **0** | Empty | 0 | Starting state | Standard validation |
+| **0** | Empty | 0 | Starting state (initial budget: 50,000 in production; 30,000 in `--mock`) | Standard validation |
 | **1** | Foundation | 5 | None | Automatic advancement |
 | **2** | Argumentation | 15 | Founder panel approval | Stricter standards |
 | **3** | Depth | 30 | 1+ active City | Can spawn Cities |
@@ -16,6 +18,7 @@ States advance through 6 tiers (0-5) based on surviving claims and additional re
 ### Tier Advancement Details
 
 **Tier 0 → 1: Automatic**
+- States start with the run profile's initial token budget (`50,000` in default production runs; `30,000` in `--mock` runs)
 - Reach 5 surviving claims (main tier)
 - No approval needed
 - Earn +10,000 tokens
