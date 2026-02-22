@@ -93,7 +93,7 @@ function buildAndLayoutGraph(
 
   // Run force simulation synchronously to completion
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-  const iterations = 300;
+  const iterations = 150;  // Reduced from 300 for performance
 
   for (let iter = 0; iter < iterations; iter++) {
     const alpha = 1 - iter / iterations;

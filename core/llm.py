@@ -69,21 +69,13 @@ class LLMProvider:
     Handles API calls, token counting, rate limiting, caching, and cost tracking.
     """
 
-    @staticmethod
-    def _read_dotenv_key() -> str:
-        """Read ANTHROPIC_API_KEY directly from .env, searching upward from this file."""
-        for search_dir in [Path(__file__).parent.parent, Path.cwd()]:
-            env_file = search_dir / ".env"
-            if env_file.exists():
-                for line in env_file.read_text(encoding="utf-8").splitlines():
-                    line = line.strip()
-                    if line.startswith("ANTHROPIC_API_KEY="):
-                        return line.split("=", 1)[1].strip().strip('"').strip("'")
-        return ""
-
     def __init__(self, api_key: Optional[str] = None, mode: str = "auto"):
-        # .env always wins; fallback to explicit arg then shell env var
-        self.api_key = self._read_dotenv_key() or api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        # Simplified: only check os.environ, let main entry point handle load_dotenv()
+        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
+        if not self.api_key:
+            raise ValueError(
+                "ANTHROPIC_API_KEY not found. Set in .env or pass directly."
+            )
         self.client = None
         self.mode = mode
 
@@ -585,8 +577,11 @@ Each governance cycle follows these steps in order:
         )
 
     def _cache_key(self, system: str, user: str, model: str) -> str:
-        combined = f"{model}:{system[:200]}:{user}"
-        return hashlib.md5(combined.encode()).hexdigest()
+        # Hash full system prompt to avoid collisions
+        system_hash = hashlib.md5(system.encode()).hexdigest()
+        user_hash = hashlib.md5(user.encode()).hexdigest()
+        combined = f"{model}:{system_hash}:{user_hash}"
+        return combined  # Already hashed components
 
     def _track_cost(self, response: LLMResponse):
         rates = self.cost_rates.get(response.model.replace("-local-sim", ""))

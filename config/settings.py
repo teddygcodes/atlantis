@@ -52,10 +52,10 @@ MOCK_CONFIG = {
 # PRODUCTION CONFIG
 # ═══════════════════════════════════════
 PRODUCTION_CONFIG = {
-    "founding_era_target_pairs": 3,        # TEMP: 3 for testing (restore to 10)
-    "phase0_research_cycles": 1,
-    "founding_era_max_cycles": 5,
-    "governance_cycles": 3,                # TEMP: 3 for testing (restore to 0 for indefinite)
+    "founding_era_target_pairs": 10,
+    "phase0_research_cycles": 5,
+    "founding_era_max_cycles": 20,
+    "governance_cycles": 0,                # 0 means indefinite
     "initial_token_budget": 50000,
     "cycle_cost": 3000,
     "federal_lab_activation_cycle": 5,

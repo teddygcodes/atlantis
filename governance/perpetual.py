@@ -783,8 +783,12 @@ class PerpetualEngine:
                 try:
                     kw_list = json.loads(c.get("keywords_json", "[]"))
                     kws.extend(kw_list)
-                except Exception:
-                    pass
+                except (json.JSONDecodeError, TypeError) as e:
+                    _log(f"[WARNING] Failed to parse keywords_json for entry {c.get('display_id', 'unknown')}: {e}")
+                    # Continue without keywords rather than crash
+                except Exception as e:
+                    _log(f"[ERROR] Unexpected error parsing keywords: {e}")
+                    raise  # Re-raise unexpected errors
             domain_keywords[domain] = list(set(kws))
 
         bridges_found = []
@@ -873,6 +877,10 @@ class PerpetualEngine:
 
         approvals = 0
         for profile in relevant:
+            if not hasattr(profile, 'to_panel_prompt'):
+                _log(f"[ERROR] FounderProfile {profile.name} missing to_panel_prompt() method")
+                continue
+
             response = self.models.complete(
                 task_type="founder_panels",
                 system_prompt=profile.to_panel_prompt(),

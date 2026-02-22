@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { STATES, HYPOTHESES, type StateEntity, type Hypothesis } from "@/lib/data";
 import { ExplainSimply } from "@/components/explain-button";
@@ -301,11 +301,22 @@ export function StateProfile({ slug }: { slug: string }) {
     );
   }
 
-  const stateHypotheses = HYPOTHESES.filter((c) => c.state === state.name);
-  const validatedHypotheses = stateHypotheses.filter(
-    (c) => c.ruling === "SURVIVED" || c.ruling === "REVISE" || c.ruling === "PARTIAL"
+  const stateHypotheses = useMemo(
+    () => HYPOTHESES.filter((c) => c.state === state.name),
+    [state.name]
   );
-  const refutedHypotheses = stateHypotheses.filter((c) => c.ruling === "DESTROYED");
+
+  const validatedHypotheses = useMemo(
+    () => stateHypotheses.filter(
+      (c) => c.ruling === "SURVIVED" || c.ruling === "REVISE" || c.ruling === "PARTIAL"
+    ),
+    [stateHypotheses]
+  );
+
+  const refutedHypotheses = useMemo(
+    () => stateHypotheses.filter((c) => c.ruling === "DESTROYED"),
+    [stateHypotheses]
+  );
 
   // Early return if no hypotheses
   if (stateHypotheses.length === 0) {
@@ -318,10 +329,12 @@ export function StateProfile({ slug }: { slug: string }) {
     );
   }
 
-  const latestHypothesis = stateHypotheses.reduce(
-    (a, b) => (a.cycle > b.cycle ? a : b),
-    stateHypotheses[0]
-  );
+  const latestHypothesis = useMemo(() => {
+    return stateHypotheses.reduce(
+      (a, b) => (a.cycle > b.cycle ? a : b),
+      stateHypotheses[0]
+    );
+  }, [stateHypotheses]);
 
   const total = state.wins + state.partials + state.losses;
   const survivalPct =
