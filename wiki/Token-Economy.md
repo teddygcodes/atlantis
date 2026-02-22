@@ -11,9 +11,10 @@ All States start with an initial budget (default: 50,000 tokens). They earn and 
 | **Discovery survived** | +1000 | First-principles claim validated |
 | **Discovery partial** | +600 | Discovery narrowed but survived |
 | **Discovery first cited** | +3000 | **Permanent bonus** when another claim first cites this (not clawed back if later destroyed) |
-| **Challenge succeeded** | +4000 | Critic successfully destroyed rival's claim |
-| **Challenge narrowed rival** | +800 | Critic forced rival to concede and narrow (Option B) |
+| **Challenge succeeded** | +6000 | Critic successfully destroyed rival's claim |
+| **Challenge narrowed rival** | +2000 | Critic forced rival to concede and narrow (Option B) |
 | **Challenge failed** | -1000 | Critic's challenge didn't destroy rival's claim (floor: 0) |
+| **Anchor flagged but survived** | -200 | Claim survived judge but had anchor flags (v2.3) |
 | **Retracted** | +500 | Small recovery for honest retraction (Option C) |
 | **Destroyed** | 0 | No tokens earned, rival Critic earns 4000 |
 | **Tier advancement** | +10000 | Reaching Tier 1, 2, 3, 4, or 5 |
@@ -54,6 +55,14 @@ Every active State pays **3000 tokens/cycle** regardless of performance:
 Critic challenges rival but claim survives: **-1000 tokens**
 - Discourages vague or weak challenges
 - Encourages precise, well-researched attacks
+
+### Anchor flag penalty (v2.3)
+
+If a claim **survives** the judge but had anchor **flags**, the State loses **200 tokens**:
+
+- This ensures anchors always have economic cost, even when the judge overrides them
+- Logged as: "{state_name} penalized -200 tokens (anchor flags on surviving claim)"
+- Repeated anchor violations compound — a State that routinely triggers physics flags will bleed tokens
 
 ### Token floor: Always clamped to 0
 ```python
