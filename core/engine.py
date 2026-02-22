@@ -544,9 +544,9 @@ class AtlantisEngine:
             return {"domain": domain, "approach_a": approach_a, "approach_b": approach_b}
 
         print(
-            f"    [!] Failed to parse pair proposal from {fc.name}. "
-            f"Raw response:\n{content}"
+            f"    [ENGINE:_founder_propose_pair] Failed to parse pair proposal from {fc.name} - domain='{domain}', approach_a='{approach_a}', approach_b='{approach_b}' - returning None"
         )
+        print(f"    Raw response:\n{content}")
         return None
 
     def _founder_vote_on_pair(

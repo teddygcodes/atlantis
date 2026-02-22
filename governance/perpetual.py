@@ -1443,8 +1443,9 @@ class PerpetualEngine:
                     val_data = json.loads(validation) if isinstance(validation, str) else validation
                     flags = val_data.get("flags", [])
                     data["anchor_flags"] += len(flags)
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                except (json.JSONDecodeError, TypeError) as err:
+                    entry_id = e.get("display_id", "unknown")
+                    print(f"[PERPETUAL:_build_state_snapshots] Error: Failed to parse validation_json for entry {entry_id} - {type(err).__name__}: {err} - anchor flags excluded from state snapshot metrics")
 
             # Collect judge feedback
             reasoning = e.get("outcome_reasoning", "")
@@ -1599,8 +1600,9 @@ class PerpetualEngine:
                     val_data = json.loads(validation) if isinstance(validation, str) else validation
                     flags = val_data.get("flags", [])
                     data["anchor_flags"] += len(flags)
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                except (json.JSONDecodeError, TypeError) as err:
+                    entry_id = e.get("display_id", "unknown")
+                    print(f"[PERPETUAL:_build_domain_metrics] Error: Failed to parse validation_json for entry {entry_id} - {type(err).__name__}: {err} - anchor flags excluded from domain metrics")
 
             # Track tokens
             tokens = e.get("tokens_earned", 0)
@@ -1672,8 +1674,9 @@ class PerpetualEngine:
                     val_data = json.loads(validation) if isinstance(validation, str) else validation
                     flags = val_data.get("flags", [])
                     total_anchor_flags += len(flags)
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                except (json.JSONDecodeError, TypeError) as err:
+                    entry_id = e.get("display_id", "unknown")
+                    print(f"[PERPETUAL:_build_state_profile] Error: Failed to parse validation_json for entry {entry_id} - {type(err).__name__}: {err} - anchor flags excluded from state profile")
 
         # Get token trajectory (compare last cycle snapshot to overall)
         state_snapshots = [
@@ -1887,8 +1890,9 @@ class PerpetualEngine:
                     val_data = json.loads(validation) if isinstance(validation, str) else validation
                     flags = val_data.get("flags", [])
                     data["anchor_flags"] += len(flags)
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                except (json.JSONDecodeError, TypeError) as err:
+                    entry_id = e.get("display_id", "unknown")
+                    print(f"[PERPETUAL:_generate_comprehensive_domain_health] Error: Failed to parse validation_json for entry {entry_id} - {type(err).__name__}: {err} - anchor flags excluded from domain health report")
 
             # Track token spend
             tokens = e.get("tokens_earned", 0)
@@ -2092,6 +2096,7 @@ class PerpetualEngine:
         """
         domains = self._get_all_domains()
         if not domains:
+            print(f"[PERPETUAL:_get_federal_lab_domain] No domains exist yet - Federal Lab skipped this cycle")
             return None
         candidates = [d for d in domains if d != self.federal_lab_last_domain]
         if not candidates:
@@ -2102,6 +2107,7 @@ class PerpetualEngine:
             target = self.db.get_highest_impact_claim(domain)
             if target:
                 return domain
+        print(f"[PERPETUAL:_get_federal_lab_domain] No eligible claims found in any domain - Federal Lab skipped this cycle - checked domains: {candidates}")
         return None
 
     # ─── HELPERS ─────────────────────────────────────────────────

@@ -105,11 +105,12 @@ class ContentGenerator:
         }
         fn = generators.get(fmt)
         if not fn:
+            print(f"  [ContentGenerator:_generate] Invalid format '{fmt}' requested - must be one of: {list(generators.keys())} - returning None")
             return None
         try:
             return fn(data)
         except Exception as e:
-            print(f"  [ContentGenerator] Error generating {fmt}: {e}")
+            print(f"  [ContentGenerator:_generate] Error generating content for format '{fmt}' - {type(e).__name__}: {e} - returning None")
             return None
 
     # ─── BLOG ─────────────────────────────────────────────────────
@@ -334,7 +335,8 @@ class ContentGenerator:
         if self.blog_context_path.exists():
             try:
                 return json.loads(self.blog_context_path.read_text(encoding="utf-8"))
-            except Exception:
+            except Exception as err:
+                print(f"  [ContentGenerator:_load_blog_context] Error loading blog context from {self.blog_context_path} - {type(err).__name__}: {err} - starting with empty context")
                 return []
         return []
 

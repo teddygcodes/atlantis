@@ -524,6 +524,7 @@ class PersistenceLayer:
         """Returns highest-impact surviving claim in domain (for Federal Lab)."""
         domain_states = self._get_states_for_domain(domain)
         if not domain_states:
+            print(f"[PERSISTENCE:get_highest_impact_claim] No active states found for domain '{domain}' - returning None")
             return None
         placeholders = ",".join("?" * len(domain_states))
         with self._get_conn() as conn:
@@ -534,6 +535,8 @@ class PersistenceLayer:
                 f"ORDER BY impact_score DESC, stability_score DESC LIMIT 1",
                 domain_states
             ).fetchone()
+        if not row:
+            print(f"[PERSISTENCE:get_highest_impact_claim] No surviving claims found in domain '{domain}' (states: {domain_states}) - returning None")
         return self._unpack_entry(row) if row else None
 
     def get_last_n_claims(self, state_name: str, n: int = 3) -> List[Dict]:
@@ -577,7 +580,8 @@ class PersistenceLayer:
         for row in principle_rows:
             try:
                 citations = json.loads(row["citations_json"] or "[]")
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError) as err:
+                print(f"[PERSISTENCE:get_principle_count] Error: Failed to parse citations_json for principle - {type(err).__name__}: {err} - principle excluded from count for domain {domain}")
                 citations = []
             if any(
                 (self.get_archive_entry(cid) or {}).get("source_state") in domain_states
@@ -829,11 +833,13 @@ class PersistenceLayer:
                 "SELECT * FROM state_budgets WHERE state_name = ?", (state_name,)
             ).fetchone()
         if not row:
+            print(f"[PERSISTENCE:get_state_budget_row] State '{state_name}' not found in state_budgets table - returning None")
             return None
         data = dict(row)
         try:
             data["total_rejections_by_type"] = json.loads(data.get("total_rejections_by_type") or "{}")
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as err:
+            print(f"[PERSISTENCE:get_state_budget_row] Error: Failed to parse total_rejections_by_type for state {state_name} - JSONDecodeError: {err} - defaulting to empty dict")
             data["total_rejections_by_type"] = {}
         return data
 
@@ -847,7 +853,9 @@ class PersistenceLayer:
             d = dict(row)
             try:
                 d["total_rejections_by_type"] = json.loads(d.get("total_rejections_by_type") or "{}")
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as err:
+                state_name = d.get("state_name", "unknown")
+                print(f"[PERSISTENCE:get_all_active_states] Error: Failed to parse total_rejections_by_type for state {state_name} - JSONDecodeError: {err} - defaulting to empty dict")
                 d["total_rejections_by_type"] = {}
             out.append(d)
         return out
@@ -864,7 +872,8 @@ class PersistenceLayer:
 
             try:
                 rejections = json.loads(row["total_rejections_by_type"] or "{}")
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as err:
+                print(f"[PERSISTENCE:increment_pipeline_claims] Error: Failed to parse total_rejections_by_type for state {state_name} - JSONDecodeError: {err} - defaulting to empty dict")
                 rejections = {}
             if not isinstance(rejections, dict):
                 rejections = {}
@@ -1295,7 +1304,9 @@ class PersistenceLayer:
             raw = d.pop(db_field, "[]")
             try:
                 d[py_field] = json.loads(raw or "[]")
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError) as err:
+                entry_id = d.get("display_id", "unknown")
+                print(f"[PERSISTENCE:_unpack_entry] Error: Failed to parse {db_field} for entry {entry_id} - {type(err).__name__}: {err} - field defaulted to empty list")
                 d[py_field] = []
         d["auto_filled_gap"] = bool(d.get("auto_filled_gap", 0))
         return d
