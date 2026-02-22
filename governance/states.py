@@ -576,6 +576,59 @@ class StateManager:
 # PIPELINE FUNCTIONS (MODULE-LEVEL)
 # ═══════════════════════════════════════
 
+def _check_operational_definition(claim_text: str) -> bool:
+    """
+    Centralized check for operational definition presence in claim text.
+    Single source of truth for operational definition regex patterns.
+
+    Checks three ways:
+    1. Explicit OPERATIONAL DEF header (new HYPOTHESIS format)
+    2. POSITION header present (old format, implies operational def expected)
+    3. HYPOTHESIS header present (new format, implies operational def expected)
+    4. Embedded operational definition phrases in main statement
+
+    Returns True if any operational definition indicator is found.
+    """
+    # Check for explicit OPERATIONAL DEF section (new format)
+    has_explicit_operational_def = bool(re.search(
+        r"^\s*OPERATIONAL\s+DEF(?:INITION)?\s*[:\-]\s*.+$",
+        claim_text,
+        re.IGNORECASE | re.MULTILINE,
+    ))
+
+    if has_explicit_operational_def:
+        return True
+
+    # Check for POSITION or HYPOTHESIS headers
+    position_match = re.search(
+        r"^\s*POSITION\s*[:\-]\s*(.+)$",
+        claim_text,
+        re.IGNORECASE | re.MULTILINE
+    )
+    hypothesis_match = re.search(
+        r"^\s*HYPOTHESIS\s*[:\-]\s*(.+)$",
+        claim_text,
+        re.IGNORECASE | re.MULTILINE
+    )
+
+    # If neither header exists, no operational definition
+    if not position_match and not hypothesis_match:
+        return False
+
+    # Extract main statement text from whichever format is present
+    main_statement_match = position_match or hypothesis_match
+    main_statement_text = main_statement_match.group(1)
+
+    # Check for embedded operational definition phrases
+    has_embedded_operational_def = bool(re.search(
+        r"\b(defined as|operational(?:ly)?|measured by|quantified by|observed as|when\s+measured|by\s+tracking)\b",
+        main_statement_text,
+        re.IGNORECASE,
+    ))
+
+    return has_embedded_operational_def
+
+
 def validate_claim(
     claim_text: str,
     models: ModelRouter,
@@ -663,41 +716,13 @@ def validate_claim(
     }
 
     if claim_type == "discovery":
-        # Accept either POSITION (old format) or HYPOTHESIS (new format)
-        position_match = re.search(r"^\s*POSITION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
-        hypothesis_match = re.search(r"^\s*HYPOTHESIS\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
-
-        if not position_match and not hypothesis_match:
+        # Use centralized helper to check for operational definition
+        if not _check_operational_definition(claim_text):
             msg = "Discovery claims should include POSITION or HYPOTHESIS with an operational definition"
             if strict_empirical:
                 errors.append(msg)
             else:
                 warnings.append(msg)
-        else:
-            # Use whichever format is present
-            main_statement_match = position_match or hypothesis_match
-            main_statement_text = main_statement_match.group(1)
-
-            # Check for operational definition in two ways:
-            # 1. Explicit OPERATIONAL DEF section (new format)
-            # 2. Embedded in POSITION/HYPOTHESIS line (old format)
-            has_explicit_operational_def = bool(re.search(
-                r"^\s*OPERATIONAL\s+DEF(?:INITION)?\s*[:\-]\s*.+$",
-                claim_text,
-                re.IGNORECASE | re.MULTILINE,
-            ))
-            has_embedded_operational_def = bool(re.search(
-                r"\b(defined as|operational(?:ly)?|measured by|quantified by|observed as|when\s+measured|by\s+tracking)\b",
-                main_statement_text,
-                re.IGNORECASE,
-            ))
-
-            if not (has_explicit_operational_def or has_embedded_operational_def):
-                msg = "Discovery POSITION/HYPOTHESIS should include an operational definition"
-                if strict_empirical:
-                    errors.append(msg)
-                else:
-                    warnings.append(msg)
 
         # Check for testability in two ways:
         # 1. Explicit PREDICTION section (new format)
@@ -797,33 +822,9 @@ def extract_validation_rejection_types(claim_text: str, errors: List[str]) -> Li
         rejection_types.append("missing_challenge_target")
 
     # Soft discovery checks are counted even when they are warnings in non-empirical domains.
-    # Check both old and new format for operational definitions
-    position_match = re.search(r"^\s*POSITION\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
-    hypothesis_match = re.search(r"^\s*HYPOTHESIS\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
-    operational_def_match = re.search(r"^\s*OPERATIONAL\s+DEF\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
-
-    # Missing if none of these headers present
-    if not position_match and not hypothesis_match and not operational_def_match:
+    # Use centralized helper to check for operational definition
+    if not _check_operational_definition(claim_text):
         rejection_types.append("missing_operational_definition")
-    else:
-        # Check if explicit OPERATIONAL DEF field exists (new format) - if so, operational def is present
-        if operational_def_match:
-            has_operational_definition = True
-        else:
-            # Otherwise check POSITION or HYPOTHESIS text for operational definition phrases
-            main_statement_match = position_match or hypothesis_match
-            if main_statement_match:
-                main_statement_text = main_statement_match.group(1)
-                has_operational_definition = bool(re.search(
-                    r"\b(defined as|operational(?:ly)?|measured by|quantified by|observed as|when\s+measured|by\s+tracking)\b",
-                    main_statement_text,
-                    re.IGNORECASE,
-                ))
-            else:
-                has_operational_definition = False
-
-        if not has_operational_definition:
-            rejection_types.append("missing_operational_definition")
 
     step_lines = re.findall(r"^\s*STEP\s*\d+\s*[:\-]\s*(.+)$", claim_text, re.IGNORECASE | re.MULTILINE)
     has_testable_step = any(re.search(
