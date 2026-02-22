@@ -97,7 +97,8 @@ class ArchiveEntry:
     challenger_entity: str = ""
     outcome: str = ""
     ruling_type: str = ""
-    rejection_reason: str = ""                   # DEPENDENCY_FAILURE|MAGNITUDE_IMPLAUSIBLE|etc (destroyed/retracted only)
+    rejection_reason: str = ""                   # DEPENDENCY_FAILURE|EVIDENCE_INSUFFICIENT|etc (destroyed/retracted only)
+    secondary_rejection_reason: str = ""         # Optional secondary reason for compound failures
     outcome_reasoning: str = ""
     open_questions: List[str] = field(default_factory=list)
     drama_score: int = 0
@@ -314,7 +315,14 @@ class State:
                 f"Option A — DEFEND: rebut the challenge with new reasoning\n"
                 f"Option B — CONCEDE AND NARROW: acknowledge partial flaw, narrow the claim\n"
                 f"Option C — RETRACT: the challenge is fatal, withdraw the claim\n\n"
-                f"Begin with 'OPTION A:', 'OPTION B:', or 'OPTION C:'"
+                f"If choosing Option C, you MUST provide a reason tag from this list:\n"
+                f"- DEPENDENCY_FAILURE: upstream claim insufficiently grounded\n"
+                f"- EVIDENCE_INSUFFICIENT: not enough empirical support\n"
+                f"- MAGNITUDE_IMPLAUSIBLE: predicted effect size inconsistent with constraints\n"
+                f"- PARAMETER_UNJUSTIFIED: key constants chosen arbitrarily\n"
+                f"- LOGIC_FAILURE: reasoning chain contains logical error\n"
+                f"- SCOPE_EXCEEDED: claim extends beyond what evidence supports\n\n"
+                f"Begin with 'OPTION A:', 'OPTION B:', or 'OPTION C: [REASON_TAG]'"
             ),
             max_tokens=800,
         )
@@ -1069,6 +1077,37 @@ def _detect_option_c(rebuttal_text: str) -> bool:
     return "OPTION C" in upper or upper.strip().startswith("C:")
 
 
+def _extract_option_c_reason(rebuttal_text: str) -> str:
+    """
+    Extracts the rejection reason tag from an Option C rebuttal.
+    Expected format: "OPTION C: REASON_TAG" or "OPTION C — REASON_TAG"
+    Returns the reason tag if found, otherwise defaults to "LOGIC_FAILURE".
+    """
+    valid_reasons = {
+        "DEPENDENCY_FAILURE",
+        "EVIDENCE_INSUFFICIENT",
+        "MAGNITUDE_IMPLAUSIBLE",
+        "PARAMETER_UNJUSTIFIED",
+        "LOGIC_FAILURE",
+        "SCOPE_EXCEEDED",
+    }
+
+    # Look for "OPTION C: REASON_TAG" or "OPTION C — REASON_TAG"
+    match = re.search(
+        r"OPTION\s+C\s*[:\-—]\s*([A-Z_]+)",
+        rebuttal_text,
+        re.IGNORECASE | re.MULTILINE,
+    )
+
+    if match:
+        reason = match.group(1).upper().replace(" ", "_")
+        if reason in valid_reasons:
+            return reason
+
+    # Default if no valid reason found
+    return "LOGIC_FAILURE"
+
+
 def determine_outcome(
     claim_text: str,
     challenge_text: str,
@@ -1094,10 +1133,13 @@ def determine_outcome(
     """
     # Option C is auto-retracted before judge sees it
     if _detect_option_c(rebuttal_text):
+        rejection_reason = _extract_option_c_reason(rebuttal_text)
         return {
             "outcome": "retracted",
             "ruling_type": "REJECT_SCOPE",
-            "reasoning": "Researcher chose to retract (Option C).",
+            "rejection_reason": rejection_reason,
+            "secondary_rejection_reason": None,
+            "reasoning": f"Researcher chose to retract (Option C): {rejection_reason}",
             "open_questions": [],
             "scores": {"drama": 3, "novelty": 1, "depth": 1},
         }
@@ -1183,17 +1225,18 @@ def determine_outcome(
             f"'destroyed' with ruling_type REJECT_SCOPE unless it demonstrates clear advancement "
             f"over existing archive entries.\n\n"
             f"REQUIRED: If outcome is 'retracted' or 'destroyed', you MUST provide rejection_reason "
-            f"(one of the following):\n"
+            f"(primary) and optionally secondary_rejection_reason:\n"
             f"- DEPENDENCY_FAILURE: upstream claim insufficiently grounded\n"
+            f"- EVIDENCE_INSUFFICIENT: not enough empirical support for claims made\n"
             f"- MAGNITUDE_IMPLAUSIBLE: predicted effect size inconsistent with known constraints\n"
             f"- PARAMETER_UNJUSTIFIED: key constants chosen arbitrarily without derivation\n"
-            f"- EXPERIMENTAL_BOUNDS: existing measurements would have detected claimed effect\n"
             f"- LOGIC_FAILURE: reasoning chain contains logical error\n"
             f"- SCOPE_EXCEEDED: claim extends beyond what evidence supports\n\n"
             f"Return JSON:\n"
             f'{{"outcome": "survived|partial|retracted|destroyed",\n'
             f' "ruling_type": "SURVIVED|REJECT_FACT|REJECT_LOGIC|REJECT_SCOPE|REJECT_CITATION|REJECT_CLARITY|REVISE",\n'
-            f' "rejection_reason": "DEPENDENCY_FAILURE|MAGNITUDE_IMPLAUSIBLE|PARAMETER_UNJUSTIFIED|EXPERIMENTAL_BOUNDS|LOGIC_FAILURE|SCOPE_EXCEEDED (required for destroyed/retracted)",\n'
+            f' "rejection_reason": "DEPENDENCY_FAILURE|EVIDENCE_INSUFFICIENT|MAGNITUDE_IMPLAUSIBLE|PARAMETER_UNJUSTIFIED|LOGIC_FAILURE|SCOPE_EXCEEDED (required for destroyed/retracted)",\n'
+            f' "secondary_rejection_reason": "same options as above (optional, for compound failures)",\n'
             f' "reasoning": "2-3 sentences",\n'
             f' "open_questions": ["question raised by exchange", ...],\n'
             f' "scores": {{"drama": 1-10, "novelty": 1-10, "depth": 1-10}}}}'
@@ -1205,6 +1248,7 @@ def determine_outcome(
         "outcome": "survived",
         "ruling_type": "SURVIVED",
         "rejection_reason": None,
+        "secondary_rejection_reason": None,
         "reasoning": "Unable to parse judge response.",
         "open_questions": [],
         "scores": {"drama": 3, "novelty": 3, "depth": 3},
@@ -1239,20 +1283,21 @@ def determine_outcome(
     # Validate rejection_reason (required for destroyed/retracted)
     valid_rejection_reasons = {
         "DEPENDENCY_FAILURE",
+        "EVIDENCE_INSUFFICIENT",
         "MAGNITUDE_IMPLAUSIBLE",
         "PARAMETER_UNJUSTIFIED",
-        "EXPERIMENTAL_BOUNDS",
         "LOGIC_FAILURE",
         "SCOPE_EXCEEDED",
     }
     rejection_reason = result.get("rejection_reason", "").upper() if result.get("rejection_reason") else None
+    secondary_rejection_reason = result.get("secondary_rejection_reason", "").upper() if result.get("secondary_rejection_reason") else None
 
     if result["outcome"] in {"destroyed", "retracted"}:
         # Rejection reason is required for destroyed/retracted outcomes
         if not rejection_reason or rejection_reason not in valid_rejection_reasons:
             # Default based on ruling_type if not provided or invalid
             reason_mapping = {
-                "REJECT_FACT": "EXPERIMENTAL_BOUNDS",
+                "REJECT_FACT": "EVIDENCE_INSUFFICIENT",
                 "REJECT_LOGIC": "LOGIC_FAILURE",
                 "REJECT_SCOPE": "SCOPE_EXCEEDED",
                 "REJECT_CITATION": "DEPENDENCY_FAILURE",
@@ -1261,9 +1306,16 @@ def determine_outcome(
             rejection_reason = reason_mapping.get(ruling_type, "LOGIC_FAILURE")
 
         result["rejection_reason"] = rejection_reason
+
+        # Validate secondary rejection reason if provided
+        if secondary_rejection_reason and secondary_rejection_reason not in valid_rejection_reasons:
+            secondary_rejection_reason = None  # Ignore invalid secondary reasons
+
+        result["secondary_rejection_reason"] = secondary_rejection_reason
     else:
         # Not required for survived/partial
         result["rejection_reason"] = None
+        result["secondary_rejection_reason"] = None
 
     return result
 
