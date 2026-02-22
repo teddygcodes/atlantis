@@ -142,7 +142,7 @@ Domains:              10
 Governance cycles:    3
 Total cost:           $2.49
 Cost per cycle:       $0.83
-LLM calls:           234 (187 Sonnet, 90 Haiku, 0 Opus)
+LLM calls:           277 (187 Sonnet, 90 Haiku, 0 Opus)
 ```
 
 ## Quick Start
