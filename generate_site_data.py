@@ -40,12 +40,13 @@ STATUS_TO_RULING = {
     "overturned": "DESTROYED",
     "foundation_challenged": "DESTROYED",
     "chain_broken": "DESTROYED",
+    "founding": "FOUNDING_DEPOSIT",
 }
 
 
 def _normalize_ruling(entry: dict[str, Any]) -> str:
     explicit = str(entry.get("ruling_type", "")).strip().upper()
-    if explicit in {"SURVIVED", "PARTIAL", "REVISE", "DESTROYED"}:
+    if explicit in {"SURVIVED", "PARTIAL", "REVISE", "DESTROYED", "FOUNDING_DEPOSIT"}:
         return explicit
     status = str(entry.get("status", "")).strip().lower()
     return STATUS_TO_RULING.get(status, "REVISE")
@@ -336,7 +337,7 @@ def generate_ts(entries: list[dict[str, Any]]) -> str:
         "  domain: Domain;",
         "  cycle: number;",
         "  state: string;",
-        "  ruling: \"REVISE\" | \"PARTIAL\" | \"DESTROYED\" | \"SURVIVED\";",
+        "  ruling: \"REVISE\" | \"PARTIAL\" | \"DESTROYED\" | \"SURVIVED\" | \"FOUNDING_DEPOSIT\";",
         "  position: string;",
         "  hypothesis?: string;",
         "  operational_def?: string;",

@@ -20,7 +20,7 @@ export const CHRONICLE_ENTRIES: ChronicleEntry[] = [
   {
     "cycle": 1,
     "title": "The Opening Arguments",
-    "narrative": "Cycle 1 intensified the rivalry. Outcomes were 17 survived, 20 revised/partial, and 4 destroyed. Domain breakdown — Biology: 2 survived, 0 validated-with-revisions, 0 refuted; Economics: 2 survived, 0 validated-with-revisions, 0 refuted; Finance: 2 survived, 0 validated-with-revisions, 0 refuted; Geography: 2 survived, 0 validated-with-revisions, 0 refuted; History: 2 survived, 0 validated-with-revisions, 0 refuted; Mathematics: 1 survived, 0 validated-with-revisions, 2 refuted; Medicine: 2 survived, 0 validated-with-revisions, 0 refuted; Philosophy: 1 survived, 0 validated-with-revisions, 1 refuted; Physics: 1 survived, 0 validated-with-revisions, 1 refuted; Technology: 2 survived, 0 validated-with-revisions, 0 refuted; Unknown: 0 survived, 20 validated-with-revisions, 0 refuted."
+    "narrative": "Cycle 1 intensified the rivalry. Outcomes were 17 survived, 0 revised/partial, and 4 destroyed. Domain breakdown — Biology: 2 survived, 0 validated-with-revisions, 0 refuted; Economics: 2 survived, 0 validated-with-revisions, 0 refuted; Finance: 2 survived, 0 validated-with-revisions, 0 refuted; Geography: 2 survived, 0 validated-with-revisions, 0 refuted; History: 2 survived, 0 validated-with-revisions, 0 refuted; Mathematics: 1 survived, 0 validated-with-revisions, 2 refuted; Medicine: 2 survived, 0 validated-with-revisions, 0 refuted; Philosophy: 1 survived, 0 validated-with-revisions, 1 refuted; Physics: 1 survived, 0 validated-with-revisions, 1 refuted; Technology: 2 survived, 0 validated-with-revisions, 0 refuted; Unknown: 0 survived, 0 validated-with-revisions, 0 refuted."
   },
   {
     "cycle": 2,
@@ -104,9 +104,9 @@ export const STATES: StateEntity[] = [
     "domain": "Unknown",
     "approach": "Hamilton on systems_theory (cycle 1)",
     "wins": 0,
-    "partials": 20,
+    "partials": 0,
     "losses": 0,
-    "learningArc": "Across 1 cycle(s), Founding Era logged 0 survivals, 20 partial/revise outcomes, and 0 destructive losses. Most recent move: Carson on ecosystem_theory (cycle 1)."
+    "learningArc": "Across 1 cycle(s), Founding Era logged 0 survivals, 0 partial/revise outcomes, and 0 destructive losses. Most recent move: Carson on ecosystem_theory (cycle 1)."
   },
   {
     "name": "Geography_Alpha",
@@ -300,7 +300,7 @@ export interface Hypothesis {
   domain: Domain;
   cycle: number;
   state: string;
-  ruling: "REVISE" | "PARTIAL" | "DESTROYED" | "SURVIVED";
+  ruling: "REVISE" | "PARTIAL" | "DESTROYED" | "SURVIVED" | "FOUNDING_DEPOSIT";
   position: string;
   hypothesis?: string;
   operational_def?: string;
@@ -326,7 +326,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Hamilton on systems_theory (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -342,7 +342,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Jefferson on political_philosophy (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -358,7 +358,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Franklin on epistemology (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -374,7 +374,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Madison on legislative_process (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -390,7 +390,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Marshall on judicial_systems (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -406,7 +406,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Washington on failure_analysis (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -422,7 +422,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Paine on transparency_systems (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -438,7 +438,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Tyler on systems_integration (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -454,7 +454,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Darwin on evolutionary_theory (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -470,7 +470,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Curie on scientific_method (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -486,7 +486,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Turing on computation_theory (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -502,7 +502,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Aristotle on ethics (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -518,7 +518,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Hippocrates on diagnostic_systems (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -534,7 +534,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Da Vinci on design_thinking (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -550,7 +550,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Brunel on infrastructure_design (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -566,7 +566,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Olympia on performance_metrics (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -582,7 +582,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Smith on resource_economics (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -598,7 +598,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Herodotus on historiography (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -614,7 +614,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Euclid on formal_logic (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -630,7 +630,7 @@ export const HYPOTHESES: Hypothesis[] = [
     "domain": "Unknown",
     "cycle": 1,
     "state": "Founding Era",
-    "ruling": "REVISE",
+    "ruling": "FOUNDING_DEPOSIT",
     "validation_json": null,
     "position": "Carson on ecosystem_theory (cycle 1)",
     "challenge": "No formal challenge was recorded.",
@@ -2306,7 +2306,7 @@ export const ABOUT_PARAGRAPHS = [
 export const STATS = {
   "domains": 11,
   "states": 21,
-  "validated": 71,
+  "validated": 51,
   "refuted": 12
 };
 

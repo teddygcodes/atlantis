@@ -26,12 +26,11 @@ function useScrollReveal(deps: unknown[] = []) {
   return ref;
 }
 
-const DOMAIN_FILTERS = [
-  "All",
-  "Consciousness",
-  "Causation",
-  "Mathematics",
-] as const;
+// Generate domain filters dynamically from actual data
+const allDomains = Array.from(
+  new Set(HYPOTHESES.map((h) => h.domain).filter((d) => d !== "Unknown"))
+).sort();
+const DOMAIN_FILTERS = ["All", ...allDomains] as const;
 type DomainFilter = (typeof DOMAIN_FILTERS)[number];
 
 export function Archive() {
@@ -39,7 +38,7 @@ export function Archive() {
   const containerRef = useScrollReveal([filter]);
 
   const validatedHypotheses = HYPOTHESES.filter(
-    (c) => c.ruling === "SURVIVED" || c.ruling === "REVISE" || c.ruling === "PARTIAL"
+    (c) => c.ruling === "SURVIVED" || c.ruling === "REVISE" || c.ruling === "PARTIAL" || c.ruling === "FOUNDING_DEPOSIT"
   );
   const filteredHypotheses =
     filter === "All"
@@ -117,7 +116,7 @@ export function Archive() {
 function VaultEntry({ hypothesis }: { hypothesis: Hypothesis }) {
   const [unlocked, setUnlocked] = useState(false);
   const claim = hypothesis;
-  const isSurviving = claim.ruling === "REVISE" || claim.ruling === "PARTIAL";
+  const isSurviving = claim.ruling === "REVISE" || claim.ruling === "PARTIAL" || claim.ruling === "FOUNDING_DEPOSIT";
 
   return (
     <article
@@ -169,13 +168,17 @@ function VaultEntry({ hypothesis }: { hypothesis: Hypothesis }) {
             </span>
             <span
               className={`rounded-sm px-2 py-0.5 text-[9px] uppercase tracking-wider ${
-                claim.ruling === "REVISE"
+                claim.ruling === "FOUNDING_DEPOSIT"
+                  ? "bg-blue-500/10 text-blue-400"
+                  : claim.ruling === "REVISE"
                   ? "bg-accent/10 text-accent"
+                  : claim.ruling === "SURVIVED"
+                  ? "bg-green-500/10 text-green-400"
                   : "bg-amber-500/10 text-amber-500"
               }`}
               style={{ fontFamily: "var(--font-ibm-plex-mono)" }}
             >
-              {claim.ruling}
+              {claim.ruling === "FOUNDING_DEPOSIT" ? "FOUNDING DEPOSIT" : claim.ruling}
             </span>
             <span
               className="text-[10px] text-muted/40"
