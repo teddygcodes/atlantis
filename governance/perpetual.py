@@ -132,12 +132,21 @@ class PerpetualEngine:
 
         # Steps 1-17: All rival pairs
         for pair in self.state_manager.get_active_pairs():
-            if pair.warmup_remaining > 0:
-                result = self._run_warmup_pair(pair)
-                pair.warmup_remaining -= 1
-            else:
-                result = self._run_rival_pipeline(pair)
-            self.cycle_log_data["pairs"].append(result)
+            try:
+                if pair.warmup_remaining > 0:
+                    result = self._run_warmup_pair(pair)
+                    pair.warmup_remaining -= 1
+                else:
+                    result = self._run_rival_pipeline(pair)
+                self.cycle_log_data["pairs"].append(result)
+            except Exception as e:
+                print(f"    PAIR SKIPPED: {pair.domain} — {type(e).__name__}: {e}")
+                self.cycle_log_data["pairs"].append({
+                    "pair": f"{pair.domain} (error)",
+                    "skipped": True,
+                    "reason": f"{type(e).__name__}: {str(e)[:100]}"
+                })
+                continue
 
         # Step 18: Federal Lab (after all pairs)
         if self._is_federal_lab_eligible():

@@ -280,7 +280,7 @@ class LLMProvider:
             temperature=temperature,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
-            timeout=30.0  # 30 second timeout
+            timeout=120.0  # 120 second timeout - Sonnet research claims can take >30s
         )
 
         return LLMResponse(
