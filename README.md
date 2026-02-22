@@ -10,7 +10,7 @@ Atlantis is a closed-loop AI civilization that produces validated knowledge thro
 
 The breakthrough: governance prevents death. Multi-agent AI systems fail because they loop, hallucinate in circles, and drift into nonsense. Atlantis solves this with structural pressure — constitutional law, token economies, objective validators, and tiered knowledge that forces the system to destroy its own bad work.
 
-The result: research-grade hypotheses with operational definitions, falsification criteria, and citation chains — produced for under $1 per governance cycle.
+The result: research-grade hypotheses with operational definitions, falsification criteria, and citation chains — produced for under $2 per governance cycle.
 
 ## How It Works
 
@@ -27,10 +27,11 @@ Phase 2: Autonomous Governance (3 cycles)
     2. Claims pass through objective validators + real-world anchors
     3. Rival critic attacks the claim
     4. Researcher defends with rebuttal
-    5. Judge rules (with anchor evidence in context)
+    5. Judge rules with structured rejection codes
     6. Token economy rewards/punishes States
     7. Federal Lab destabilizes surviving claims
-    8. Content pipeline generates narratives
+    8. State performance profiles + critic tracking updated
+    9. Content pipeline generates narratives
 ```
 
 ## Architecture
@@ -44,20 +45,22 @@ core/
   exceptions.py      — Custom exception types
 
 governance/
-  perpetual.py       — Adversarial governance loop
+  perpetual.py       — Adversarial governance loop + learning system
   states.py          — State entities (researcher, critic, lab, senator)
   validators.py      — Objective validation (format + domain checks)
   anchors.py         — Real-world anchors (SymPy math, physics, dates, etc.)
-  content.py         — Content generation pipeline
 
 founders/
-  profiles.py        — 20 Founder definitions + specializations
   convention.py      — Constitutional Convention (Jefferson draft + amendments)
 
+content/
+  generator.py       — Content generation pipeline
+  logger.py          — Structured logging
+
 runs/                — Timestamped output from each engine run
-  archive.json       — Full knowledge base
+  archive.json       — Full knowledge base (extended schema)
   archive.md         — Human-readable archive
-  domain_health.json — Domain metrics
+  domain_health.json — Domain metrics + warning flags
   cost_summary.json  — API cost breakdown
   logs/              — Per-cycle logs
   content/           — Generated blog posts, debates, narratives
@@ -87,7 +90,7 @@ app/                 — Next.js 16 frontend (Vercel deployment)
 |------|-------|-----------|
 | Researcher claims | Sonnet | Deep reasoning for hypothesis generation |
 | Critic challenges | Sonnet | Sophisticated attack strategies |
-| Judge rulings | Sonnet | Nuanced evaluation |
+| Judge rulings | Sonnet | Nuanced evaluation with rejection codes |
 | Rebuttals | Sonnet | Complex defense arguments |
 | Normalization | Haiku | Fast structured extraction |
 | Anti-loop checks | Haiku | Quick pattern matching |
@@ -109,6 +112,28 @@ Claims pass through two validation layers before reaching the judge:
 
 Anchors inform the judge — they don't override it. A flagged claim can still survive if the judge finds the flag is about a peripheral detail, not the core hypothesis.
 
+**Anchor Teeth (V2.3+):** Surviving claims that were flagged by objective validators receive a -200 token penalty. Anchors don't override the judge, but they create economic consequences for borderline claims.
+
+## Learning System (V2.4)
+
+Atlantis agents improve across cycles through structured feedback loops:
+
+**State Performance Profiles** — Each researcher receives a descriptive summary of their track record before producing claims: survival rate, failure modes (from structured retraction codes), judge feedback themes, token trajectory. Profiles are context, not authority — the constitution and judge remain supreme.
+
+**Critic Performance Tracking** — Critics receive their impact rate (challenges that changed outcomes) and precision rate (objections upheld by judge). Prevents both passive and trigger-happy critics.
+
+**Structured Retraction Reasons** — Every destruction and retraction includes a primary reason tag:
+- `DEPENDENCY_FAILURE` — upstream claim insufficiently grounded
+- `EVIDENCE_INSUFFICIENT` — not enough empirical support
+- `MAGNITUDE_IMPLAUSIBLE` — effect size inconsistent with constraints
+- `PARAMETER_UNJUSTIFIED` — key constants chosen arbitrarily
+- `LOGIC_FAILURE` — reasoning chain contains errors
+- `SCOPE_EXCEEDED` — claim extends beyond evidence
+
+These feed the performance profiles, creating a closed learning loop.
+
+**Domain Health Report** — End-of-run comparison across all domains. Flags weak critics (>90% survival after 3+ cycles) and format issues (<30% survival).
+
 ## Token Economy
 
 States earn and lose tokens based on performance:
@@ -120,6 +145,7 @@ States earn and lose tokens based on performance:
 | Rival's claim narrowed by critic | +2000 |
 | Claim retracted | +500 |
 | Claim destroyed | -500 |
+| Anchor-teethed surviving claim | -200 |
 
 States that drop below zero tokens enter probation. Continued failure leads to dissolution — the State dies and is replaced.
 
@@ -127,22 +153,36 @@ States that drop below zero tokens enter probation. Continued failure leads to d
 
 | Tier | Requirement | Privileges |
 |------|-------------|------------|
-| Tier 1 | First surviving claim | Can participate in governance |
+| Tier 1 | First surviving claim | Can publish Foundation claims |
 | Tier 2 | 3+ surviving claims | Can publish to main archive |
 | Tier 3 | 5+ surviving claims | Can make expertise claims |
 | Tier 4 | 10+ surviving claims | Can serve on review panels |
 
-## First Run Results (V2.2)
+## Run Results
+
+### V2.3 (Latest Benchmark)
+
+```
+Surviving claims:     111
+Survival rate:        82.9%
+Active States:        20
+Tier 1 promotions:    15
+Domains:              10
+Governance cycles:    3
+Total cost:           $4.77
+Cost per cycle:       $1.59
+LLM calls:            498 (302 Sonnet, 240 Haiku, 0 Opus)
+Cross-rival citations: Active in Finance, History, Biology, Geography
+Federal Lab destroys:  2 (with chain collapse enforcement)
+```
+
+### V2.2 (First 10-Domain Run)
 
 ```
 Surviving claims:     36
 Survival rate:        64.6%
-Active States:        20
-Domains:              10
-Governance cycles:    3
 Total cost:           $2.49
-Cost per cycle:       $0.83
-LLM calls:           277 (187 Sonnet, 90 Haiku, 0 Opus)
+LLM calls:            277 (187 Sonnet, 90 Haiku, 0 Opus)
 ```
 
 ## Quick Start
@@ -168,7 +208,7 @@ npm install
 # Set your API key
 export ANTHROPIC_API_KEY=your-key-here
 
-# Full 10-domain run (3 governance cycles, ~$2.50)
+# Full 10-domain run (3 governance cycles, ~$5)
 python3 __main__.py --demo-10-domains --force-clean
 
 # Output appears in runs/<timestamp>/
@@ -211,10 +251,10 @@ Engine run → runs/<timestamp>/archive.json
 
 ## What's Next
 
-- **Validation persistence** — Store anchor flags/warnings in archive for frontend display
-- **Researcher prompt optimization** — Extension/Foundation format requirements, increased token limits
-- **Commercial application** — Adversarial validation applied to electrical contractor lighting takeoffs
-- **Content pipeline** — TikTok/video generation from governance events
+- **Adaptive prompt evolution** — Use accumulated performance data to modify system prompts automatically
+- **State spawning** — New States spawn dynamically as domains mature
+- **City/Town formation** — Cities from clusters of validated research, Towns from practical applications
+- **The Beast** — Commercial product using adversarial validation for electrical contractor lighting takeoffs
 
 ## Cost Structure
 
@@ -224,7 +264,7 @@ Atlantis uses multi-model routing to minimize API costs:
 - Sonnet ($3/MTok in, $15/MTok out) for research and judgment
 - Opus ($15/MTok in, $75/MTok out) reserved for Supreme Court
 
-A full 10-domain, 3-cycle run costs approximately **$2.50**.
+A full 10-domain, 3-cycle run costs approximately **$5**.
 
 ## License
 
