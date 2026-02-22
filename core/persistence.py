@@ -206,6 +206,9 @@ class PersistenceLayer:
         if "auto_filled_gap" not in cols:
             conn.execute("ALTER TABLE archive_entries ADD COLUMN auto_filled_gap INTEGER DEFAULT 0")
         conn.execute(
+            "ALTER TABLE archive_entries ADD COLUMN IF NOT EXISTS validation_json TEXT DEFAULT NULL"
+        )
+        conn.execute(
             "UPDATE archive_entries "
             "SET archive_tier = CASE "
             "WHEN status IN ('surviving', 'survived') THEN 'main' "
