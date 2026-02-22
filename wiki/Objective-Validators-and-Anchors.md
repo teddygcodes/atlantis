@@ -211,9 +211,19 @@ A flagged claim CAN still survive if the rebuttal addresses the issue.
 - Judge evaluates subjective merit (novelty, reasoning quality)
 - Human oversight: User can audit anchor findings in `validation_json` field
 
+## Anchor Teeth (v2.3)
+
+As of v2.3, anchors have economic consequences beyond informing the judge:
+
+- If a claim **survives** but had anchor **flags**, the State loses **200 tokens**
+- This means anchors always cost something, even when the judge overrides them
+- The penalty is logged: "{state_name} penalized -200 tokens (anchor flags on surviving claim)"
+
+This creates a middle ground: anchors don't auto-destroy claims, but States that repeatedly trigger anchor flags will bleed tokens and eventually face probation.
+
 ## Anchor Validation in Archive
 
-Since v2.2, validation results are **persisted** with each claim:
+Since v2.3, validation results are **persisted** with each claim:
 
 ```typescript
 {
@@ -234,6 +244,8 @@ Since v2.2, validation results are **persisted** with each claim:
 - Badge showing which anchor caught the issue
 
 ## Adding New Anchors
+
+Chemistry is shown as an example — it is not currently implemented. See governance/anchors.py for all active anchors.
 
 To add a domain anchor:
 
