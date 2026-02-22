@@ -1371,6 +1371,242 @@ class PerpetualEngine:
         out_path = self.output_dir / "domain_health.json"
         out_path.write_text(json.dumps(health, indent=2), encoding="utf-8")
 
+    def _build_state_snapshots(self) -> list:
+        """
+        Build per-State per-cycle snapshots for learning system.
+        Returns list of dicts with state_id, cycle, performance metrics.
+        """
+        snapshots = []
+        all_entries = self.db.get_all_archive_entries()
+
+        # Group entries by state and cycle
+        state_cycle_map = {}
+        for e in all_entries:
+            state = e.get("source_state", "")
+            cycle = e.get("cycle_created", 0)
+            if not state or state == "Founding Era":
+                continue
+
+            key = (state, cycle)
+            if key not in state_cycle_map:
+                state_cycle_map[key] = {
+                    "attempted": 0,
+                    "survived": 0,
+                    "retracted": 0,
+                    "destroyed": 0,
+                    "anchor_flags": 0,
+                    "token_deltas": [],
+                    "judge_feedback": [],
+                }
+
+            data = state_cycle_map[key]
+            data["attempted"] += 1
+
+            outcome = e.get("outcome", "")
+            if outcome == "survived":
+                data["survived"] += 1
+            elif outcome == "retracted":
+                data["retracted"] += 1
+            elif outcome == "destroyed":
+                data["destroyed"] += 1
+            elif outcome == "partial":
+                data["survived"] += 1  # Partial counts as survived
+
+            # Count anchor flags from validation_json
+            validation = e.get("validation_json")
+            if validation:
+                try:
+                    val_data = json.loads(validation) if isinstance(validation, str) else validation
+                    flags = val_data.get("flags", [])
+                    data["anchor_flags"] += len(flags)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # Track tokens earned
+            tokens = e.get("tokens_earned", 0)
+            if tokens:
+                data["token_deltas"].append(tokens)
+
+            # Collect judge feedback
+            reasoning = e.get("outcome_reasoning", "")
+            if reasoning and len(reasoning) > 10:
+                data["judge_feedback"].append(reasoning)
+
+        # Build snapshot dicts
+        for (state, cycle), data in state_cycle_map.items():
+            # Compute token delta (sum of all token changes this cycle)
+            token_delta = sum(data["token_deltas"])
+
+            # Summarize judge feedback (max 200 tokens ~800 chars)
+            feedback_summary = ""
+            if data["judge_feedback"]:
+                # Take first 3 most recent feedback items
+                feedback_text = " | ".join(data["judge_feedback"][:3])
+                feedback_summary = feedback_text[:800]  # Approx 200 tokens
+
+            snapshots.append({
+                "state_id": state,
+                "cycle": cycle,
+                "claims_attempted": data["attempted"],
+                "claims_survived": data["survived"],
+                "claims_retracted": data["retracted"],
+                "claims_destroyed": data["destroyed"],
+                "anchor_flags": data["anchor_flags"],
+                "token_delta": token_delta,
+                "judge_feedback_summary": feedback_summary,
+            })
+
+        # Sort by cycle, then state
+        snapshots.sort(key=lambda x: (x["cycle"], x["state_id"]))
+        return snapshots
+
+    def _build_critic_snapshots(self) -> list:
+        """
+        Build per-critic per-cycle snapshots for learning system.
+        Tracks challenge effectiveness and precision.
+        """
+        snapshots = []
+        all_entries = self.db.get_all_archive_entries()
+
+        # Group entries by challenger (critic) and cycle
+        critic_cycle_map = {}
+        for e in all_entries:
+            challenger = e.get("challenger_entity", "")
+            cycle = e.get("cycle_created", 0)
+
+            # Skip if no challenger (unchallenged claims) or if Federal Lab
+            if not challenger or challenger == "Federal Lab":
+                continue
+
+            key = (challenger, cycle)
+            if key not in critic_cycle_map:
+                critic_cycle_map[key] = {
+                    "issued": 0,
+                    "upheld": 0,
+                    "overruled": 0,
+                }
+
+            data = critic_cycle_map[key]
+            data["issued"] += 1
+
+            outcome = e.get("outcome", "")
+            ruling = e.get("ruling_type", "")
+
+            # Challenge upheld if claim was destroyed or retracted
+            if outcome in ("destroyed", "retracted"):
+                data["upheld"] += 1
+            # Challenge overruled if claim survived
+            elif outcome in ("survived", "partial"):
+                data["overruled"] += 1
+
+        # Build snapshot dicts
+        for (critic, cycle), data in critic_cycle_map.items():
+            total = data["issued"]
+            upheld = data["upheld"]
+            overruled = data["overruled"]
+
+            # Impact rate: challenges that changed outcome / total
+            # (destroyed + retracted are impact, survived/partial are not)
+            impact_rate = upheld / total if total > 0 else 0.0
+
+            # Precision rate: challenges upheld / total challenges
+            precision_rate = upheld / total if total > 0 else 0.0
+
+            snapshots.append({
+                "critic_id": critic,
+                "cycle": cycle,
+                "challenges_issued": total,
+                "challenges_upheld": upheld,
+                "challenges_overruled": overruled,
+                "impact_rate": round(impact_rate, 3),
+                "precision_rate": round(precision_rate, 3),
+            })
+
+        # Sort by cycle, then critic
+        snapshots.sort(key=lambda x: (x["cycle"], x["critic_id"]))
+        return snapshots
+
+    def _build_domain_metrics(self) -> list:
+        """
+        Build per-domain aggregate metrics for entire run.
+        """
+        metrics = []
+        all_entries = self.db.get_all_archive_entries()
+
+        # Group entries by domain
+        domain_map = {}
+        for e in all_entries:
+            # Infer domain from source_state (e.g., "Physics_Alpha" → "Physics")
+            state = e.get("source_state", "")
+            if not state or state == "Founding Era":
+                continue
+
+            # Extract domain from state name (split on underscore)
+            parts = state.split("_")
+            domain = parts[0] if parts else state
+
+            if domain not in domain_map:
+                domain_map[domain] = {
+                    "total": 0,
+                    "survived": 0,
+                    "retracted": 0,
+                    "destroyed": 0,
+                    "anchor_flags": 0,
+                    "tokens": [],
+                }
+
+            data = domain_map[domain]
+            data["total"] += 1
+
+            outcome = e.get("outcome", "")
+            if outcome in ("survived", "partial"):
+                data["survived"] += 1
+            elif outcome == "retracted":
+                data["retracted"] += 1
+            elif outcome == "destroyed":
+                data["destroyed"] += 1
+
+            # Count anchor flags
+            validation = e.get("validation_json")
+            if validation:
+                try:
+                    val_data = json.loads(validation) if isinstance(validation, str) else validation
+                    flags = val_data.get("flags", [])
+                    data["anchor_flags"] += len(flags)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # Track tokens
+            tokens = e.get("tokens_earned", 0)
+            if tokens:
+                data["tokens"].append(tokens)
+
+        # Build metric dicts
+        for domain, data in domain_map.items():
+            total = data["total"]
+            survived = data["survived"]
+            retracted = data["retracted"]
+            flags = data["anchor_flags"]
+
+            survival_rate = survived / total if total > 0 else 0.0
+            retraction_rate = retracted / total if total > 0 else 0.0
+            anchor_flag_rate = flags / total if total > 0 else 0.0
+
+            # Average tokens per outcome (all outcomes, not just survived)
+            avg_tokens = sum(data["tokens"]) / len(data["tokens"]) if data["tokens"] else 0.0
+
+            metrics.append({
+                "domain": domain,
+                "survival_rate": round(survival_rate, 3),
+                "retraction_rate": round(retraction_rate, 3),
+                "anchor_flag_rate": round(anchor_flag_rate, 3),
+                "avg_tokens_per_outcome": round(avg_tokens, 1),
+            })
+
+        # Sort by domain name
+        metrics.sort(key=lambda x: x["domain"])
+        return metrics
+
     def _export_archive(self):
         """
         Rebuild output/archive.md (human-readable, domain+cycle order).
@@ -1405,9 +1641,51 @@ class PerpetualEngine:
 
         (self.output_dir / "archive.md").write_text("".join(md_lines), encoding="utf-8")
 
-        # JSON archive (full data)
+        # JSON archive (extended schema with learning system support)
+        # Add per-claim computed fields
+        enhanced_entries = []
+        for e in all_entries:
+            # Copy all existing fields
+            enhanced = dict(e)
+
+            # Add retraction_reason (primary rejection_reason if retracted/destroyed)
+            rejection = e.get("rejection_reason", "")
+            retraction_reason = rejection if e.get("outcome") in ("retracted", "destroyed") else None
+            enhanced["retraction_reason"] = retraction_reason
+
+            # Add reason_tags (array of primary + secondary if present)
+            reason_tags = []
+            if rejection:
+                reason_tags.append(rejection)
+            secondary = e.get("secondary_rejection_reason", "")
+            if secondary:
+                reason_tags.append(secondary)
+            enhanced["reason_tags"] = reason_tags
+
+            enhanced_entries.append(enhanced)
+
+        # Build snapshots
+        state_snapshots = self._build_state_snapshots()
+        critic_snapshots = self._build_critic_snapshots()
+        domain_metrics = self._build_domain_metrics()
+
+        # Structure JSON with nested keys
+        archive_data = {
+            "archive_entries": enhanced_entries,
+            "state_snapshots": state_snapshots,
+            "critic_snapshots": critic_snapshots,
+            "domain_metrics": domain_metrics,
+            "meta": {
+                "last_cycle": self.cycle,
+                "total_entries": len(enhanced_entries),
+                "total_states": len(set(s["state_id"] for s in state_snapshots)),
+                "total_critics": len(set(c["critic_id"] for c in critic_snapshots)),
+                "total_domains": len(domain_metrics),
+            }
+        }
+
         (self.output_dir / "archive.json").write_text(
-            json.dumps(all_entries, indent=2, default=str), encoding="utf-8"
+            json.dumps(archive_data, indent=2, default=str), encoding="utf-8"
         )
 
     # ─── FEDERAL LAB ELIGIBILITY ──────────────────────────────────

@@ -408,13 +408,31 @@ def main() -> None:
         return
 
     try:
-        entries = json.loads(input_path.read_text(encoding="utf-8"))
+        archive_data = json.loads(input_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         print(f"Warning: failed to read archive data from {input_path}: {exc}. data.ts was not modified.")
         return
 
+    # Handle both old (list) and new (nested dict) formats
+    if isinstance(archive_data, list):
+        # Old format: direct list of entries
+        entries = archive_data
+    elif isinstance(archive_data, dict) and "archive_entries" in archive_data:
+        # New format: nested dict with archive_entries key
+        entries = archive_data["archive_entries"]
+        # Optional: log presence of new snapshot data
+        if archive_data.get("state_snapshots"):
+            print(f"  Found {len(archive_data['state_snapshots'])} state snapshots")
+        if archive_data.get("critic_snapshots"):
+            print(f"  Found {len(archive_data['critic_snapshots'])} critic snapshots")
+        if archive_data.get("domain_metrics"):
+            print(f"  Found {len(archive_data['domain_metrics'])} domain metrics")
+    else:
+        print(f"Warning: archive payload at {input_path} has unexpected format. data.ts was not modified.")
+        return
+
     if not isinstance(entries, list):
-        print(f"Warning: archive payload at {input_path} is not a JSON list. data.ts was not modified.")
+        print(f"Warning: archive_entries is not a list. data.ts was not modified.")
         return
 
     DATA_TS_PATH.write_text(generate_ts(entries), encoding="utf-8")
