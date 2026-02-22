@@ -33,7 +33,7 @@ export default function RootLayout({
             color: "#525252",
           }}
         >
-          <span>ATLANTIS v2.3</span>
+          <span>ATLANTIS v2.4</span>
           <span style={{ color: "#525252" }}>{" · "}</span>
           <a
             href="https://atlantiskb.com"
