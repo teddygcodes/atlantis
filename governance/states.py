@@ -224,13 +224,16 @@ class State:
             "CONCLUSION: [one sentence summary]\n"
             "GAP ADDRESSED: [what new ground this covers]\n"
             "CITATIONS: [#IDs from knowledge base, or real literature references]\n"
-            "KEYWORDS: [3-5 terms]"
+            "KEYWORDS: [3-5 terms]\n\n"
+            "IMPORTANT FORMAT REQUIREMENTS:\n"
+            "- Extension claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [what this doesn't cover]\n"
+            "- Foundation claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [limits], CITATIONS: #[archive IDs]"
         )
         response = self.models.complete(
             task_type="researcher_claims",
             system_prompt=self.researcher_config.system_prompt,
             user_prompt=base,
-            max_tokens=1200,
+            max_tokens=2500,
         )
         return response.content or ""
 
