@@ -51,6 +51,9 @@ class MetaOptimizer:
         self.history_file = Path(history_file)
         self.proposals_dir = Path(proposals_dir)
         self.llm = LLMProvider(mode=llm_mode)
+        print(f"[OPTIMIZER] LLM initialized in mode: {self.llm.mode}")
+        if self.llm.mode == "local":
+            print("[OPTIMIZER] WARNING: Running in local simulation mode - set ANTHROPIC_API_KEY to use real API")
 
     def run(self, run_path: str | None = None) -> Path:
         run_dir = self._resolve_run(run_path)
@@ -180,6 +183,16 @@ class MetaOptimizer:
         parsed = self._parse_alpha(alpha)
         ruling = self._extract_ruling(judge)
         proposed_text = parsed.get("proposed_change", current_excerpt)
+
+        # Validate that the proposed change is actually different
+        if proposed_text.strip() == current_excerpt.strip():
+            print(f"[OPTIMIZER] WARNING: Proposal {rank} has identical current and proposed text for {target_section}")
+            print(f"[OPTIMIZER] Pattern: {pattern.pattern}, attempting to force change...")
+            # Try to extract any suggested changes from the alpha response text
+            if "add text requiring" in alpha.lower() or "add:" in alpha.lower():
+                print(f"[OPTIMIZER] Alpha response suggests changes but didn't modify proposed_change field")
+                print(f"[OPTIMIZER] Alpha excerpt: {alpha[:500]}...")
+
         if len(proposed_text) > int(len(current_excerpt) * 1.1):
             ruling = "NARROWED"
             proposed_text = proposed_text[: int(len(current_excerpt) * 1.1)]
@@ -209,15 +222,82 @@ class MetaOptimizer:
         }
 
     def _alpha_prompt(self, pattern: FailurePattern, target_section: str, current_excerpt: str) -> str:
+        # Pattern-specific guidance
+        pattern_guidance = {
+            "LOGIC_FAILURE": (
+                "Claims have logical gaps or non-sequiturs. Add text requiring:\n"
+                "- 'Verify each logical step follows necessarily from the previous one'\n"
+                "- 'Identify and reject claims with missing inferential steps'\n"
+                "- 'Ensure conclusions are entailed by premises, not merely compatible'"
+            ),
+            "EVIDENCE_INSUFFICIENT": (
+                "Claims lack adequate supporting evidence. Add text requiring:\n"
+                "- 'Every empirical claim must cite specific data sources'\n"
+                "- 'Reject assertions that lack measurable evidence or replication pathway'\n"
+                "- 'Demand quantitative support for all magnitude claims'"
+            ),
+            "PARAMETER_UNJUSTIFIED": (
+                "Numerical parameters lack justification. Add text requiring:\n"
+                "- 'All thresholds and constants must have explicit derivations'\n"
+                "- 'Explain why each parameter value was chosen over alternatives'\n"
+                "- 'Link parameter choices to empirical constraints or theoretical bounds'"
+            ),
+            "MAGNITUDE_IMPLAUSIBLE": (
+                "Claims contain implausible numerical magnitudes. Add text requiring:\n"
+                "- 'Sanity-check all quantitative claims against known reference values'\n"
+                "- 'Flag magnitude claims that exceed domain-typical ranges by >2x'\n"
+                "- 'Require explicit justification for extraordinary magnitude claims'"
+            ),
+            "SCOPE_EXCEEDED": (
+                "Claims overgeneralize beyond supporting evidence. Add text requiring:\n"
+                "- 'Explicitly bound the scope of each claim to tested conditions'\n"
+                "- 'Challenge generalizations that extend beyond available data'\n"
+                "- 'Require domain-specific caveats for cross-domain applications'"
+            ),
+            "DEPENDENCY_FAILURE": (
+                "Claims cite retracted or weak dependencies. Add text requiring:\n"
+                "- 'Verify all cited claims have survived adversarial review'\n"
+                "- 'Check citation chains for retracted or partial-status dependencies'\n"
+                "- 'Reject claims that rest on unvalidated foundations'"
+            ),
+        }
+
+        guidance = pattern_guidance.get(pattern.pattern, "Add validation text to prevent this failure pattern.")
+
         return (
-            "You are Meta_Alpha optimizer. Return JSON with keys: proposed_change, rationale, "
-            "predicted_effect, risk, trade_off.\n"
-            "The proposal must REPLACE weak text, not append only.\n"
-            f"Target section: {target_section}\n"
-            f"Failure pattern: {pattern.pattern}; score={pattern.score}; frequency={pattern.frequency}; "
-            f"domains={pattern.affected_domains}; states={pattern.affected_states}.\n"
-            "Use only the excerpt as editable source.\n"
-            f"CURRENT_EXCERPT:\n{current_excerpt}"
+            "You are Meta_Alpha, a prompt optimization agent. Your task is to MODIFY the current prompt text "
+            "to address a specific failure pattern.\n\n"
+
+            f"FAILURE PATTERN: {pattern.pattern}\n"
+            f"Severity score: {pattern.score} | Frequency: {pattern.frequency} occurrences\n"
+            f"Affected domains: {', '.join(pattern.affected_domains)}\n"
+            f"Affected states: {', '.join(pattern.affected_states[:3])}{'...' if len(pattern.affected_states) > 3 else ''}\n\n"
+
+            f"HOW TO FIX {pattern.pattern}:\n{guidance}\n\n"
+
+            f"TARGET SECTION: {target_section}\n\n"
+
+            "INSTRUCTIONS:\n"
+            "1. Read the CURRENT_EXCERPT below (the current prompt text)\n"
+            "2. Identify where to add/modify text to prevent this failure pattern\n"
+            "3. Generate a MODIFIED version of the excerpt with specific validation requirements added\n"
+            "4. The proposed_change must be DIFFERENT from the current excerpt - add concrete validation text\n"
+            "5. Keep changes focused and minimal - replace weak phrasing or add specific checks\n"
+            "6. Do NOT just append text - integrate changes into the existing structure\n"
+            "7. Preserve the overall structure and formatting of the prompt\n\n"
+
+            "Return JSON with these exact keys:\n"
+            "{\n"
+            '  "proposed_change": "THE FULL MODIFIED PROMPT TEXT (must differ from current_excerpt)",\n'
+            '  "rationale": "Why this change addresses the failure pattern",\n'
+            '  "predicted_effect": "Expected impact on claim survival rates",\n'
+            '  "risk": "Potential downsides or unintended consequences",\n'
+            '  "trade_off": "What we might lose by adding this validation"\n'
+            "}\n\n"
+
+            f"CURRENT_EXCERPT:\n{current_excerpt}\n\n"
+
+            "Now generate the JSON with a MODIFIED proposed_change that addresses the failure pattern:"
         )
 
     @staticmethod
@@ -287,15 +367,23 @@ class MetaOptimizer:
         return state_name.split("_")[0]
 
     def _call_llm(self, prompt: str, model: str, max_tokens: int) -> str:
-        response = self.llm.complete(
-            system_prompt="You are an internal Atlantis meta-optimization agent.",
-            user_prompt=prompt,
-            model=model,
-            max_tokens=max_tokens,
-            temperature=0.3,
-            task_type="meta_optimizer",
-        )
-        return response.content or ""
+        try:
+            response = self.llm.complete(
+                system_prompt="You are an internal Atlantis meta-optimization agent.",
+                user_prompt=prompt,
+                model=model,
+                max_tokens=max_tokens,
+                temperature=0.3,
+                task_type="meta_optimizer",
+            )
+            content = response.content or ""
+            if not content:
+                print(f"[OPTIMIZER] WARNING: Empty LLM response for model {model}")
+            return content
+        except Exception as e:
+            print(f"[OPTIMIZER] ERROR: LLM call failed - {type(e).__name__}: {e}")
+            print(f"[OPTIMIZER] Model: {model}, Mode: {self.llm.mode}")
+            raise
 
     @staticmethod
     def _prompt_version() -> str:

@@ -5,6 +5,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+# Load environment variables from .env
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env", override=True)
+except ImportError:
+    pass  # dotenv not installed, assume env vars set manually
+
 from .apply import _apply_proposal_file
 from .optimizer import MetaOptimizer
 
