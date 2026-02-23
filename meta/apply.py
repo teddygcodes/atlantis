@@ -17,6 +17,18 @@ STATES_PATH = ROOT / "governance" / "states.py"
 RUNS_DIR = ROOT / "runs"
 
 ALLOWED_MARKERS = {"RESEARCHER_PROMPT", "CRITIC_PROMPT"}
+MARKER_CALLS_PER_RUN = {
+    "RESEARCHER_PROMPT": 60,
+    "CRITIC_PROMPT": 60,
+}
+MARKER_MODEL_TIER = {
+    "RESEARCHER_PROMPT": "sonnet",
+    "CRITIC_PROMPT": "sonnet",
+}
+INPUT_PRICE_PER_MTOK_USD = {
+    "haiku": 0.25,
+    "sonnet": 3.00,
+}
 REQUIRED_SECTIONS = {
     # Strict format requirements for researcher prompts (constitutional)
     "RESEARCHER_PROMPT": ["RESEARCH TYPE:", "HYPOTHESIS:", "CONCLUSION:", "CITATIONS:"],
@@ -269,23 +281,39 @@ def _show_proposal_diff_and_review(current_text: str, proposal: Proposal, index:
 
     print(f"\n=== Proposal {index}/{total}: {proposal.proposal_id} ({proposal.marker}) ===")
     print("\n".join(diff) or "(no textual change)")
+    old_tokens = _estimate_input_tokens(old_block)
+    new_tokens = _estimate_input_tokens(preview_new)
+    token_delta = new_tokens - old_tokens
+    cost_delta = _estimated_cost_impact_per_run(proposal.marker, token_delta)
+    print(
+        "Estimated cost impact: "
+        f"{token_delta:+d} tokens/call, "
+        f"~${cost_delta:.3f}/run"
+    )
     print(f"Adversarial review summary: {proposal.adversarial_review_summary}")
 
+def _estimate_input_tokens(text: str) -> int:
+    """Approximate token count using the provider's char-to-token heuristic."""
+    return len(text) // 4
 
-def _apply_proposal_file(proposal_path: Path, *, minor_bump: bool = False) -> None:
+
+def _estimated_cost_impact_per_run(marker: str, token_delta_per_call: int) -> float:
+    calls_per_run = MARKER_CALLS_PER_RUN.get(marker, 0)
+    model_tier = MARKER_MODEL_TIER.get(marker, "sonnet")
+    input_price_per_mtok = INPUT_PRICE_PER_MTOK_USD.get(model_tier, INPUT_PRICE_PER_MTOK_USD["sonnet"])
+    return (token_delta_per_call * calls_per_run / 1_000_000) * input_price_per_mtok
+
+
+def process_proposal_file(proposal_path: Path, dry_run: bool = False, *, minor_bump: bool = False) -> dict[str, int | bool | str]:
     payload = _read_json(proposal_path)
     proposals = _to_proposals(payload)
     if not proposals:
         print("No non-rejected proposals to apply. Exiting.")
-        return
+        return {"accepted": 0, "denied": 0, "version_changed": False, "new_version": "unchanged"}
 
     history = _read_history()
     prompt_version = str(history.get("current_prompt_version") or "v2.4.0")
     proposal_version = payload.get("prompt_version")
-
-    latest_run = _latest_run_dir(RUNS_DIR)
-    baseline_path = _snapshot_baseline(prompt_version, latest_run)
-    print(f"Baseline snapshot written: {baseline_path}")
 
     base_text = STATES_PATH.read_text(encoding="utf-8")
     new_text = base_text
@@ -295,6 +323,9 @@ def _apply_proposal_file(proposal_path: Path, *, minor_bump: bool = False) -> No
 
     for idx, p in enumerate(proposals, start=1):
         _show_proposal_diff_and_review(new_text, p, idx, len(proposals))
+        if dry_run:
+            continue
+
         confirm = input(f"\nApply proposal {idx} of {len(proposals)}? (y/n): ").strip().lower()
         if confirm != "y":
             denied_proposals.append({"proposal_id": p.proposal_id, "reason": "user_rejected"})
@@ -310,6 +341,10 @@ def _apply_proposal_file(proposal_path: Path, *, minor_bump: bool = False) -> No
 
         accepted_proposals.append(p)
         modified_sections.append(p.marker)
+
+    if dry_run:
+        print("Dry run enabled: proposals were displayed but not applied.")
+        return {"accepted": 0, "denied": len(proposals), "version_changed": False, "new_version": prompt_version}
 
     if accepted_proposals:
         STATES_PATH.write_text(new_text, encoding="utf-8")
@@ -358,11 +393,21 @@ def _apply_proposal_file(proposal_path: Path, *, minor_bump: bool = False) -> No
     history.setdefault("runs", []).append(run_record)
     history["current_prompt_version"] = new_version
     _write_json(HISTORY_PATH, history)
+
+    if accepted_proposals and new_version != prompt_version:
+        latest_run = _latest_run_dir(RUNS_DIR)
+        baseline_path = _snapshot_baseline(new_version, latest_run)
+        print(f"Baseline snapshot written: {baseline_path}")
     print(
         f"Applied {len(accepted_proposals)} proposal(s); denied {len(denied_proposals)} proposal(s). "
         f"prompt_version: {prompt_version} → {new_version}"
     )
     print(f"History updated: {HISTORY_PATH}")
+    return {"accepted": len(accepted_proposals), "denied": len(denied_proposals), "version_changed": new_version != prompt_version, "new_version": new_version}
+
+
+def _apply_proposal_file(proposal_path: Path) -> None:
+    process_proposal_file(proposal_path, dry_run=False)
 
 
 def _compare_mode(baseline_path: Path, run_dir: Path) -> int:

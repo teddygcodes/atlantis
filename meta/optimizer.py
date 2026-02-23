@@ -23,7 +23,7 @@ SEVERITY = {
     "CRITIC_TOO_PASSIVE": 5,
 }
 
-MAX_PROPOSALS = 10
+DEFAULT_MAX_PROPOSALS = 10
 
 PROMPT_MARKERS = {
     "RESEARCHER_PROMPT": ("# === RESEARCHER_PROMPT_START ===", "# === RESEARCHER_PROMPT_END ==="),
@@ -64,10 +64,11 @@ class MetaOptimizer:
         if self.llm.mode == "local":
             print("[OPTIMIZER] WARNING: Running in local simulation mode - set ANTHROPIC_API_KEY to use real API")
 
-    def run(self, run_path: str | None = None, cost_mode: bool = False) -> Path:
+    def run(self, run_path: str | None = None, cost_mode: bool = False, max_proposals: int = DEFAULT_MAX_PROPOSALS) -> Path:
         run_dir = self._resolve_run(run_path)
         archive = self._load_archive(run_dir)
         history = self._load_history()
+        max_proposals = max(1, min(int(max_proposals), DEFAULT_MAX_PROPOSALS))
 
         if cost_mode:
             payload = self._run_cost_optimization(run_dir, archive)
@@ -76,7 +77,7 @@ class MetaOptimizer:
             out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
             return out
 
-        top_patterns = self._rank_failures(archive, run_dir)[:MAX_PROPOSALS]
+        top_patterns = self._rank_failures(archive, run_dir, max_proposals)
         prompt_text = self.states_file.read_text(encoding="utf-8")
 
         proposals = []
@@ -430,7 +431,7 @@ class MetaOptimizer:
             out[task] = max(out.get(task, 0), int(tok))
         return out
 
-    def _rank_failures(self, archive: dict[str, Any], run_dir: Path) -> list[FailurePattern]:
+    def _rank_failures(self, archive: dict[str, Any], run_dir: Path, max_proposals: int = DEFAULT_MAX_PROPOSALS) -> list[FailurePattern]:
         entries = archive.get("archive_entries", [])
         domain_survival = {
             d.get("domain"): max(float(d.get("survival_rate", 0.0)), 0.01)
@@ -493,7 +494,7 @@ class MetaOptimizer:
             for k, v in score_acc.items()
         ]
         ranked.sort(key=lambda p: p.score, reverse=True)
-        return ranked[:MAX_PROPOSALS]
+        return ranked[:max_proposals]
 
     def _draft_proposal(
         self,

@@ -12,7 +12,7 @@ try:
 except ImportError:
     pass  # dotenv not installed, assume env vars set manually
 
-from .apply import _apply_proposal_file
+from .apply import _apply_proposal_file, process_proposal_file
 from .apply_code import apply_code, _compare as compare_code
 from .architect import run_architect
 from .optimizer import MetaOptimizer
@@ -24,7 +24,9 @@ def main() -> None:
 
     optimize = sub.add_parser("optimize", help="Analyze runs and generate proposal JSON")
     optimize.add_argument("--run", help="Run directory to analyze (defaults to latest)")
-    optimize.add_argument("--cost", action="store_true", help="Run cost optimization mode")
+    optimize.add_argument("--cost", action="store_true", help="Include cost optimization analysis")
+    optimize.add_argument("--dry-run", action="store_true", help="Show proposals without applying")
+    optimize.add_argument("--max", type=int, default=10, help="Limit to top N proposals (default 10, max 10)")
     optimize.add_argument(
         "--llm-mode",
         default="auto",
@@ -58,8 +60,14 @@ def main() -> None:
 
     if args.command == "optimize":
         optimizer = MetaOptimizer(llm_mode=args.llm_mode)
-        out = optimizer.run(run_path=args.run, cost_mode=args.cost)
+        out = optimizer.run(run_path=args.run, cost_mode=False, max_proposals=args.max)
         print(f"Wrote proposal file: {out}")
+
+        if args.cost:
+            cost_out = optimizer.run(run_path=args.run, cost_mode=True, max_proposals=args.max)
+            print(f"Wrote cost proposal file: {cost_out}")
+
+        process_proposal_file(out, dry_run=args.dry_run)
         return
 
     if args.command == "apply":
