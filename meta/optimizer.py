@@ -82,14 +82,19 @@ class MetaOptimizer:
 
         proposals = []
         proposal_rank = 0
+        print(f"[OPTIMIZER] Generating proposals from {len(top_patterns)} failure patterns...")
         for pattern in top_patterns:
             target_section = "CRITIC_PROMPT" if pattern.pattern in {"LOGIC_FAILURE", "CRITIC_TOO_PASSIVE"} else "RESEARCHER_PROMPT"
             current_excerpt = self._extract_prompt(prompt_text, target_section)
             # Get guidance - may be a list (split into atomic proposals) or string (single proposal)
             guidance_raw = self._get_guidance(pattern)
             guidance_items = guidance_raw if isinstance(guidance_raw, list) else [guidance_raw]
+            print(f"[OPTIMIZER] Pattern {pattern.pattern}: expanding into {len(guidance_items)} proposal(s)")
+
             for gi, guidance_text in enumerate(guidance_items):
                 proposal_rank += 1
+                print(f"[OPTIMIZER] Drafting proposal {proposal_rank}/{max_proposals} for {pattern.pattern} ({gi+1}/{len(guidance_items)})")
+
                 sub_pattern = FailurePattern(
                     pattern=pattern.pattern,
                     score=round(pattern.score / len(guidance_items), 3),
@@ -97,18 +102,35 @@ class MetaOptimizer:
                     affected_domains=pattern.affected_domains,
                     affected_states=pattern.affected_states,
                 )
-                proposal = self._draft_proposal(run_dir, sub_pattern, proposal_rank, target_section, current_excerpt, guidance_override=guidance_text)
-                if self._is_oscillating(proposal, history):
-                    proposal["status"] = "REJECTED"
-                    proposal["adversarial_review"]["meta_judge_ruling"] += (
-                        "\nRejected by anti-oscillation guard due to recent contradictory edits."
-                    )
-                    proposal["adversarial_review"]["ruling"] = "REJECTED"
-                proposals.append(proposal)
+
+                try:
+                    proposal = self._draft_proposal(run_dir, sub_pattern, proposal_rank, target_section, current_excerpt, guidance_override=guidance_text)
+
+                    if self._is_oscillating(proposal, history):
+                        print(f"[OPTIMIZER] Proposal {proposal_rank} rejected by anti-oscillation guard")
+                        proposal["status"] = "REJECTED"
+                        proposal["adversarial_review"]["meta_judge_ruling"] += (
+                            "\nRejected by anti-oscillation guard due to recent contradictory edits."
+                        )
+                        proposal["adversarial_review"]["ruling"] = "REJECTED"
+
+                    proposals.append(proposal)
+                    print(f"[OPTIMIZER] Proposal {proposal_rank} added (status: {proposal['status']})")
+
+                except Exception as e:
+                    print(f"[OPTIMIZER] ERROR: Failed to draft proposal {proposal_rank}: {type(e).__name__}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Continue to next proposal instead of failing entire run
+                    continue
+
                 if len(proposals) >= max_proposals:
+                    print(f"[OPTIMIZER] Reached max_proposals limit ({max_proposals})")
                     break
             if len(proposals) >= max_proposals:
                 break
+
+        print(f"[OPTIMIZER] Generated {len(proposals)} total proposals")
 
         payload = {
             "run_analyzed": str(run_dir),
