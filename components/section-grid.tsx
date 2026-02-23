@@ -27,22 +27,10 @@ const SECTIONS: {
     href: "/states",
   },
   {
-    id: "Knowledge Base",
-    title: "Knowledge Base",
-    description: "the knowledge that earned its place",
-    href: "/archive",
-  },
-  {
-    id: "Debates",
-    title: "Peer Review",
-    description: "watch the adversarial review process",
-    href: "/debates",
-  },
-  {
-    id: "Refuted",
-    title: "Refuted",
-    description: "not every hypothesis holds up",
-    href: "/graveyard",
+    id: "About",
+    title: "About",
+    description: "how the system works",
+    href: "/about",
   },
 ];
 
@@ -69,7 +57,7 @@ export function SectionGrid() {
     return () => observer.disconnect();
   }, []);
 
-  const rowMap = [0, 1, 1, 2, 2];
+  const rowMap = [0, 1, 1];
 
   return (
     <section className="mx-auto max-w-5xl px-6 py-28 md:py-40">
@@ -89,11 +77,6 @@ export function SectionGrid() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {renderTile(SECTIONS[1], 1)}
           {renderTile(SECTIONS[2], 2)}
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {renderTile(SECTIONS[3], 3)}
-          {renderTile(SECTIONS[4], 4)}
         </div>
       </div>
     </section>

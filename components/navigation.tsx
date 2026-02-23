@@ -8,18 +8,12 @@ import { NAV_ITEMS } from "@/lib/data";
 const ROUTE_MAP: Record<string, string> = {
   "Research Timeline": "/chronicle",
   "States": "/states",
-  "Knowledge Base": "/archive",
-  "Debates": "/debates",
-  "Refuted": "/graveyard",
   "About": "/about",
 };
 
 const DISPLAY_NAMES: Record<string, string> = {
   "Research Timeline": "Research Timeline",
   "States": "States",
-  "Knowledge Base": "Knowledge Base",
-  "Debates": "Debates",
-  "Refuted": "Refuted",
   "About": "About",
 };
 

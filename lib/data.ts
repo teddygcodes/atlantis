@@ -1,9 +1,6 @@
 export const NAV_ITEMS = [
   "Research Timeline",
   "States",
-  "Knowledge Base",
-  "Debates",
-  "Refuted",
   "About"
 ] as const;
 
