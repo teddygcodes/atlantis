@@ -317,8 +317,15 @@ class State:
                 f"1. Verify each logical step follows NECESSARILY (not merely possibly) from the previous one\n"
                 f"2. Identify any missing inferential steps between premises and conclusion\n"
                 f"3. Distinguish between claims that are COMPATIBLE with evidence vs. ENTAILED by evidence\n"
-                f"4. Reject any challenge
-# === CRITIC_PROMPT_END ===
+                f"4. Reject any challenge you cannot ground in a specific logical flaw\n\n"
+                f"Format:\n"
+                f"STEP TARGETED: [step number or phrase]\n"
+                f"FLAW: [explain the logical gap]\n"
+                f"ALTERNATIVE: [what would make it valid]\n"
+                f"EVIDENCE: [how to test or verify]\n"
+            ),
+        )
+        # === CRITIC_PROMPT_END ===
         return response.content or ""
 
     def produce_rebuttal(
