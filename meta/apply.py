@@ -192,20 +192,42 @@ def _to_proposals(payload: dict[str, Any]) -> list[Proposal]:
         status = str(p.get("status", "")).upper()
         if status == "REJECTED":
             continue
-        marker = p.get("marker")
+
+        # Support both old format (marker/new_text/rollback_text) and new format (target_section/proposed_change/current_excerpt)
+        marker = p.get("marker") or p.get("target_section")
         if marker not in ALLOWED_MARKERS:
             raise ValueError(f"Proposal {i} targets invalid marker '{marker}'")
-        rollback = p.get("rollback_text", "")
+
+        # Rollback text: old format uses "rollback_text", new format uses "current_excerpt"
+        rollback = p.get("rollback_text") or p.get("current_excerpt", "")
         if not rollback:
-            raise ValueError(f"Proposal {i} missing exact rollback_text")
+            raise ValueError(f"Proposal {i} missing rollback text (rollback_text or current_excerpt)")
+
+        # New text: old format uses "new_text", new format uses "proposed_change"
+        new_text = p.get("new_text") or p.get("proposed_change", "")
+        if not new_text:
+            raise ValueError(f"Proposal {i} missing new text (new_text or proposed_change)")
+
+        # Adversarial review: old format uses string "adversarial_review_summary", new format uses dict "adversarial_review"
+        adv_review = p.get("adversarial_review_summary")
+        if not adv_review:
+            # New format: extract summary from adversarial_review dict
+            adv_dict = p.get("adversarial_review", {})
+            if isinstance(adv_dict, dict):
+                ruling = adv_dict.get("ruling", "UNKNOWN")
+                judge_ruling = adv_dict.get("meta_judge_ruling", "")
+                adv_review = f"Ruling: {ruling}\n{judge_ruling}"
+            else:
+                adv_review = "(none provided)"
+
         proposals.append(
             Proposal(
                 proposal_id=str(p.get("proposal_id", f"proposal_{i+1}")),
                 status=status,
                 marker=marker,
-                new_text=str(p.get("new_text", "")),
-                rollback_text=str(rollback),
-                adversarial_review_summary=str(p.get("adversarial_review_summary", "(none provided)")),
+                new_text=new_text,
+                rollback_text=rollback,
+                adversarial_review_summary=str(adv_review),
             )
         )
 
