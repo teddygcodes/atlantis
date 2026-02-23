@@ -299,19 +299,15 @@ def _estimated_cost_impact_per_run(marker: str, token_delta_per_call: int) -> fl
     return (token_delta_per_call * calls_per_run / 1_000_000) * input_price_per_mtok
 
 
-def _apply_proposal_file(proposal_path: Path) -> None:
+def process_proposal_file(proposal_path: Path, dry_run: bool = False) -> dict[str, int | bool | str]:
     payload = _read_json(proposal_path)
     proposals = _to_proposals(payload)
     if not proposals:
         print("No non-rejected proposals to apply. Exiting.")
-        return
+        return {"accepted": 0, "denied": 0, "version_changed": False, "new_version": "unchanged"}
 
     history = _read_history()
     prompt_version = str(payload.get("prompt_version") or history.get("current_prompt_version") or "v2.4.0")
-
-    latest_run = _latest_run_dir(RUNS_DIR)
-    baseline_path = _snapshot_baseline(prompt_version, latest_run)
-    print(f"Baseline snapshot written: {baseline_path}")
 
     base_text = STATES_PATH.read_text(encoding="utf-8")
     new_text = base_text
@@ -321,6 +317,9 @@ def _apply_proposal_file(proposal_path: Path) -> None:
 
     for idx, p in enumerate(proposals, start=1):
         _show_proposal_diff_and_review(new_text, p, idx, len(proposals))
+        if dry_run:
+            continue
+
         confirm = input(f"\nApply proposal {idx} of {len(proposals)}? (y/n): ").strip().lower()
         if confirm != "y":
             denied_proposals.append({"proposal_id": p.proposal_id, "reason": "user_rejected"})
@@ -336,6 +335,10 @@ def _apply_proposal_file(proposal_path: Path) -> None:
 
         accepted_proposals.append(p)
         modified_sections.append(p.marker)
+
+    if dry_run:
+        print("Dry run enabled: proposals were displayed but not applied.")
+        return {"accepted": 0, "denied": len(proposals), "version_changed": False, "new_version": prompt_version}
 
     if accepted_proposals:
         STATES_PATH.write_text(new_text, encoding="utf-8")
@@ -376,11 +379,21 @@ def _apply_proposal_file(proposal_path: Path) -> None:
     history.setdefault("runs", []).append(run_record)
     history["current_prompt_version"] = new_version
     _write_json(HISTORY_PATH, history)
+
+    if accepted_proposals and new_version != prompt_version:
+        latest_run = _latest_run_dir(RUNS_DIR)
+        baseline_path = _snapshot_baseline(new_version, latest_run)
+        print(f"Baseline snapshot written: {baseline_path}")
     print(
         f"Applied {len(accepted_proposals)} proposal(s); denied {len(denied_proposals)} proposal(s). "
         f"prompt_version: {prompt_version} → {new_version}"
     )
     print(f"History updated: {HISTORY_PATH}")
+    return {"accepted": len(accepted_proposals), "denied": len(denied_proposals), "version_changed": new_version != prompt_version, "new_version": new_version}
+
+
+def _apply_proposal_file(proposal_path: Path) -> None:
+    process_proposal_file(proposal_path, dry_run=False)
 
 
 def _compare_mode(baseline_path: Path, run_dir: Path) -> int:
