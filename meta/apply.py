@@ -46,6 +46,10 @@ class Proposal:
     new_text: str
     rollback_text: str
     adversarial_review_summary: str
+    # Additive mode fields (optional)
+    mode: str = "replace"  # "replace" or "additive"
+    after_line: str | None = None  # For additive: line to insert after
+    addition: str | None = None  # For additive: the one line to add
 
 
 def _now() -> str:
@@ -148,33 +152,71 @@ def _normalize_new_text(new_text: str) -> str:
     return "\n" + new_text
 
 
-def _apply_block(text: str, marker: str, new_text: str) -> str:
+def _apply_block(text: str, marker: str, proposal: Proposal) -> str:
     start, end, old_block = _extract_block(text, marker)
-    old_len = len(old_block.strip())
-    new_len = len(new_text.strip())
-    # Allow either 10% growth OR 200 characters, whichever is greater
-    max_growth = max(int(old_len * 0.10), 200)
-    if old_len and (new_len - old_len) > max_growth:
-        raise ValueError(f"Proposal increases {marker} length by more than {max_growth} chars (10% or 200 char limit)")
-    # Validate required sections (case-insensitive for flexibility)
-    # Support OR syntax: "flaw|gap|error" means accept any of these words
-    for required in REQUIRED_SECTIONS.get(marker, []):
-        if "|" in required:
-            # OR-based check: accept any of the alternatives
-            alternatives = [alt.strip() for alt in required.split("|")]
-            if not any(alt.lower() in new_text.lower() for alt in alternatives):
-                raise ValueError(f"Proposal removes required section (needs one of: {', '.join(alternatives)}) from {marker}")
-        else:
-            # Exact keyword check (case-insensitive)
-            if required.lower() not in new_text.lower():
-                raise ValueError(f"Proposal removes required section '{required}' from {marker}")
 
-    weak_patterns = [r"validation\s+optional", r"ignore\s+validation", r"skip\s+validation"]
-    lowered = new_text.lower()
-    if any(re.search(pat, lowered) for pat in weak_patterns):
-        raise ValueError("Proposal appears to weaken validation requirements")
+    if proposal.mode == "additive":
+        # Additive mode: find anchor line and insert new line after it
+        if not proposal.after_line or not proposal.addition:
+            raise ValueError(f"Additive proposal missing after_line or addition")
 
-    return text[:start] + _normalize_new_text(new_text) + text[end:]
+        # Find the anchor line in the old block
+        lines = old_block.splitlines(keepends=True)
+        anchor_found = False
+        new_lines = []
+
+        for line in lines:
+            new_lines.append(line)
+            # Check if this line contains the anchor text (fuzzy match)
+            if proposal.after_line.strip() in line.strip():
+                # Insert the new line after this one
+                # Preserve indentation from the anchor line
+                indent = len(line) - len(line.lstrip())
+                new_line_with_indent = " " * indent + proposal.addition.strip() + "\n"
+                new_lines.append(new_line_with_indent)
+                anchor_found = True
+                break
+
+        if not anchor_found:
+            raise ValueError(f"Anchor line not found in {marker}: {proposal.after_line[:60]}...")
+
+        # Add remaining lines after the insertion point
+        if anchor_found:
+            anchor_idx = lines.index(next(l for l in lines if proposal.after_line.strip() in l.strip()))
+            new_lines.extend(lines[anchor_idx + 1:])
+
+        new_block = "".join(new_lines)
+        # For additive mode, skip length check (single line additions are always small)
+        return text[:start] + new_block + text[end:]
+
+    else:
+        # Replace mode: validate and replace entire block
+        new_text = proposal.new_text
+        old_len = len(old_block.strip())
+        new_len = len(new_text.strip())
+        # Allow either 10% growth OR 200 characters, whichever is greater
+        max_growth = max(int(old_len * 0.10), 200)
+        if old_len and (new_len - old_len) > max_growth:
+            raise ValueError(f"Proposal increases {marker} length by more than {max_growth} chars (10% or 200 char limit)")
+        # Validate required sections (case-insensitive for flexibility)
+        # Support OR syntax: "flaw|gap|error" means accept any of these words
+        for required in REQUIRED_SECTIONS.get(marker, []):
+            if "|" in required:
+                # OR-based check: accept any of the alternatives
+                alternatives = [alt.strip() for alt in required.split("|")]
+                if not any(alt.lower() in new_text.lower() for alt in alternatives):
+                    raise ValueError(f"Proposal removes required section (needs one of: {', '.join(alternatives)}) from {marker}")
+            else:
+                # Exact keyword check (case-insensitive)
+                if required.lower() not in new_text.lower():
+                    raise ValueError(f"Proposal removes required section '{required}' from {marker}")
+
+        weak_patterns = [r"validation\s+optional", r"ignore\s+validation", r"skip\s+validation"]
+        lowered = new_text.lower()
+        if any(re.search(pat, lowered) for pat in weak_patterns):
+            raise ValueError("Proposal appears to weaken validation requirements")
+
+        return text[:start] + _normalize_new_text(new_text) + text[end:]
 
 
 def _next_version(current: str) -> str:
@@ -235,10 +277,22 @@ def _to_proposals(payload: dict[str, Any]) -> list[Proposal]:
         if not rollback:
             raise ValueError(f"Proposal {i} missing rollback text (rollback_text or current_excerpt)")
 
-        # New text: old format uses "new_text", new format uses "proposed_change"
-        new_text = p.get("new_text") or p.get("proposed_change", "")
-        if not new_text:
-            raise ValueError(f"Proposal {i} missing new text (new_text or proposed_change)")
+        # Detect mode: additive or replace
+        mode = p.get("mode", "replace")
+        after_line = p.get("after_line")
+        addition = p.get("addition")
+
+        # For additive mode, validate required fields
+        if mode == "additive":
+            if not after_line or not addition:
+                raise ValueError(f"Proposal {i} in additive mode missing after_line or addition")
+            # In additive mode, new_text is the addition, rollback_text stays as current_excerpt
+            new_text = addition
+        else:
+            # Replace mode: old format uses "new_text", new format uses "proposed_change"
+            new_text = p.get("new_text") or p.get("proposed_change", "")
+            if not new_text:
+                raise ValueError(f"Proposal {i} missing new text (new_text or proposed_change)")
 
         # Adversarial review: old format uses string "adversarial_review_summary", new format uses dict "adversarial_review"
         adv_review = p.get("adversarial_review_summary")
@@ -260,6 +314,9 @@ def _to_proposals(payload: dict[str, Any]) -> list[Proposal]:
                 new_text=new_text,
                 rollback_text=rollback,
                 adversarial_review_summary=str(adv_review),
+                mode=mode,
+                after_line=after_line,
+                addition=addition,
             )
         )
 
@@ -270,23 +327,49 @@ def _to_proposals(payload: dict[str, Any]) -> list[Proposal]:
 
 def _show_proposal_diff_and_review(current_text: str, proposal: Proposal, index: int, total: int) -> None:
     _, _, old_block = _extract_block(current_text, proposal.marker)
-    preview_new = _normalize_new_text(proposal.new_text)
-    diff = difflib.unified_diff(
-        old_block.splitlines(),
-        preview_new.splitlines(),
-        fromfile=f"{proposal.marker}:old",
-        tofile=f"{proposal.marker}:new",
-        lineterm="",
-    )
 
     print(f"\n=== Proposal {index}/{total}: {proposal.proposal_id} ({proposal.marker}) ===")
-    print("\n".join(diff) or "(no textual change)")
-    old_tokens = _estimate_input_tokens(old_block)
-    new_tokens = _estimate_input_tokens(preview_new)
-    token_delta = new_tokens - old_tokens
+
+    if proposal.mode == "additive":
+        # Show additive proposal as a clean single-line insertion
+        print(f"MODE: Additive (single line addition)")
+        print(f"\nAfter line: {proposal.after_line[:80]}...")
+        print(f"Adding:     + {proposal.addition}")
+
+        # Show context (3 lines before and after the anchor)
+        lines = old_block.splitlines()
+        for i, line in enumerate(lines):
+            if proposal.after_line.strip() in line.strip():
+                context_start = max(0, i - 2)
+                context_end = min(len(lines), i + 3)
+                print(f"\nContext:")
+                for j in range(context_start, context_end):
+                    prefix = "  " if j != i else "→ "
+                    print(f"{prefix}{lines[j]}")
+                if i + 1 < len(lines):
+                    print(f"+ {proposal.addition}")
+                break
+
+        # Token estimate for additive mode (just the one line)
+        token_delta = _estimate_input_tokens(proposal.addition)
+    else:
+        # Show full diff for replace mode
+        preview_new = _normalize_new_text(proposal.new_text)
+        diff = difflib.unified_diff(
+            old_block.splitlines(),
+            preview_new.splitlines(),
+            fromfile=f"{proposal.marker}:old",
+            tofile=f"{proposal.marker}:new",
+            lineterm="",
+        )
+        print("\n".join(diff) or "(no textual change)")
+        old_tokens = _estimate_input_tokens(old_block)
+        new_tokens = _estimate_input_tokens(preview_new)
+        token_delta = new_tokens - old_tokens
+
     cost_delta = _estimated_cost_impact_per_run(proposal.marker, token_delta)
     print(
-        "Estimated cost impact: "
+        "\nEstimated cost impact: "
         f"{token_delta:+d} tokens/call, "
         f"~${cost_delta:.3f}/run"
     )
@@ -333,7 +416,7 @@ def process_proposal_file(proposal_path: Path, dry_run: bool = False, *, minor_b
 
         try:
             _check_anti_oscillation(history, [p.marker])
-            new_text = _apply_block(new_text, p.marker, p.new_text)
+            new_text = _apply_block(new_text, p.marker, p)
         except ValueError as e:
             denied_proposals.append({"proposal_id": p.proposal_id, "reason": str(e)})
             print(f"Skipping {p.proposal_id}: {e}")

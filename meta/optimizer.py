@@ -547,32 +547,55 @@ class MetaOptimizer:
 
         parsed = self._parse_alpha(alpha)
         ruling = self._extract_ruling(judge)
-        proposed_text = parsed.get("proposed_change", current_excerpt)
 
-        # Validate that the proposed change is actually different
-        if proposed_text.strip() == current_excerpt.strip():
-            print(f"[OPTIMIZER] WARNING: Proposal {rank} has identical current and proposed text for {target_section}")
-            print(f"[OPTIMIZER] Pattern: {pattern.pattern}, attempting to force change...")
-            # Try to extract any suggested changes from the alpha response text
-            if "add text requiring" in alpha.lower() or "add:" in alpha.lower():
-                print(f"[OPTIMIZER] Alpha response suggests changes but didn't modify proposed_change field")
-                print(f"[OPTIMIZER] Alpha excerpt: {alpha[:500]}...")
+        # Detect additive vs replace mode
+        after_line = parsed.get("after_line")
+        new_line = parsed.get("new_line")
 
-        if len(proposed_text) > int(len(current_excerpt) * 1.1):
-            ruling = "NARROWED"
-            proposed_text = proposed_text[: int(len(current_excerpt) * 1.1)]
+        if after_line and new_line:
+            # Additive mode: single line addition
+            mode = "additive"
+            # Validate the anchor line exists in current_excerpt
+            if after_line.strip() not in current_excerpt:
+                print(f"[OPTIMIZER] WARNING: Anchor line not found in {target_section}")
+                print(f"[OPTIMIZER] Looking for: {after_line[:80]}...")
+                # Fallback: try to find fuzzy match
+                lines = current_excerpt.splitlines()
+                fuzzy_match = next((line for line in lines if after_line[:40].strip() in line), None)
+                if fuzzy_match:
+                    print(f"[OPTIMIZER] Using fuzzy match: {fuzzy_match[:80]}...")
+                    after_line = fuzzy_match.strip()
+                else:
+                    raise ValueError(f"Anchor line not found: {after_line[:60]}...")
+
+            print(f"[OPTIMIZER] Additive proposal {rank}: adding after '{after_line[:60]}...'")
+        else:
+            # Replace mode (legacy fallback)
+            mode = "replace"
+            after_line = None
+            new_line = None
+            proposed_text = parsed.get("proposed_change", current_excerpt)
+
+            # Validate that the proposed change is actually different
+            if proposed_text.strip() == current_excerpt.strip():
+                print(f"[OPTIMIZER] WARNING: Proposal {rank} has identical current and proposed text for {target_section}")
+                print(f"[OPTIMIZER] Pattern: {pattern.pattern}, attempting to force change...")
+
+            if len(proposed_text) > int(len(current_excerpt) * 1.1):
+                ruling = "NARROWED"
+                proposed_text = proposed_text[: int(len(current_excerpt) * 1.1)]
 
         status_map = {"APPROVE": "APPROVED", "NARROW": "NARROWED", "REJECT": "REJECTED"}
         status = status_map.get(ruling, "NARROWED")
 
-        return {
+        proposal_dict = {
+            "proposal_id": f"proposal_{rank}",
             "status": status,
             "target_file": "governance/states.py",
             "target_section": target_section,
             "current_excerpt": current_excerpt,
             "current_length": len(current_excerpt),
-            "proposed_change": proposed_text,
-            "proposed_length": len(proposed_text),
+            "mode": mode,
             "rationale": parsed.get("rationale", "Generated from weighted failure analysis."),
             "predicted_effect": parsed.get("predicted_effect", "Improve survival for targeted failure pattern."),
             "risk": parsed.get("risk", "May overfit to recent run characteristics."),
@@ -585,6 +608,21 @@ class MetaOptimizer:
                 "ruling": status,
             },
         }
+
+        if mode == "additive":
+            proposal_dict.update({
+                "after_line": after_line,
+                "addition": new_line,
+                "proposed_change": new_line,  # For compatibility
+                "proposed_length": len(new_line),
+            })
+        else:
+            proposal_dict.update({
+                "proposed_change": proposed_text,
+                "proposed_length": len(proposed_text),
+            })
+
+        return proposal_dict
 
     def _get_guidance(self, pattern: FailurePattern):
         """Return guidance for a pattern. May be a list (atomic) or string (single)."""
@@ -605,88 +643,42 @@ class MetaOptimizer:
         return pattern_guidance.get(pattern.pattern, "Add validation text to prevent this failure pattern.")
 
     def _alpha_prompt(self, pattern: FailurePattern, target_section: str, current_excerpt: str, guidance_override: str | None = None) -> str:
-        # Pattern-specific guidance
-        pattern_guidance = {
-            "LOGIC_FAILURE": (
-                "Claims have logical gaps or non-sequiturs. Add text requiring:\n"
-                "- 'Verify each logical step follows necessarily from the previous one'\n"
-                "- 'Identify and reject claims with missing inferential steps'\n"
-                "- 'Ensure conclusions are entailed by premises, not merely compatible'"
-            ),
-            "EVIDENCE_INSUFFICIENT": (
-                "Claims lack adequate supporting evidence. Add text requiring:\n"
-                "- 'Every empirical claim must cite specific data sources'\n"
-                "- 'Reject assertions that lack measurable evidence or replication pathway'\n"
-                "- 'Demand quantitative support for all magnitude claims'"
-            ),
-            "PARAMETER_UNJUSTIFIED": (
-                "Numerical parameters lack justification. Add text requiring:\n"
-                "- 'All thresholds and constants must have explicit derivations'\n"
-                "- 'Explain why each parameter value was chosen over alternatives'\n"
-                "- 'Link parameter choices to empirical constraints or theoretical bounds'"
-            ),
-            "MAGNITUDE_IMPLAUSIBLE": (
-                "Claims contain implausible numerical magnitudes. Add text requiring:\n"
-                "- 'Sanity-check all quantitative claims against known reference values'\n"
-                "- 'Flag magnitude claims that exceed domain-typical ranges by >2x'\n"
-                "- 'Require explicit justification for extraordinary magnitude claims'"
-            ),
-            "SCOPE_EXCEEDED": (
-                "Claims overgeneralize beyond supporting evidence. Add text requiring:\n"
-                "- 'Explicitly bound the scope of each claim to tested conditions'\n"
-                "- 'Challenge generalizations that extend beyond available data'\n"
-                "- 'Require domain-specific caveats for cross-domain applications'"
-            ),
-            "DEPENDENCY_FAILURE": (
-                "Claims cite retracted or weak dependencies. Add text requiring:\n"
-                "- 'Verify all cited claims have survived adversarial review'\n"
-                "- 'Check citation chains for retracted or partial-status dependencies'\n"
-                "- 'Reject claims that rest on unvalidated foundations'"
-            ),
-            "CRITIC_TOO_PASSIVE": [
-                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to actively seek falsification opportunities for each claim, not just surface checks.",
-                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to challenge at least one core assumption with a domain-specific counterexample attempt.",
-                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to escalate uncertain claims to retraction unless evidence clears explicit confidence thresholds.",
-                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to explain the stress tests attempted and why they failed to falsify when no weaknesses are found.",
-            ],
-        }
-
-        guidance = pattern_guidance.get(pattern.pattern, "Add validation text to prevent this failure pattern.")
+        # Use guidance_override if provided (atomic ONE-line instruction)
+        guidance = guidance_override if guidance_override else f"Add validation text to prevent {pattern.pattern}"
 
         return (
-            "You are Meta_Alpha, a prompt optimization agent. Your task is to MODIFY the current prompt text "
-            "to address a specific failure pattern.\n\n"
+            "You are Meta_Alpha, a prompt optimization agent. Your task is to ADD ONE LINE to the current prompt.\n\n"
 
             f"FAILURE PATTERN: {pattern.pattern}\n"
             f"Severity score: {pattern.score} | Frequency: {pattern.frequency} occurrences\n"
             f"Affected domains: {', '.join(pattern.affected_domains)}\n"
             f"Affected states: {', '.join(pattern.affected_states[:3])}{'...' if len(pattern.affected_states) > 3 else ''}\n\n"
 
-            f"HOW TO FIX {pattern.pattern}:\n{guidance}\n\n"
+            f"GUIDANCE: {guidance}\n\n"
 
             f"TARGET SECTION: {target_section}\n\n"
 
-            "INSTRUCTIONS:\n"
-            "1. Read the CURRENT_EXCERPT below (the current prompt text)\n"
-            "2. Identify where to add/modify text to prevent this failure pattern\n"
-            "3. Generate a MODIFIED version of the excerpt with specific validation requirements added\n"
-            "4. The proposed_change must be DIFFERENT from the current excerpt - add concrete validation text\n"
-            "5. Keep changes focused and minimal - replace weak phrasing or add specific checks\n"
-            "6. Do NOT just append text - integrate changes into the existing structure\n"
-            "7. Preserve the overall structure and formatting of the prompt\n\n"
+            "ADDITIVE MODE - ATOMIC PROPOSAL:\n"
+            "1. Read the CURRENT_EXCERPT below\n"
+            "2. Choose EXACTLY ONE existing line to insert after (your anchor line)\n"
+            "3. Write EXACTLY ONE new line of validation text to add\n"
+            "4. Do NOT modify any existing lines\n"
+            "5. Do NOT write the entire modified prompt\n"
+            "6. The new line should integrate naturally at the insertion point\n\n"
 
             "Return JSON with these exact keys:\n"
             "{\n"
-            '  "proposed_change": "THE FULL MODIFIED PROMPT TEXT (must differ from current_excerpt)",\n'
-            '  "rationale": "Why this change addresses the failure pattern",\n'
+            '  "after_line": "The EXACT text of the existing line to insert after",\n'
+            '  "new_line": "The ONE line to add (must be a complete validation requirement)",\n'
+            '  "rationale": "Why this addition addresses the failure pattern",\n'
             '  "predicted_effect": "Expected impact on claim survival rates",\n'
-            '  "risk": "Potential downsides or unintended consequences",\n'
+            '  "risk": "Potential downsides of this addition",\n'
             '  "trade_off": "What we might lose by adding this validation"\n'
             "}\n\n"
 
             f"CURRENT_EXCERPT:\n{current_excerpt}\n\n"
 
-            "Now generate the JSON with a MODIFIED proposed_change that addresses the failure pattern:"
+            "Now generate the JSON with after_line (exact match) and new_line (atomic addition):"
         )
 
     @staticmethod
