@@ -81,17 +81,34 @@ class MetaOptimizer:
         prompt_text = self.states_file.read_text(encoding="utf-8")
 
         proposals = []
-        for rank, pattern in enumerate(top_patterns, start=1):
+        proposal_rank = 0
+        for pattern in top_patterns:
             target_section = "CRITIC_PROMPT" if pattern.pattern in {"LOGIC_FAILURE", "CRITIC_TOO_PASSIVE"} else "RESEARCHER_PROMPT"
             current_excerpt = self._extract_prompt(prompt_text, target_section)
-            proposal = self._draft_proposal(run_dir, pattern, rank, target_section, current_excerpt)
-            if self._is_oscillating(proposal, history):
-                proposal["status"] = "REJECTED"
-                proposal["adversarial_review"]["meta_judge_ruling"] += (
-                    "\nRejected by anti-oscillation guard due to recent contradictory edits."
+            # Get guidance - may be a list (split into atomic proposals) or string (single proposal)
+            guidance_raw = self._get_guidance(pattern)
+            guidance_items = guidance_raw if isinstance(guidance_raw, list) else [guidance_raw]
+            for gi, guidance_text in enumerate(guidance_items):
+                proposal_rank += 1
+                sub_pattern = FailurePattern(
+                    pattern=pattern.pattern,
+                    score=round(pattern.score / len(guidance_items), 3),
+                    frequency=pattern.frequency,
+                    affected_domains=pattern.affected_domains,
+                    affected_states=pattern.affected_states,
                 )
-                proposal["adversarial_review"]["ruling"] = "REJECTED"
-            proposals.append(proposal)
+                proposal = self._draft_proposal(run_dir, sub_pattern, proposal_rank, target_section, current_excerpt, guidance_override=guidance_text)
+                if self._is_oscillating(proposal, history):
+                    proposal["status"] = "REJECTED"
+                    proposal["adversarial_review"]["meta_judge_ruling"] += (
+                        "\nRejected by anti-oscillation guard due to recent contradictory edits."
+                    )
+                    proposal["adversarial_review"]["ruling"] = "REJECTED"
+                proposals.append(proposal)
+                if len(proposals) >= max_proposals:
+                    break
+            if len(proposals) >= max_proposals:
+                break
 
         payload = {
             "run_analyzed": str(run_dir),
@@ -503,8 +520,9 @@ class MetaOptimizer:
         rank: int,
         target_section: str,
         current_excerpt: str,
+        guidance_override: str | None = None,
     ) -> dict[str, Any]:
-        alpha_prompt = self._alpha_prompt(pattern, target_section, current_excerpt)
+        alpha_prompt = self._alpha_prompt(pattern, target_section, current_excerpt, guidance_override=guidance_override)
         alpha = self._call_llm(alpha_prompt, MODEL_IDS["haiku"], 1200)
 
         beta_prompt = (
@@ -568,7 +586,25 @@ class MetaOptimizer:
             },
         }
 
-    def _alpha_prompt(self, pattern: FailurePattern, target_section: str, current_excerpt: str) -> str:
+    def _get_guidance(self, pattern: FailurePattern):
+        """Return guidance for a pattern. May be a list (atomic) or string (single)."""
+        pattern_guidance = {
+            "LOGIC_FAILURE": "Claims are being retracted for logical gaps. Add ONE line requiring critics to verify each step follows NECESSARILY from the previous one.",
+            "EVIDENCE_INSUFFICIENT": "Claims survive with weak evidence. Add ONE line requiring specific evidence class citations.",
+            "PARAMETER_UNJUSTIFIED": "Claims contain unjustified parameters. Add ONE line requiring explicit ESTIMATE/ASSUMPTIONS tags.",
+            "MAGNITUDE_IMPLAUSIBLE": "Claims contain implausible magnitudes. Add ONE line requiring order-of-magnitude sanity checks.",
+            "SCOPE_EXCEEDED": "Claims exceed their stated scope. Add ONE line requiring scope boundary enforcement.",
+            "DEPENDENCY_FAILURE": "Claims depend on retracted work. Add ONE line requiring dependency validation.",
+            "CRITIC_TOO_PASSIVE": [
+                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to actively seek falsification opportunities for each claim, not just surface checks.",
+                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to challenge at least one core assumption with a domain-specific counterexample attempt.",
+                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to escalate uncertain claims to retraction unless evidence clears explicit confidence thresholds.",
+                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to explain the stress tests attempted and why they failed to falsify when no weaknesses are found.",
+            ],
+        }
+        return pattern_guidance.get(pattern.pattern, "Add validation text to prevent this failure pattern.")
+
+    def _alpha_prompt(self, pattern: FailurePattern, target_section: str, current_excerpt: str, guidance_override: str | None = None) -> str:
         # Pattern-specific guidance
         pattern_guidance = {
             "LOGIC_FAILURE": (
@@ -607,13 +643,12 @@ class MetaOptimizer:
                 "- 'Check citation chains for retracted or partial-status dependencies'\n"
                 "- 'Reject claims that rest on unvalidated foundations'"
             ),
-            "CRITIC_TOO_PASSIVE": (
-                "Entire domains show 100% survival while weak-critic flags are active. Add text requiring:\n"
-                "- 'Actively seek falsification opportunities for each claim, not just surface checks'\n"
-                "- 'Challenge at least one core assumption with a domain-specific counterexample attempt'\n"
-                "- 'Escalate uncertain claims to retraction unless evidence clears explicit confidence thresholds'\n"
-                "- 'When no weaknesses are found, explain the stress tests attempted and why they failed to falsify'"
-            ),
+            "CRITIC_TOO_PASSIVE": [
+                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to actively seek falsification opportunities for each claim, not just surface checks.",
+                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to challenge at least one core assumption with a domain-specific counterexample attempt.",
+                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to escalate uncertain claims to retraction unless evidence clears explicit confidence thresholds.",
+                "Entire domains show 100% survival while weak-critic flags are active. Add ONE line requiring critics to explain the stress tests attempted and why they failed to falsify when no weaknesses are found.",
+            ],
         }
 
         guidance = pattern_guidance.get(pattern.pattern, "Add validation text to prevent this failure pattern.")
