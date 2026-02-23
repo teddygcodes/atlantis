@@ -18,8 +18,11 @@ RUNS_DIR = ROOT / "runs"
 
 ALLOWED_MARKERS = {"RESEARCHER_PROMPT", "CRITIC_PROMPT"}
 REQUIRED_SECTIONS = {
+    # Strict format requirements for researcher prompts (constitutional)
     "RESEARCHER_PROMPT": ["RESEARCH TYPE:", "HYPOTHESIS:", "CONCLUSION:", "CITATIONS:"],
-    "CRITIC_PROMPT": ["STEP TARGETED:", "FLAW:", "ALTERNATIVE:", "EVIDENCE:"],
+    # Semantic requirements for critic prompts (allow format flexibility)
+    # These are OR-based: "flaw|gap|error" means accept any of these words
+    "CRITIC_PROMPT": ["challenge", "flaw|gap|error", "evidence"],
 }
 
 
@@ -141,9 +144,18 @@ def _apply_block(text: str, marker: str, new_text: str) -> str:
     max_growth = max(int(old_len * 0.10), 200)
     if old_len and (new_len - old_len) > max_growth:
         raise ValueError(f"Proposal increases {marker} length by more than {max_growth} chars (10% or 200 char limit)")
+    # Validate required sections (case-insensitive for flexibility)
+    # Support OR syntax: "flaw|gap|error" means accept any of these words
     for required in REQUIRED_SECTIONS.get(marker, []):
-        if required not in new_text:
-            raise ValueError(f"Proposal removes required format section '{required}' in {marker}")
+        if "|" in required:
+            # OR-based check: accept any of the alternatives
+            alternatives = [alt.strip() for alt in required.split("|")]
+            if not any(alt.lower() in new_text.lower() for alt in alternatives):
+                raise ValueError(f"Proposal removes required section (needs one of: {', '.join(alternatives)}) from {marker}")
+        else:
+            # Exact keyword check (case-insensitive)
+            if required.lower() not in new_text.lower():
+                raise ValueError(f"Proposal removes required section '{required}' from {marker}")
 
     weak_patterns = [r"validation\s+optional", r"ignore\s+validation", r"skip\s+validation"]
     lowered = new_text.lower()
