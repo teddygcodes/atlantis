@@ -83,3 +83,10 @@ pnpm-lock.yaml
 
 # TypeScript build info
 tsconfig.tsbuildinfo
+
+# Generated run artifacts (output from governance cycles)
+runs/
+
+# Meta optimizer generated files
+meta/proposals/
+meta/baselines/
