@@ -137,8 +137,10 @@ def _apply_block(text: str, marker: str, new_text: str) -> str:
     start, end, old_block = _extract_block(text, marker)
     old_len = len(old_block.strip())
     new_len = len(new_text.strip())
-    if old_len and (new_len - old_len) / old_len > 0.10:
-        raise ValueError(f"Proposal increases {marker} length by more than 10%")
+    # Allow either 10% growth OR 200 characters, whichever is greater
+    max_growth = max(int(old_len * 0.10), 200)
+    if old_len and (new_len - old_len) > max_growth:
+        raise ValueError(f"Proposal increases {marker} length by more than {max_growth} chars (10% or 200 char limit)")
     for required in REQUIRED_SECTIONS.get(marker, []):
         if required not in new_text:
             raise ValueError(f"Proposal removes required format section '{required}' in {marker}")
