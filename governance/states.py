@@ -317,8 +317,8 @@ class State:
                 f"1. Verify each logical step follows NECESSARILY (not merely possibly) from the previous one\n"
                 f"2. Identify any missing inferential steps between premises and conclusion\n"
                 f"3. Distinguish between claims that are COMPATIBLE with evidence vs. ENTAILED by evidence\n"
-                f"4. Reject any challenge you cannot ground in a specific logical flaw\n\n"
-                5. If no logical flaws are found after systematic testing, explicitly document which stress tests were attempted, why each failed to falsify the claim, and what would constitute sufficient evidence to overturn it
+                f"4. Reject any challenge you cannot ground in a specific logical flaw\n"
+                f"5. If no logical flaws are found after systematic testing, explicitly document which stress tests were attempted, why each failed to falsify the claim, and what would constitute sufficient evidence to overturn it\n\n"
                 f"Format:\n"
                 f"STEP TARGETED: [step number or phrase]\n"
                 f"FLAW: [explain the logical gap]\n"
