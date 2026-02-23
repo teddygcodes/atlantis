@@ -1,0 +1,193 @@
+{
+  "prompt_version": "v2.0.2",
+  "run": "2026-02-22_193306",
+  "created_at": "2026-02-23T05:34:09.655621+00:00",
+  "survival_rate_per_domain": {
+    "Biology_Alpha": 1.0,
+    "Biology_Beta": 1.0,
+    "Economics_Alpha": 1.0,
+    "Economics_Beta": 1.0,
+    "Finance_Alpha": 1.0,
+    "Finance_Beta": 1.0,
+    "Geography_Alpha": 1.0,
+    "Geography_Beta": 1.0,
+    "History_Alpha": 1.0,
+    "History_Beta": 1.0,
+    "Mathematics_Alpha": 0.5714,
+    "Mathematics_Beta": 0.8333,
+    "Medicine_Alpha": 1.0,
+    "Medicine_Beta": 1.0,
+    "Philosophy_Alpha": 1.0,
+    "Philosophy_Beta": 1.0,
+    "Physics_Alpha": 0.6,
+    "Physics_Beta": 1.0,
+    "Technology_Alpha": 1.0,
+    "Technology_Beta": 1.0
+  },
+  "retraction_reason_distribution": {
+    "LOGIC_FAILURE": 2,
+    "UNKNOWN": 2
+  },
+  "domain_health_summary": {
+    "Mathematics": {
+      "survival_rate": 0.769,
+      "retraction_rate": 0.154,
+      "destruction_rate": 0.077,
+      "anchor_flag_rate": 0.0,
+      "avg_tokens_per_outcome": 1076.9,
+      "critic_impact_rate": 0.167,
+      "critic_precision_rate": 0.167,
+      "total_claims": 13,
+      "cycles_active": 3,
+      "flags": {
+        "weak_critic_warning": false,
+        "format_issue_warning": false,
+        "healthy": true
+      }
+    },
+    "Physics": {
+      "survival_rate": 0.75,
+      "retraction_rate": 0.25,
+      "destruction_rate": 0.0,
+      "anchor_flag_rate": 0.0,
+      "avg_tokens_per_outcome": 875.0,
+      "critic_impact_rate": 0.25,
+      "critic_precision_rate": 0.25,
+      "total_claims": 8,
+      "cycles_active": 2,
+      "flags": {
+        "weak_critic_warning": false,
+        "format_issue_warning": false,
+        "healthy": true
+      }
+    },
+    "Biology": {
+      "survival_rate": 1.0,
+      "retraction_rate": 0.0,
+      "destruction_rate": 0.0,
+      "anchor_flag_rate": 0.0,
+      "avg_tokens_per_outcome": 1000.0,
+      "critic_impact_rate": 0.0,
+      "critic_precision_rate": 0.0,
+      "total_claims": 12,
+      "cycles_active": 3,
+      "flags": {
+        "weak_critic_warning": true,
+        "format_issue_warning": false,
+        "healthy": false
+      }
+    },
+    "Finance": {
+      "survival_rate": 1.0,
+      "retraction_rate": 0.0,
+      "destruction_rate": 0.0,
+      "anchor_flag_rate": 0.077,
+      "avg_tokens_per_outcome": 938.5,
+      "critic_impact_rate": 0.0,
+      "critic_precision_rate": 0.0,
+      "total_claims": 13,
+      "cycles_active": 3,
+      "flags": {
+        "weak_critic_warning": true,
+        "format_issue_warning": false,
+        "healthy": false
+      }
+    },
+    "Technology": {
+      "survival_rate": 1.0,
+      "retraction_rate": 0.0,
+      "destruction_rate": 0.0,
+      "anchor_flag_rate": 0.2,
+      "avg_tokens_per_outcome": 840.0,
+      "critic_impact_rate": 0.0,
+      "critic_precision_rate": 0.0,
+      "total_claims": 5,
+      "cycles_active": 1,
+      "flags": {
+        "weak_critic_warning": false,
+        "format_issue_warning": false,
+        "healthy": false
+      }
+    },
+    "Medicine": {
+      "survival_rate": 1.0,
+      "retraction_rate": 0.0,
+      "destruction_rate": 0.0,
+      "anchor_flag_rate": 0.0,
+      "avg_tokens_per_outcome": 1000.0,
+      "critic_impact_rate": 0.0,
+      "critic_precision_rate": 0.0,
+      "total_claims": 12,
+      "cycles_active": 3,
+      "flags": {
+        "weak_critic_warning": true,
+        "format_issue_warning": false,
+        "healthy": false
+      }
+    },
+    "Geography": {
+      "survival_rate": 1.0,
+      "retraction_rate": 0.0,
+      "destruction_rate": 0.0,
+      "anchor_flag_rate": 0.333,
+      "avg_tokens_per_outcome": 733.3,
+      "critic_impact_rate": 0.0,
+      "critic_precision_rate": 0.0,
+      "total_claims": 6,
+      "cycles_active": 1,
+      "flags": {
+        "weak_critic_warning": false,
+        "format_issue_warning": false,
+        "healthy": false
+      }
+    },
+    "History": {
+      "survival_rate": 1.0,
+      "retraction_rate": 0.0,
+      "destruction_rate": 0.0,
+      "anchor_flag_rate": 0.143,
+      "avg_tokens_per_outcome": 885.7,
+      "critic_impact_rate": 0.0,
+      "critic_precision_rate": 0.0,
+      "total_claims": 14,
+      "cycles_active": 3,
+      "flags": {
+        "weak_critic_warning": true,
+        "format_issue_warning": false,
+        "healthy": false
+      }
+    },
+    "Economics": {
+      "survival_rate": 1.0,
+      "retraction_rate": 0.0,
+      "destruction_rate": 0.0,
+      "anchor_flag_rate": 0.267,
+      "avg_tokens_per_outcome": 840.0,
+      "critic_impact_rate": 0.0,
+      "critic_precision_rate": 0.0,
+      "total_claims": 15,
+      "cycles_active": 3,
+      "flags": {
+        "weak_critic_warning": true,
+        "format_issue_warning": false,
+        "healthy": false
+      }
+    },
+    "Philosophy": {
+      "survival_rate": 1.0,
+      "retraction_rate": 0.0,
+      "destruction_rate": 0.0,
+      "anchor_flag_rate": 0.077,
+      "avg_tokens_per_outcome": 1246.2,
+      "critic_impact_rate": 0.0,
+      "critic_precision_rate": 0.0,
+      "total_claims": 13,
+      "cycles_active": 3,
+      "flags": {
+        "weak_critic_warning": true,
+        "format_issue_warning": false,
+        "healthy": false
+      }
+    }
+  }
+}
