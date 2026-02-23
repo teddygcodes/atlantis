@@ -165,12 +165,18 @@ def _apply_block(text: str, marker: str, new_text: str) -> str:
     return text[:start] + _normalize_new_text(new_text) + text[end:]
 
 
-def _bump_patch(version: str) -> str:
-    m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", version.strip())
+def _next_version(current: str) -> str:
+    parts = current.lstrip("v").split(".")
+    parts[-1] = str(int(parts[-1]) + 1)
+    return "v" + ".".join(parts)
+
+
+def _next_minor_version(current: str) -> str:
+    m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", current.strip())
     if not m:
-        raise ValueError(f"Invalid prompt version '{version}', expected vX.Y.Z")
-    major, minor, patch = map(int, m.groups())
-    return f"v{major}.{minor}.{patch + 1}"
+        raise ValueError(f"Invalid prompt version '{current}', expected vX.Y.Z")
+    major, minor, _patch = map(int, m.groups())
+    return f"v{major}.{minor + 1}.0"
 
 
 def _read_history() -> dict[str, Any]:
@@ -266,7 +272,7 @@ def _show_proposal_diff_and_review(current_text: str, proposal: Proposal, index:
     print(f"Adversarial review summary: {proposal.adversarial_review_summary}")
 
 
-def _apply_proposal_file(proposal_path: Path) -> None:
+def _apply_proposal_file(proposal_path: Path, *, minor_bump: bool = False) -> None:
     payload = _read_json(proposal_path)
     proposals = _to_proposals(payload)
     if not proposals:
@@ -274,7 +280,8 @@ def _apply_proposal_file(proposal_path: Path) -> None:
         return
 
     history = _read_history()
-    prompt_version = str(payload.get("prompt_version") or history.get("current_prompt_version") or "v2.4.0")
+    prompt_version = str(history.get("current_prompt_version") or "v2.4.0")
+    proposal_version = payload.get("prompt_version")
 
     latest_run = _latest_run_dir(RUNS_DIR)
     baseline_path = _snapshot_baseline(prompt_version, latest_run)
@@ -307,7 +314,15 @@ def _apply_proposal_file(proposal_path: Path) -> None:
     if accepted_proposals:
         STATES_PATH.write_text(new_text, encoding="utf-8")
 
-    new_version = _bump_patch(prompt_version) if accepted_proposals else prompt_version
+    if accepted_proposals:
+        if minor_bump:
+            new_version = _next_minor_version(prompt_version)
+        elif proposal_version:
+            new_version = str(proposal_version)
+        else:
+            new_version = _next_version(prompt_version)
+    else:
+        new_version = prompt_version
     run_record = {
         "applied_at": _now(),
         "proposal_file": str(proposal_path),
@@ -386,6 +401,7 @@ def main() -> int:
     parser.add_argument("--compare", action="store_true", help="Compare run with baseline")
     parser.add_argument("--baseline", type=Path, help="Path to baseline JSON")
     parser.add_argument("--run", type=Path, help="Run directory path")
+    parser.add_argument("--minor-bump", action="store_true", help="Bump minor version (vX.Y.0) when proposals are applied")
     args = parser.parse_args()
 
     if args.compare:
@@ -396,7 +412,7 @@ def main() -> int:
     if not args.proposal:
         parser.error("--proposal is required when not in compare mode")
 
-    _apply_proposal_file(args.proposal)
+    _apply_proposal_file(args.proposal, minor_bump=args.minor_bump)
     return 0
 
 

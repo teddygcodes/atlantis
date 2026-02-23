@@ -35,6 +35,7 @@ def main() -> None:
     apply_cmd = sub.add_parser("apply", help="Apply approved proposal sections")
     apply_cmd.add_argument("proposal", help="Path to proposal JSON")
     apply_cmd.add_argument("--yes", action="store_true", help="Apply without confirmation prompts")
+    apply_cmd.add_argument("--minor-bump", action="store_true", help="Bump minor version (vX.Y.0) when proposals are applied")
 
     architect_cmd = sub.add_parser("architect", help="Generate governance parallelization proposal")
     architect_cmd.add_argument("--run", help="Run directory to analyze (defaults to latest)")
@@ -65,7 +66,7 @@ def main() -> None:
         proposal_path = Path(args.proposal)
         if args.yes:
             print("Note: --yes flag not yet supported in apply mode")
-        _apply_proposal_file(proposal_path)
+        _apply_proposal_file(proposal_path, minor_bump=args.minor_bump)
         return
 
     if args.command == "architect":

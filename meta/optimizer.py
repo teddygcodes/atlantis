@@ -31,6 +31,12 @@ PROMPT_MARKERS = {
 }
 
 
+def _next_version(current: str) -> str:
+    parts = current.lstrip("v").split(".")
+    parts[-1] = str(int(parts[-1]) + 1)
+    return "v" + ".".join(parts)
+
+
 @dataclass
 class FailurePattern:
     pattern: str
@@ -88,7 +94,7 @@ class MetaOptimizer:
 
         payload = {
             "run_analyzed": str(run_dir),
-            "prompt_version": self._prompt_version(),
+            "prompt_version": _next_version(self._prompt_version()),
             "failure_patterns": [self._pattern_json(p, i + 1, archive) for i, p in enumerate(top_patterns)],
             "proposals": proposals,
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -118,7 +124,7 @@ class MetaOptimizer:
             "analysis_mode": "cost_optimization",
             "run_analyzed": str(run_dir),
             "baseline_run": str(previous_run) if previous_run else None,
-            "prompt_version": self._prompt_version(),
+            "prompt_version": _next_version(self._prompt_version()),
             "summary": {
                 "proposal_count": len(proposals),
                 "estimated_total_savings_per_run_usd": round(sum(p["cost_delta"]["estimated_savings_per_run_usd"] for p in proposals), 6),
@@ -737,5 +743,5 @@ class MetaOptimizer:
         history_path = Path("meta/history.json")
         if history_path.exists():
             history = json.loads(history_path.read_text(encoding="utf-8"))
-            return history.get("current_version", "unknown")
-        return "unknown"
+            return str(history.get("current_prompt_version") or history.get("current_version") or "v0.0.0")
+        return "v0.0.0"
