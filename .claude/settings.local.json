@@ -45,7 +45,9 @@
       "Bash(error\" \\(for flaw explanation - accepts synonyms\\)\n   - \"evidence\" \\(for evidence/alternative requirement\\)\n\n2. Added OR-based validation logic:\n   - Keywords with \")",
       "Bash(\" separator accept any alternative\n   - \"flaw)",
       "Bash(error\" accepts \"flaw\" OR \"gap\" OR \"error\"\n   - All checks are case-insensitive\n\n3. Kept RESEARCHER_PROMPT strict \\(constitutional format requirements\\)\n\nExample: Optimizer''s proposed text uses \"identifying logical gaps\" \ninstead of \"FLAW:\" - now accepted because \"gap\" is in \"flaw)",
-      "Bash(error\".\n\nTested with actual proposal from 20260222_190139_proposal.json:\n- Current text: ✓ PASS \\(has challenge, flaw, evidence\\)\n- Proposed text: ✓ PASS \\(has challenge, gap, evidence\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(error\".\n\nTested with actual proposal from 20260222_190139_proposal.json:\n- Current text: ✓ PASS \\(has challenge, flaw, evidence\\)\n- Proposed text: ✓ PASS \\(has challenge, gap, evidence\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git mv:*)",
+      "Bash(git ls-tree:*)"
     ]
   }
 }
