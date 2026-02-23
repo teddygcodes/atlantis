@@ -60,6 +60,7 @@ class AtlantisEngine:
         api_key: Optional[str] = None,
         demo_electrical: bool = False,
         demo_10_domains: bool = False,
+        with_founding: bool = False,
     ):
         self._check_v1_data(force_clean)
         self.constitution_text = self._load_constitution()
@@ -70,6 +71,7 @@ class AtlantisEngine:
         self.verbose = verbose
         self.demo_electrical = demo_electrical
         self.demo_10_domains = demo_10_domains
+        self.with_founding = with_founding
         self.output_dir = Path("output")
         self._initialize_run_folder()
         self._prepare_output_workspace()
@@ -99,20 +101,25 @@ class AtlantisEngine:
         print(f"  Governance cycles: {self.config['governance_cycles'] or 'indefinite'}")
         self._print_model_allocation_validation()
 
-        # Phase 0: Founding Period
-        print(f"\n{'─'*60}")
-        print(f"  [Phase 0] Founder Research")
-        founder_configs = self._get_all_founder_configs()
-        founding = FoundingPeriod(
-            founder_configs=founder_configs,
-            db=self.db,
-            models=self.models,
-            config=self.config,
-        )
-        founder_profiles = founding.run(self.config["phase0_research_cycles"])
-        print(f"  Phase 0 complete. {len(founder_profiles)} Founder profiles archived.")
+        # Phase 0: Founding Period (optional, skipped by default to save ~30-40% cost)
+        if self.with_founding:
+            print(f"\n{'─'*60}")
+            print(f"  [Phase 0] Founder Research (--with-founding enabled)")
+            founder_configs = self._get_all_founder_configs()
+            founding = FoundingPeriod(
+                founder_configs=founder_configs,
+                db=self.db,
+                models=self.models,
+                config=self.config,
+            )
+            founder_profiles = founding.run(self.config["phase0_research_cycles"])
+            print(f"  Phase 0 complete. {len(founder_profiles)} Founder profiles archived.")
+        else:
+            print(f"\n{'─'*60}")
+            print(f"  [Phase 0] Skipped (use --with-founding to include 100 founding claims)")
+            founder_profiles = []
 
-        # Phase 1: Founding Era — Senate pair formation
+        # Phase 1: Founding Era — Rival Pair Formation
         print(f"\n{'─'*60}")
         print(f"  [Phase 1] Founding Era — Rival Pair Formation")
         state_manager = self._run_founding_era(founder_profiles)
@@ -972,11 +979,14 @@ def main(argv=None):
         epilog=(
             "Examples:\n"
             "  python -m atlantis --mock              # Quick test (3 pairs, 5 cycles)\n"
-            "  python -m atlantis                     # Full production run\n"
+            "  python -m atlantis --demo-10-domains   # 10 diverse domains (Phase 1-2 only, ~$3)\n"
+            "  python -m atlantis --demo-10-domains --with-founding  # Include Phase 0 founding claims (~$5)\n"
             "  python -m atlantis --force-clean       # Remove V1 data first\n"
             "  python -m atlantis --dry-run           # Print prompts, skip API calls\n"
             "  python -m atlantis --demo-electrical   # Electrical-domain empirical demo\n"
-            "  python -m atlantis --demo-10-domains   # 10 diverse domains demo (STEM + social sciences + humanities)\n"
+            "\n"
+            "Note: Phase 0 (100 founding claims) is SKIPPED by default to save ~30-40%% cost.\n"
+            "      Use --with-founding to include it for legacy compatibility.\n"
         ),
     )
     parser.add_argument(
@@ -1003,6 +1013,10 @@ def main(argv=None):
         "--demo-10-domains", action="store_true",
         help="Use 10-domain demo pairs (STEM + social sciences + humanities) and skip Senate voting in Phase 1"
     )
+    parser.add_argument(
+        "--with-founding", action="store_true",
+        help="Include Phase 0 (Founding Period with 100 founding claims). Skipped by default to save ~30-40%% cost."
+    )
     args = parser.parse_args(argv)
 
     if args.mock:
@@ -1022,5 +1036,6 @@ def main(argv=None):
         verbose=args.verbose,
         demo_electrical=args.demo_electrical,
         demo_10_domains=args.demo_10_domains,
+        with_founding=args.with_founding,
     )
     engine.run()
