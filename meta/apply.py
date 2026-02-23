@@ -288,7 +288,7 @@ def _apply_proposal_file(proposal_path: Path) -> None:
 
     for idx, p in enumerate(proposals, start=1):
         _show_proposal_diff_and_review(new_text, p, idx, len(proposals))
-        confirm = input(f"\nApply proposal {idx}? (y/n): ").strip().lower()
+        confirm = input(f"\nApply proposal {idx} of {len(proposals)}? (y/n): ").strip().lower()
         if confirm != "y":
             denied_proposals.append({"proposal_id": p.proposal_id, "reason": "user_rejected"})
             continue
