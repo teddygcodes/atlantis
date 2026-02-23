@@ -20,7 +20,10 @@ SEVERITY = {
     "MAGNITUDE_IMPLAUSIBLE": 2,
     "SCOPE_EXCEEDED": 1,
     "DEPENDENCY_FAILURE": 1,
+    "CRITIC_TOO_PASSIVE": 5,
 }
+
+MAX_PROPOSALS = 10
 
 PROMPT_MARKERS = {
     "RESEARCHER_PROMPT": ("# === RESEARCHER_PROMPT_START ===", "# === RESEARCHER_PROMPT_END ==="),
@@ -67,12 +70,12 @@ class MetaOptimizer:
             out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
             return out
 
-        top_patterns = self._rank_failures(archive)
+        top_patterns = self._rank_failures(archive, run_dir)[:MAX_PROPOSALS]
         prompt_text = self.states_file.read_text(encoding="utf-8")
 
         proposals = []
         for rank, pattern in enumerate(top_patterns, start=1):
-            target_section = "CRITIC_PROMPT" if "LOGIC" in pattern.pattern else "RESEARCHER_PROMPT"
+            target_section = "CRITIC_PROMPT" if pattern.pattern in {"LOGIC_FAILURE", "CRITIC_TOO_PASSIVE"} else "RESEARCHER_PROMPT"
             current_excerpt = self._extract_prompt(prompt_text, target_section)
             proposal = self._draft_proposal(run_dir, pattern, rank, target_section, current_excerpt)
             if self._is_oscillating(proposal, history):
@@ -136,6 +139,13 @@ class MetaOptimizer:
     @staticmethod
     def _load_archive(run_dir: Path) -> dict[str, Any]:
         return json.loads((run_dir / "archive.json").read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _load_domain_health(run_dir: Path) -> dict[str, Any]:
+        path = run_dir / "domain_health.json"
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8"))
 
     def _load_history(self) -> dict[str, Any]:
         if not self.history_file.exists():
@@ -414,12 +424,13 @@ class MetaOptimizer:
             out[task] = max(out.get(task, 0), int(tok))
         return out
 
-    def _rank_failures(self, archive: dict[str, Any]) -> list[FailurePattern]:
+    def _rank_failures(self, archive: dict[str, Any], run_dir: Path) -> list[FailurePattern]:
         entries = archive.get("archive_entries", [])
         domain_survival = {
             d.get("domain"): max(float(d.get("survival_rate", 0.0)), 0.01)
             for d in archive.get("domain_metrics", [])
         }
+        domain_health = self._load_domain_health(run_dir)
 
         counts = Counter()
         domains_by_reason: dict[str, set[str]] = defaultdict(set)
@@ -443,6 +454,28 @@ class MetaOptimizer:
                 weight = 1.0 / domain_survival.get(domain, 0.1)
                 score_acc[tag] += SEVERITY[tag] * weight
 
+        passive_domains = []
+        for domain, metrics in domain_health.items():
+            if not isinstance(metrics, dict):
+                continue
+            flags = metrics.get("flags") or {}
+            survival = float(metrics.get("survival_rate", 0.0))
+            weak_critic = bool(flags.get("weak_critic_warning"))
+            if survival >= 0.999 and weak_critic:
+                passive_domains.append(domain)
+
+        if passive_domains:
+            tag = "CRITIC_TOO_PASSIVE"
+            counts[tag] = len(passive_domains)
+            domains_by_reason[tag].update(passive_domains)
+            passive_states = {
+                e.get("source_state", "")
+                for e in entries
+                if self._domain_from_state(e.get("source_state", "")) in passive_domains
+            }
+            states_by_reason[tag].update(s for s in passive_states if s)
+            score_acc[tag] += SEVERITY[tag] * len(passive_domains) * 2
+
         ranked = [
             FailurePattern(
                 pattern=k,
@@ -454,7 +487,7 @@ class MetaOptimizer:
             for k, v in score_acc.items()
         ]
         ranked.sort(key=lambda p: p.score, reverse=True)
-        return ranked[:10]
+        return ranked[:MAX_PROPOSALS]
 
     def _draft_proposal(
         self,
@@ -566,6 +599,13 @@ class MetaOptimizer:
                 "- 'Verify all cited claims have survived adversarial review'\n"
                 "- 'Check citation chains for retracted or partial-status dependencies'\n"
                 "- 'Reject claims that rest on unvalidated foundations'"
+            ),
+            "CRITIC_TOO_PASSIVE": (
+                "Entire domains show 100% survival while weak-critic flags are active. Add text requiring:\n"
+                "- 'Actively seek falsification opportunities for each claim, not just surface checks'\n"
+                "- 'Challenge at least one core assumption with a domain-specific counterexample attempt'\n"
+                "- 'Escalate uncertain claims to retraction unless evidence clears explicit confidence thresholds'\n"
+                "- 'When no weaknesses are found, explain the stress tests attempted and why they failed to falsify'"
             ),
         }
 
