@@ -305,7 +305,7 @@ def _apply_proposal_file(proposal_path: Path) -> None:
     new_version = _bump_patch(prompt_version)
     run_record = {
         "applied_at": _now(),
-        "proposal_file": str(proposal_path.relative_to(ROOT)),
+        "proposal_file": str(proposal_path),
         "prompt_version_before": prompt_version,
         "prompt_version_after": new_version,
         "modified_sections": modified_sections,
