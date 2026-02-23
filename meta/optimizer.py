@@ -147,7 +147,7 @@ class MetaOptimizer:
             for k, v in score_acc.items()
         ]
         ranked.sort(key=lambda p: p.score, reverse=True)
-        return ranked[:3]
+        return ranked[:10]
 
     def _draft_proposal(
         self,

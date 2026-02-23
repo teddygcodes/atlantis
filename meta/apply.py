@@ -245,28 +245,25 @@ def _to_proposals(payload: dict[str, Any]) -> list[Proposal]:
             )
         )
 
-    if len(proposals) > 3:
-        raise ValueError("Maximum 3 non-rejected proposals are allowed per analysis")
+    if len(proposals) > 10:
+        raise ValueError("Maximum 10 non-rejected proposals are allowed per analysis")
     return proposals
 
 
-def _show_diff_and_review(current_text: str, proposals: list[Proposal]) -> None:
-    temp = current_text
-    print("\n=== Proposed Changes ===")
-    for p in proposals:
-        _, _, old_block = _extract_block(temp, p.marker)
-        preview_new = _normalize_new_text(p.new_text)
-        diff = difflib.unified_diff(
-            old_block.splitlines(),
-            preview_new.splitlines(),
-            fromfile=f"{p.marker}:old",
-            tofile=f"{p.marker}:new",
-            lineterm="",
-        )
-        print(f"\n--- {p.proposal_id} ({p.marker}) ---")
-        print("\n".join(diff) or "(no textual change)")
-        print(f"Adversarial review summary: {p.adversarial_review_summary}")
-        temp = _apply_block(temp, p.marker, p.new_text)
+def _show_proposal_diff_and_review(current_text: str, proposal: Proposal, index: int, total: int) -> None:
+    _, _, old_block = _extract_block(current_text, proposal.marker)
+    preview_new = _normalize_new_text(proposal.new_text)
+    diff = difflib.unified_diff(
+        old_block.splitlines(),
+        preview_new.splitlines(),
+        fromfile=f"{proposal.marker}:old",
+        tofile=f"{proposal.marker}:new",
+        lineterm="",
+    )
+
+    print(f"\n=== Proposal {index}/{total}: {proposal.proposal_id} ({proposal.marker}) ===")
+    print("\n".join(diff) or "(no textual change)")
+    print(f"Adversarial review summary: {proposal.adversarial_review_summary}")
 
 
 def _apply_proposal_file(proposal_path: Path) -> None:
@@ -279,30 +276,38 @@ def _apply_proposal_file(proposal_path: Path) -> None:
     history = _read_history()
     prompt_version = str(payload.get("prompt_version") or history.get("current_prompt_version") or "v2.4.0")
 
-    sections = [p.marker for p in proposals]
-    _check_anti_oscillation(history, sections)
-
     latest_run = _latest_run_dir(RUNS_DIR)
     baseline_path = _snapshot_baseline(prompt_version, latest_run)
     print(f"Baseline snapshot written: {baseline_path}")
 
-    current_text = STATES_PATH.read_text(encoding="utf-8")
-    _show_diff_and_review(current_text, proposals)
-
-    confirm = input("\nApply these changes? (y/n): ").strip().lower()
-    if confirm != "y":
-        print("Aborted by user.")
-        return
-
-    new_text = current_text
+    base_text = STATES_PATH.read_text(encoding="utf-8")
+    new_text = base_text
     modified_sections: list[str] = []
-    for p in proposals:
-        new_text = _apply_block(new_text, p.marker, p.new_text)
+    accepted_proposals: list[Proposal] = []
+    denied_proposals: list[dict[str, str]] = []
+
+    for idx, p in enumerate(proposals, start=1):
+        _show_proposal_diff_and_review(new_text, p, idx, len(proposals))
+        confirm = input(f"\nApply proposal {idx}? (y/n): ").strip().lower()
+        if confirm != "y":
+            denied_proposals.append({"proposal_id": p.proposal_id, "reason": "user_rejected"})
+            continue
+
+        try:
+            _check_anti_oscillation(history, [p.marker])
+            new_text = _apply_block(new_text, p.marker, p.new_text)
+        except ValueError as e:
+            denied_proposals.append({"proposal_id": p.proposal_id, "reason": str(e)})
+            print(f"Skipping {p.proposal_id}: {e}")
+            continue
+
+        accepted_proposals.append(p)
         modified_sections.append(p.marker)
 
-    STATES_PATH.write_text(new_text, encoding="utf-8")
+    if accepted_proposals:
+        STATES_PATH.write_text(new_text, encoding="utf-8")
 
-    new_version = _bump_patch(prompt_version)
+    new_version = _bump_patch(prompt_version) if accepted_proposals else prompt_version
     run_record = {
         "applied_at": _now(),
         "proposal_file": str(proposal_path),
@@ -316,15 +321,32 @@ def _apply_proposal_file(proposal_path: Path) -> None:
                 "status": p.status,
                 "rollback_text": p.rollback_text,
                 "adversarial_review_summary": p.adversarial_review_summary,
+                "applied": True,
+            }
+            for p in accepted_proposals
+        ]
+        + [
+            {
+                "proposal_id": p.proposal_id,
+                "marker": p.marker,
+                "status": p.status,
+                "rollback_text": p.rollback_text,
+                "adversarial_review_summary": p.adversarial_review_summary,
+                "applied": False,
+                "rejection_reason": next(d["reason"] for d in denied_proposals if d["proposal_id"] == p.proposal_id),
             }
             for p in proposals
+            if any(d["proposal_id"] == p.proposal_id for d in denied_proposals)
         ],
     }
 
     history.setdefault("runs", []).append(run_record)
     history["current_prompt_version"] = new_version
     _write_json(HISTORY_PATH, history)
-    print(f"Applied {len(proposals)} proposal(s). prompt_version: {prompt_version} → {new_version}")
+    print(
+        f"Applied {len(accepted_proposals)} proposal(s); denied {len(denied_proposals)} proposal(s). "
+        f"prompt_version: {prompt_version} → {new_version}"
+    )
     print(f"History updated: {HISTORY_PATH}")
 
 
