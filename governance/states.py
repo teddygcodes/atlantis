@@ -241,7 +241,8 @@ class State:
             "- Extension claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [what this claim does not cover]\n"
             "- Foundation claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [limits], CITATIONS: #[archive IDs]"
         )
-        # === RESEARCHER_PROMPT_END ===
+        
+# === RESEARCHER_PROMPT_END ===
         response = self.models.complete(
             task_type="researcher_claims",
             system_prompt=self.researcher_config.system_prompt,
@@ -311,16 +312,13 @@ class State:
                 f"{critic_profile_block}"
                 f"RIVAL CLAIM (full text):\n{rival_claim_full}\n\n"
                 f"DECOMPOSED PREMISES:\n{premises_text}\n\n"
-                f"Challenge this claim. Identify a specific step and explain why it fails.\n"
-                f"Format:\n"
-                f"STEP TARGETED: [step number or phrase]\n"
-                f"FLAW: [explain the logical flaw]\n"
-                f"ALTERNATIVE: [what the evidence actually supports]\n"
-                f"EVIDENCE: [your counter-evidence]"
-            ),
-            max_tokens=800,
-        )
-        # === CRITIC_PROMPT_END ===
+                f"Challenge this claim by identifying logical gaps and non-sequiturs.\n"
+                f"CRITICAL VALIDATION REQUIREMENTS:\n"
+                f"1. Verify each logical step follows NECESSARILY (not merely possibly) from the previous one\n"
+                f"2. Identify any missing inferential steps between premises and conclusion\n"
+                f"3. Distinguish between claims that are COMPATIBLE with evidence vs. ENTAILED by evidence\n"
+                f"4. Reject any challenge
+# === CRITIC_PROMPT_END ===
         return response.content or ""
 
     def produce_rebuttal(

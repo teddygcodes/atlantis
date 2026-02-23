@@ -1,0 +1,113 @@
+{
+  "run_analyzed": "runs/2026-02-22_151937",
+  "prompt_version": "v2.0.0",
+  "failure_patterns": [
+    {
+      "rank": 1,
+      "pattern": "LOGIC_FAILURE",
+      "frequency": "50% of retractions",
+      "score": 20.98,
+      "affected_domains": [
+        "Geography",
+        "Mathematics",
+        "Physics"
+      ],
+      "affected_states": [
+        "Geography_Alpha",
+        "Mathematics_Alpha",
+        "Mathematics_Beta",
+        "Physics_Beta"
+      ]
+    },
+    {
+      "rank": 2,
+      "pattern": "MAGNITUDE_IMPLAUSIBLE",
+      "frequency": "25% of retractions",
+      "score": 8.206,
+      "affected_domains": [
+        "Biology",
+        "Physics"
+      ],
+      "affected_states": [
+        "Biology_Beta",
+        "Physics_Alpha"
+      ]
+    },
+    {
+      "rank": 3,
+      "pattern": "PARAMETER_UNJUSTIFIED",
+      "frequency": "12% of retractions",
+      "score": 6.006,
+      "affected_domains": [
+        "Physics"
+      ],
+      "affected_states": [
+        "Physics_Alpha"
+      ]
+    }
+  ],
+  "proposals": [
+    {
+      "status": "NARROWED",
+      "target_file": "governance/states.py",
+      "target_section": "CRITIC_PROMPT",
+      "current_excerpt": "        response = self.models.complete(\n            task_type=\"critic_challenges\",\n            system_prompt=self.critic_config.system_prompt,\n            user_prompt=(\n                f\"{constitution_block}\"\n                f\"{critic_profile_block}\"\n                f\"RIVAL CLAIM (full text):\\n{rival_claim_full}\\n\\n\"\n                f\"DECOMPOSED PREMISES:\\n{premises_text}\\n\\n\"\n                f\"Challenge this claim. Identify a specific step and explain why it fails.\\n\"\n                f\"Format:\\n\"\n                f\"STEP TARGETED: [step number or phrase]\\n\"\n                f\"FLAW: [explain the logical flaw]\\n\"\n                f\"ALTERNATIVE: [what the evidence actually supports]\\n\"\n                f\"EVIDENCE: [your counter-evidence]\"\n            ),\n            max_tokens=800,\n        )\n        ",
+      "current_length": 804,
+      "proposed_change": "        response = self.models.complete(\n            task_type=\"critic_challenges\",\n            system_prompt=self.critic_config.system_prompt,\n            user_prompt=(\n                f\"{constitution_block}\"\n                f\"{critic_profile_block}\"\n                f\"RIVAL CLAIM (full text):\\n{rival_claim_full}\\n\\n\"\n                f\"DECOMPOSED PREMISES:\\n{premises_text}\\n\\n\"\n                f\"Challenge this claim. Identify a specific step and explain why it fails.\\n\"\n                f\"Format:\\n\"\n                f\"STEP TARGETED: [step number or phrase]\\n\"\n                f\"FLAW: [explain the logical flaw]\\n\"\n                f\"ALTERNATIVE: [what the evidence actually supports]\\n\"\n                f\"EVIDENCE: [your counter-evidence]\"\n            ),\n            max_tokens=800,\n        )\n        ",
+      "proposed_length": 804,
+      "rationale": "Generated from weighted failure analysis.",
+      "predicted_effect": "Improve survival for targeted failure pattern.",
+      "risk": "May overfit to recent run characteristics.",
+      "trade_off": "Higher structure may reduce stylistic variance.",
+      "rollback_plan": "Revert to previous prompt text",
+      "adversarial_review": {
+        "meta_beta_objection": "[LLM ERROR: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CYQ1QLLeWX7ZTUhmSStMU'}]",
+        "meta_alpha_rebuttal": "[LLM ERROR: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CYQ1QLnC89cnQo5QGwTut'}]",
+        "meta_judge_ruling": "[LLM ERROR: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CYQ1QMFxpitPpA5p4THTQ'}]",
+        "ruling": "NARROWED"
+      }
+    },
+    {
+      "status": "NARROWED",
+      "target_file": "governance/states.py",
+      "target_section": "RESEARCHER_PROMPT",
+      "current_excerpt": "        base = (\n            f\"Domain: {self.domain}\\nApproach: {self.approach}\\n\\n\"\n            f\"CURRENT CYCLE: {cycle_number}\\n\"\n            \"PREVIOUS CLAIM POSITIONS (from your State):\\n\"\n            f\"{previous_claims_summary}\\n\\n\"\n            \"You must not repeat previous claims. \"\n            \"Build on, challenge, or extend prior work.\\n\\n\"\n            f\"ARCHIVE CONTEXT (MAIN archive only; citable):\\n{archive_context}\\n\\n\"\n            f\"META-LEARNING (graveyard claims; learn but do not cite):\\n{meta_learning}\\n\\n\"\n        )\n        if performance_context:\n            base += (\n                f\"PERFORMANCE CONTEXT:\\n{performance_context}\\n\\n\"\n                \"This context informs you of recent patterns. It does NOT prescribe actions. \"\n                \"The Constitution and judge remain the authority.\\n\\n\"\n            )\n            print(f\"  [LEARNING] {self.name} researcher received {len(performance_context)} chars of performance context\")\n        if lab_hypothesis:\n            base += (\n                f\"LAB HYPOTHESIS (optional \u2014 you may formalize this):\\n{lab_hypothesis}\\n\\n\"\n            )\n        archive_is_empty = (\n            not archive_context.strip()\n            or \"no citable main-archive claims\" in archive_context.lower()\n        )\n        claim_type_hint = (\n            \"NOTE: The Archive has no citable main claims yet. Produce a DISCOVERY claim \"\n            \"(first-principles reasoning \u2014 no citations required).\\n\\n\"\n            if archive_is_empty\n            else \"Produce a Foundation, Discovery, or Challenge claim.\\n\\n\"\n        )\n        base += (\n            f\"{claim_type_hint}\"\n            \"Use this structure:\\n\\n\"\n            \"RESEARCH TYPE: [Foundation|Discovery|Extension|Challenge]\\n\"\n            \"HYPOTHESIS: [one sentence \u2014 testable prediction]\\n\"\n            \"OPERATIONAL DEF: [key terms defined measurably]\\n\"\n            \"STEP 1: [evidence/reasoning]\\n\"\n            \"STEP 2: [evidence/reasoning]\\n\"\n            \"(add steps as needed)\\n\"\n            \"PREDICTION: [what this predicts that can be verified]\\n\"\n            \"CONCLUSION: [one sentence summary]\\n\"\n            \"GAP ADDRESSED: [what new ground this covers]\\n\"\n            \"CITATIONS: [#IDs from knowledge base, or real literature references]\\n\"\n            \"KEYWORDS: [3-5 terms]\\n\\n\"\n            \"IMPORTANT FORMAT REQUIREMENTS:\\n\"\n            \"- Extension claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [what this claim does not cover]\\n\"\n            \"- Foundation claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [limits], CITATIONS: #[archive IDs]\"\n        )\n        ",
+      "current_length": 2632,
+      "proposed_change": "        base = (\n            f\"Domain: {self.domain}\\nApproach: {self.approach}\\n\\n\"\n            f\"CURRENT CYCLE: {cycle_number}\\n\"\n            \"PREVIOUS CLAIM POSITIONS (from your State):\\n\"\n            f\"{previous_claims_summary}\\n\\n\"\n            \"You must not repeat previous claims. \"\n            \"Build on, challenge, or extend prior work.\\n\\n\"\n            f\"ARCHIVE CONTEXT (MAIN archive only; citable):\\n{archive_context}\\n\\n\"\n            f\"META-LEARNING (graveyard claims; learn but do not cite):\\n{meta_learning}\\n\\n\"\n        )\n        if performance_context:\n            base += (\n                f\"PERFORMANCE CONTEXT:\\n{performance_context}\\n\\n\"\n                \"This context informs you of recent patterns. It does NOT prescribe actions. \"\n                \"The Constitution and judge remain the authority.\\n\\n\"\n            )\n            print(f\"  [LEARNING] {self.name} researcher received {len(performance_context)} chars of performance context\")\n        if lab_hypothesis:\n            base += (\n                f\"LAB HYPOTHESIS (optional \u2014 you may formalize this):\\n{lab_hypothesis}\\n\\n\"\n            )\n        archive_is_empty = (\n            not archive_context.strip()\n            or \"no citable main-archive claims\" in archive_context.lower()\n        )\n        claim_type_hint = (\n            \"NOTE: The Archive has no citable main claims yet. Produce a DISCOVERY claim \"\n            \"(first-principles reasoning \u2014 no citations required).\\n\\n\"\n            if archive_is_empty\n            else \"Produce a Foundation, Discovery, or Challenge claim.\\n\\n\"\n        )\n        base += (\n            f\"{claim_type_hint}\"\n            \"Use this structure:\\n\\n\"\n            \"RESEARCH TYPE: [Foundation|Discovery|Extension|Challenge]\\n\"\n            \"HYPOTHESIS: [one sentence \u2014 testable prediction]\\n\"\n            \"OPERATIONAL DEF: [key terms defined measurably]\\n\"\n            \"STEP 1: [evidence/reasoning]\\n\"\n            \"STEP 2: [evidence/reasoning]\\n\"\n            \"(add steps as needed)\\n\"\n            \"PREDICTION: [what this predicts that can be verified]\\n\"\n            \"CONCLUSION: [one sentence summary]\\n\"\n            \"GAP ADDRESSED: [what new ground this covers]\\n\"\n            \"CITATIONS: [#IDs from knowledge base, or real literature references]\\n\"\n            \"KEYWORDS: [3-5 terms]\\n\\n\"\n            \"IMPORTANT FORMAT REQUIREMENTS:\\n\"\n            \"- Extension claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [what this claim does not cover]\\n\"\n            \"- Foundation claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [limits], CITATIONS: #[archive IDs]\"\n        )\n        ",
+      "proposed_length": 2632,
+      "rationale": "Generated from weighted failure analysis.",
+      "predicted_effect": "Improve survival for targeted failure pattern.",
+      "risk": "May overfit to recent run characteristics.",
+      "trade_off": "Higher structure may reduce stylistic variance.",
+      "rollback_plan": "Revert to previous prompt text",
+      "adversarial_review": {
+        "meta_beta_objection": "[LLM ERROR: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CYQ1QN9YXUBYfNAiEeVBR'}]",
+        "meta_alpha_rebuttal": "[LLM ERROR: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CYQ1QNZMDiCzvvnfMqFYd'}]",
+        "meta_judge_ruling": "[LLM ERROR: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CYQ1QP37wmg2hTkPrnqbf'}]",
+        "ruling": "NARROWED"
+      }
+    },
+    {
+      "status": "NARROWED",
+      "target_file": "governance/states.py",
+      "target_section": "RESEARCHER_PROMPT",
+      "current_excerpt": "        base = (\n            f\"Domain: {self.domain}\\nApproach: {self.approach}\\n\\n\"\n            f\"CURRENT CYCLE: {cycle_number}\\n\"\n            \"PREVIOUS CLAIM POSITIONS (from your State):\\n\"\n            f\"{previous_claims_summary}\\n\\n\"\n            \"You must not repeat previous claims. \"\n            \"Build on, challenge, or extend prior work.\\n\\n\"\n            f\"ARCHIVE CONTEXT (MAIN archive only; citable):\\n{archive_context}\\n\\n\"\n            f\"META-LEARNING (graveyard claims; learn but do not cite):\\n{meta_learning}\\n\\n\"\n        )\n        if performance_context:\n            base += (\n                f\"PERFORMANCE CONTEXT:\\n{performance_context}\\n\\n\"\n                \"This context informs you of recent patterns. It does NOT prescribe actions. \"\n                \"The Constitution and judge remain the authority.\\n\\n\"\n            )\n            print(f\"  [LEARNING] {self.name} researcher received {len(performance_context)} chars of performance context\")\n        if lab_hypothesis:\n            base += (\n                f\"LAB HYPOTHESIS (optional \u2014 you may formalize this):\\n{lab_hypothesis}\\n\\n\"\n            )\n        archive_is_empty = (\n            not archive_context.strip()\n            or \"no citable main-archive claims\" in archive_context.lower()\n        )\n        claim_type_hint = (\n            \"NOTE: The Archive has no citable main claims yet. Produce a DISCOVERY claim \"\n            \"(first-principles reasoning \u2014 no citations required).\\n\\n\"\n            if archive_is_empty\n            else \"Produce a Foundation, Discovery, or Challenge claim.\\n\\n\"\n        )\n        base += (\n            f\"{claim_type_hint}\"\n            \"Use this structure:\\n\\n\"\n            \"RESEARCH TYPE: [Foundation|Discovery|Extension|Challenge]\\n\"\n            \"HYPOTHESIS: [one sentence \u2014 testable prediction]\\n\"\n            \"OPERATIONAL DEF: [key terms defined measurably]\\n\"\n            \"STEP 1: [evidence/reasoning]\\n\"\n            \"STEP 2: [evidence/reasoning]\\n\"\n            \"(add steps as needed)\\n\"\n            \"PREDICTION: [what this predicts that can be verified]\\n\"\n            \"CONCLUSION: [one sentence summary]\\n\"\n            \"GAP ADDRESSED: [what new ground this covers]\\n\"\n            \"CITATIONS: [#IDs from knowledge base, or real literature references]\\n\"\n            \"KEYWORDS: [3-5 terms]\\n\\n\"\n            \"IMPORTANT FORMAT REQUIREMENTS:\\n\"\n            \"- Extension claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [what this claim does not cover]\\n\"\n            \"- Foundation claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [limits], CITATIONS: #[archive IDs]\"\n        )\n        ",
+      "current_length": 2632,
+      "proposed_change": "        base = (\n            f\"Domain: {self.domain}\\nApproach: {self.approach}\\n\\n\"\n            f\"CURRENT CYCLE: {cycle_number}\\n\"\n            \"PREVIOUS CLAIM POSITIONS (from your State):\\n\"\n            f\"{previous_claims_summary}\\n\\n\"\n            \"You must not repeat previous claims. \"\n            \"Build on, challenge, or extend prior work.\\n\\n\"\n            f\"ARCHIVE CONTEXT (MAIN archive only; citable):\\n{archive_context}\\n\\n\"\n            f\"META-LEARNING (graveyard claims; learn but do not cite):\\n{meta_learning}\\n\\n\"\n        )\n        if performance_context:\n            base += (\n                f\"PERFORMANCE CONTEXT:\\n{performance_context}\\n\\n\"\n                \"This context informs you of recent patterns. It does NOT prescribe actions. \"\n                \"The Constitution and judge remain the authority.\\n\\n\"\n            )\n            print(f\"  [LEARNING] {self.name} researcher received {len(performance_context)} chars of performance context\")\n        if lab_hypothesis:\n            base += (\n                f\"LAB HYPOTHESIS (optional \u2014 you may formalize this):\\n{lab_hypothesis}\\n\\n\"\n            )\n        archive_is_empty = (\n            not archive_context.strip()\n            or \"no citable main-archive claims\" in archive_context.lower()\n        )\n        claim_type_hint = (\n            \"NOTE: The Archive has no citable main claims yet. Produce a DISCOVERY claim \"\n            \"(first-principles reasoning \u2014 no citations required).\\n\\n\"\n            if archive_is_empty\n            else \"Produce a Foundation, Discovery, or Challenge claim.\\n\\n\"\n        )\n        base += (\n            f\"{claim_type_hint}\"\n            \"Use this structure:\\n\\n\"\n            \"RESEARCH TYPE: [Foundation|Discovery|Extension|Challenge]\\n\"\n            \"HYPOTHESIS: [one sentence \u2014 testable prediction]\\n\"\n            \"OPERATIONAL DEF: [key terms defined measurably]\\n\"\n            \"STEP 1: [evidence/reasoning]\\n\"\n            \"STEP 2: [evidence/reasoning]\\n\"\n            \"(add steps as needed)\\n\"\n            \"PREDICTION: [what this predicts that can be verified]\\n\"\n            \"CONCLUSION: [one sentence summary]\\n\"\n            \"GAP ADDRESSED: [what new ground this covers]\\n\"\n            \"CITATIONS: [#IDs from knowledge base, or real literature references]\\n\"\n            \"KEYWORDS: [3-5 terms]\\n\\n\"\n            \"IMPORTANT FORMAT REQUIREMENTS:\\n\"\n            \"- Extension claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [what this claim does not cover]\\n\"\n            \"- Foundation claims MUST include: DEPENDS ON: #[prior claim ID], SCOPE BOUNDARY: [limits], CITATIONS: #[archive IDs]\"\n        )\n        ",
+      "proposed_length": 2632,
+      "rationale": "Generated from weighted failure analysis.",
+      "predicted_effect": "Improve survival for targeted failure pattern.",
+      "risk": "May overfit to recent run characteristics.",
+      "trade_off": "Higher structure may reduce stylistic variance.",
+      "rollback_plan": "Revert to previous prompt text",
+      "adversarial_review": {
+        "meta_beta_objection": "[LLM ERROR: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CYQ1QPuD2agDeAJgp68Zt'}]",
+        "meta_alpha_rebuttal": "[LLM ERROR: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CYQ1QQNF2B58wW1kZBcTL'}]",
+        "meta_judge_ruling": "[LLM ERROR: Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CYQ1QQp2ZLdJFpza63rZu'}]",
+        "ruling": "NARROWED"
+      }
+    }
+  ],
+  "generated_at": "2026-02-22T23:53:09.461262+00:00",
+  "llm_cost_usd_estimate": 0.0
+}
