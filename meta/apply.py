@@ -240,6 +240,11 @@ def _read_history() -> dict[str, Any]:
 
 
 def _check_anti_oscillation(history: dict[str, Any], sections: list[str]) -> None:
+    """Check if section was modified too recently (prevents rapid back-and-forth changes).
+
+    TODO: Make this more granular - allow changes to different lines in same section.
+    Currently blocks entire section if modified in last run. Future: track line-level changes.
+    """
     runs = history.get("runs", [])
     if not runs:
         return
@@ -250,9 +255,10 @@ def _check_anti_oscillation(history: dict[str, Any], sections: list[str]) -> Non
             if section in runs[idx].get("modified_sections", []):
                 last_idx = idx
                 break
-        if last_idx is not None and (current_idx - last_idx) < 3:
+        # Block if modified in the immediately previous run (reduced from 3 to 1)
+        if last_idx is not None and (current_idx - last_idx) < 2:
             raise ValueError(
-                f"Anti-oscillation violation: section '{section}' modified {current_idx - last_idx} run(s) ago"
+                f"Anti-oscillation: '{section}' was modified in the last run (v{history.get('current_prompt_version', 'unknown')})"
             )
 
 
@@ -409,17 +415,26 @@ def process_proposal_file(proposal_path: Path, dry_run: bool = False, *, minor_b
         if dry_run:
             continue
 
+        # Check anti-oscillation BEFORE asking user to approve
+        # Never waste user's time approving something that will be rejected
+        try:
+            _check_anti_oscillation(history, [p.marker])
+        except ValueError as e:
+            denied_proposals.append({"proposal_id": p.proposal_id, "reason": str(e)})
+            print(f"\n⚠️  [BLOCKED] {e}")
+            print(f"Skipping proposal {idx} (not asking for approval)\n")
+            continue
+
         confirm = input(f"\nApply proposal {idx} of {len(proposals)}? (y/n): ").strip().lower()
         if confirm != "y":
             denied_proposals.append({"proposal_id": p.proposal_id, "reason": "user_rejected"})
             continue
 
         try:
-            _check_anti_oscillation(history, [p.marker])
             new_text = _apply_block(new_text, p.marker, p)
         except ValueError as e:
             denied_proposals.append({"proposal_id": p.proposal_id, "reason": str(e)})
-            print(f"Skipping {p.proposal_id}: {e}")
+            print(f"Error applying {p.proposal_id}: {e}")
             continue
 
         accepted_proposals.append(p)
