@@ -17,6 +17,18 @@ STATES_PATH = ROOT / "governance" / "states.py"
 RUNS_DIR = ROOT / "runs"
 
 ALLOWED_MARKERS = {"RESEARCHER_PROMPT", "CRITIC_PROMPT"}
+MARKER_CALLS_PER_RUN = {
+    "RESEARCHER_PROMPT": 60,
+    "CRITIC_PROMPT": 60,
+}
+MARKER_MODEL_TIER = {
+    "RESEARCHER_PROMPT": "sonnet",
+    "CRITIC_PROMPT": "sonnet",
+}
+INPUT_PRICE_PER_MTOK_USD = {
+    "haiku": 0.25,
+    "sonnet": 3.00,
+}
 REQUIRED_SECTIONS = {
     # Strict format requirements for researcher prompts (constitutional)
     "RESEARCHER_PROMPT": ["RESEARCH TYPE:", "HYPOTHESIS:", "CONCLUSION:", "CITATIONS:"],
@@ -263,7 +275,28 @@ def _show_proposal_diff_and_review(current_text: str, proposal: Proposal, index:
 
     print(f"\n=== Proposal {index}/{total}: {proposal.proposal_id} ({proposal.marker}) ===")
     print("\n".join(diff) or "(no textual change)")
+    old_tokens = _estimate_input_tokens(old_block)
+    new_tokens = _estimate_input_tokens(preview_new)
+    token_delta = new_tokens - old_tokens
+    cost_delta = _estimated_cost_impact_per_run(proposal.marker, token_delta)
+    print(
+        "Estimated cost impact: "
+        f"{token_delta:+d} tokens/call, "
+        f"~${cost_delta:.3f}/run"
+    )
     print(f"Adversarial review summary: {proposal.adversarial_review_summary}")
+
+
+def _estimate_input_tokens(text: str) -> int:
+    """Approximate token count using the provider's char-to-token heuristic."""
+    return len(text) // 4
+
+
+def _estimated_cost_impact_per_run(marker: str, token_delta_per_call: int) -> float:
+    calls_per_run = MARKER_CALLS_PER_RUN.get(marker, 0)
+    model_tier = MARKER_MODEL_TIER.get(marker, "sonnet")
+    input_price_per_mtok = INPUT_PRICE_PER_MTOK_USD.get(model_tier, INPUT_PRICE_PER_MTOK_USD["sonnet"])
+    return (token_delta_per_call * calls_per_run / 1_000_000) * input_price_per_mtok
 
 
 def _apply_proposal_file(proposal_path: Path) -> None:
