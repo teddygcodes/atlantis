@@ -55,10 +55,17 @@ class MetaOptimizer:
         if self.llm.mode == "local":
             print("[OPTIMIZER] WARNING: Running in local simulation mode - set ANTHROPIC_API_KEY to use real API")
 
-    def run(self, run_path: str | None = None) -> Path:
+    def run(self, run_path: str | None = None, cost_mode: bool = False) -> Path:
         run_dir = self._resolve_run(run_path)
         archive = self._load_archive(run_dir)
         history = self._load_history()
+
+        if cost_mode:
+            payload = self._run_cost_optimization(run_dir, archive)
+            self.proposals_dir.mkdir(parents=True, exist_ok=True)
+            out = self.proposals_dir / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_cost_proposal.json"
+            out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            return out
 
         top_patterns = self._rank_failures(archive)
         prompt_text = self.states_file.read_text(encoding="utf-8")
@@ -90,6 +97,34 @@ class MetaOptimizer:
         out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return out
 
+    def _run_cost_optimization(self, run_dir: Path, archive: dict[str, Any]) -> dict[str, Any]:
+        cost_summary = self._load_cost_summary(run_dir)
+        previous_run = self._previous_run(run_dir)
+        previous_cost_summary = self._load_cost_summary(previous_run) if previous_run else {}
+        previous_archive = self._load_archive(previous_run) if previous_run else {}
+
+        savings_candidates = []
+        savings_candidates.extend(self._detect_prompt_bloat(run_dir, archive, cost_summary, previous_archive, previous_cost_summary))
+        savings_candidates.extend(self._detect_model_tier_opportunities(cost_summary))
+        savings_candidates.extend(self._detect_redundant_validation(run_dir, archive, cost_summary))
+        savings_candidates.extend(self._detect_token_budget_waste(run_dir, cost_summary))
+
+        proposals = [self._draft_cost_proposal(run_dir, i + 1, candidate) for i, candidate in enumerate(savings_candidates[:10])]
+
+        return {
+            "analysis_mode": "cost_optimization",
+            "run_analyzed": str(run_dir),
+            "baseline_run": str(previous_run) if previous_run else None,
+            "prompt_version": self._prompt_version(),
+            "summary": {
+                "proposal_count": len(proposals),
+                "estimated_total_savings_per_run_usd": round(sum(p["cost_delta"]["estimated_savings_per_run_usd"] for p in proposals), 6),
+            },
+            "proposals": proposals,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "llm_cost_usd_estimate": round(self.llm.get_stats().get("total_cost_usd", 0.0), 6),
+        }
+
     def _resolve_run(self, run_path: str | None) -> Path:
         if run_path:
             return Path(run_path)
@@ -106,6 +141,278 @@ class MetaOptimizer:
         if not self.history_file.exists():
             return {"events": []}
         return json.loads(self.history_file.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _load_cost_summary(run_dir: Path | None) -> dict[str, Any]:
+        if not run_dir:
+            return {}
+        path = run_dir / "cost_summary.json"
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _previous_run(self, run_dir: Path) -> Path | None:
+        candidates = sorted([p for p in self.runs_dir.iterdir() if p.is_dir()])
+        try:
+            idx = candidates.index(run_dir)
+        except ValueError:
+            return None
+        if idx <= 0:
+            return None
+        return candidates[idx - 1]
+
+    def _draft_cost_proposal(self, run_dir: Path, rank: int, candidate: dict[str, Any]) -> dict[str, Any]:
+        alpha_prompt = self._alpha_cost_prompt(run_dir, candidate)
+        alpha = self._call_llm(alpha_prompt, MODEL_IDS["haiku"], 1000)
+
+        beta_prompt = (
+            "You are Meta_Beta. Attack this cost savings proposal with strongest quality-risk objections.\n"
+            f"Proposal:\n{alpha}\n"
+            "Argue why quality, recall, or safety will regress if this change ships."
+        )
+        beta = self._call_llm(beta_prompt, MODEL_IDS["haiku"], 700)
+
+        rebut_prompt = (
+            "You are Meta_Alpha. Rebut each objection with run-data grounded defense.\n"
+            f"Original proposal:\n{alpha}\n\nObjections:\n{beta}"
+        )
+        rebuttal = self._call_llm(rebut_prompt, MODEL_IDS["haiku"], 800)
+
+        judge_prompt = (
+            "You are Meta_Judge. Decide APPROVE, NARROW, or REJECT.\n"
+            "Prioritize net savings but reject if quality risk is too high.\n"
+            f"Proposal:\n{alpha}\n\nObjection:\n{beta}\n\nRebuttal:\n{rebuttal}"
+        )
+        judge = self._call_llm(judge_prompt, MODEL_IDS["sonnet"], 800)
+        ruling = self._extract_ruling(judge)
+        status = {"APPROVE": "APPROVED", "NARROW": "NARROWED", "REJECT": "REJECTED"}.get(ruling, "NARROWED")
+
+        return {
+            "proposal_id": f"cost_{rank}",
+            "category": candidate["category"],
+            "component": candidate["component"],
+            "status": status,
+            "approval": "PENDING_HUMAN",
+            "evidence": candidate["evidence"],
+            "proposal": candidate["proposal"],
+            "cost_delta": candidate["cost_delta"],
+            "risk_assessment": candidate["risk_assessment"],
+            "adversarial_review": {
+                "meta_beta_objection": beta,
+                "meta_alpha_rebuttal": rebuttal,
+                "meta_judge_ruling": judge,
+                "ruling": status,
+            },
+        }
+
+    def _alpha_cost_prompt(self, run_dir: Path, candidate: dict[str, Any]) -> str:
+        return (
+            "You are Meta_Alpha performing COST OPTIMIZATION for Atlantis.\n"
+            f"Run: {run_dir}\n"
+            f"Category: {candidate['category']}\n"
+            f"Component: {candidate['component']}\n"
+            f"Evidence: {json.dumps(candidate['evidence'])}\n"
+            f"Current cost per run: ${candidate['cost_delta']['current_cost_per_run_usd']:.6f}\n"
+            f"Proposed cost per run: ${candidate['cost_delta']['proposed_cost_per_run_usd']:.6f}\n"
+            f"Estimated savings per run: ${candidate['cost_delta']['estimated_savings_per_run_usd']:.6f}\n"
+            f"Risk: {candidate['risk_assessment']}\n"
+            "Write a concise implementation proposal and why quality should remain acceptable."
+        )
+
+    @staticmethod
+    def _survival_rate(archive: dict[str, Any]) -> float:
+        entries = archive.get("archive_entries", []) if isinstance(archive, dict) else []
+        considered = [e for e in entries if (e.get("status") or "").lower() != "founding"]
+        if not considered:
+            return 0.0
+        survived = sum(1 for e in considered if (e.get("status") or "").lower() in {"survived", "partial"})
+        return survived / len(considered)
+
+    def _detect_prompt_bloat(
+        self,
+        run_dir: Path,
+        archive: dict[str, Any],
+        cost_summary: dict[str, Any],
+        previous_archive: dict[str, Any],
+        previous_cost_summary: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        if not previous_cost_summary:
+            return []
+        curr_tasks = cost_summary.get("cost_by_task_type", {})
+        prev_tasks = previous_cost_summary.get("cost_by_task_type", {})
+        survival_delta = self._survival_rate(archive) - self._survival_rate(previous_archive)
+        proposals = []
+        for task, curr in curr_tasks.items():
+            prev = prev_tasks.get(task)
+            if not prev:
+                continue
+            curr_calls = max(int(curr.get("calls", 0)), 1)
+            prev_calls = max(int(prev.get("calls", 0)), 1)
+            curr_avg_in = float(curr.get("input_tokens", 0)) / curr_calls
+            prev_avg_in = float(prev.get("input_tokens", 0)) / prev_calls
+            if prev_avg_in <= 0:
+                continue
+            growth = (curr_avg_in - prev_avg_in) / prev_avg_in
+            if growth <= 0.20 or survival_delta > 0.01:
+                continue
+            current_cost = float(curr.get("cost_usd", 0.0))
+            proposed_cost = current_cost * 0.85
+            proposals.append(
+                {
+                    "category": "PROMPT_BLOAT",
+                    "component": task,
+                    "evidence": {
+                        "avg_input_tokens_previous": round(prev_avg_in, 2),
+                        "avg_input_tokens_current": round(curr_avg_in, 2),
+                        "token_growth_pct": round(growth * 100, 2),
+                        "overall_survival_delta_pct": round(survival_delta * 100, 2),
+                    },
+                    "proposal": "Compress repeated instructions and move static rubric text into shorter canonical bullets.",
+                    "cost_delta": {
+                        "current_cost_per_run_usd": round(current_cost, 6),
+                        "proposed_cost_per_run_usd": round(proposed_cost, 6),
+                        "estimated_savings_per_run_usd": round(current_cost - proposed_cost, 6),
+                    },
+                    "risk_assessment": "Compression may remove nuance and reduce edge-case handling in adversarial prompts.",
+                }
+            )
+        return proposals
+
+    def _detect_model_tier_opportunities(self, cost_summary: dict[str, Any]) -> list[dict[str, Any]]:
+        tasks = cost_summary.get("cost_by_task_type", {})
+        sonnet_tasks = {k: v for k, v in tasks.items() if MODEL_IDS.get("sonnet") and k in {"researcher_claims", "critic_challenges", "researcher_rebuttals", "federal_lab", "judge"}}
+        proposals = []
+        for task, bucket in sonnet_tasks.items():
+            calls = max(int(bucket.get("calls", 0)), 1)
+            avg_output = float(bucket.get("output_tokens", 0)) / calls
+            if avg_output > 450:
+                continue
+            current_cost = float(bucket.get("cost_usd", 0.0))
+            proposed_cost = current_cost * 0.35
+            proposals.append(
+                {
+                    "category": "MODEL_TIER_OPPORTUNITY",
+                    "component": task,
+                    "evidence": {
+                        "current_tier": "sonnet",
+                        "proposed_tier": "haiku",
+                        "calls": calls,
+                        "avg_output_tokens": round(avg_output, 2),
+                    },
+                    "proposal": f"Route {task} to Haiku for low-complexity cases; keep Sonnet fallback when confidence is low.",
+                    "cost_delta": {
+                        "current_cost_per_run_usd": round(current_cost, 6),
+                        "proposed_cost_per_run_usd": round(proposed_cost, 6),
+                        "estimated_savings_per_run_usd": round(current_cost - proposed_cost, 6),
+                    },
+                    "risk_assessment": "Haiku downgrade may reduce reasoning depth on hard samples unless fallback routing is enforced.",
+                }
+            )
+        return proposals[:3]
+
+    def _detect_redundant_validation(
+        self,
+        run_dir: Path,
+        archive: dict[str, Any],
+        cost_summary: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        tasks = cost_summary.get("cost_by_task_type", {})
+        entries = archive.get("archive_entries", [])
+        rejection_text = "\n".join(
+            str(e.get("rejection_reason") or "") + " " + str(e.get("retraction_reason") or "")
+            for e in entries
+        ).lower()
+        validation_keywords = {
+            "anti_loop": ["loop", "circular"],
+            "rebuttal_newness": ["duplicate", "newness", "novelty"],
+            "premise_decomposition": ["premise", "decomposition"],
+            "science_gate": ["science gate", "scientific"],
+            "normalization": ["normalize", "format"],
+        }
+        proposals = []
+        for task, keys in validation_keywords.items():
+            bucket = tasks.get(task)
+            if not bucket or int(bucket.get("calls", 0)) < 20:
+                continue
+            catches = sum(rejection_text.count(k) for k in keys)
+            if catches != 0:
+                continue
+            current_cost = float(bucket.get("cost_usd", 0.0))
+            proposed_cost = current_cost * 0.25
+            proposals.append(
+                {
+                    "category": "REDUNDANT_VALIDATION",
+                    "component": task,
+                    "evidence": {
+                        "run": str(run_dir),
+                        "calls": int(bucket.get("calls", 0)),
+                        "estimated_rejections_caught": catches,
+                        "estimated_rejection_rate": 0.0,
+                    },
+                    "proposal": f"Consolidate {task} into adjacent validation stage and execute only on high-risk samples.",
+                    "cost_delta": {
+                        "current_cost_per_run_usd": round(current_cost, 6),
+                        "proposed_cost_per_run_usd": round(proposed_cost, 6),
+                        "estimated_savings_per_run_usd": round(current_cost - proposed_cost, 6),
+                    },
+                    "risk_assessment": "Hidden failure modes may reappear if this validator is removed entirely; keep periodic audit sampling.",
+                }
+            )
+        return proposals
+
+    def _detect_token_budget_waste(self, run_dir: Path, cost_summary: dict[str, Any]) -> list[dict[str, Any]]:
+        tasks = cost_summary.get("cost_by_task_type", {})
+        token_limits = self._extract_task_token_limits(run_dir)
+        proposals = []
+        for task, bucket in tasks.items():
+            max_tokens = token_limits.get(task)
+            if not max_tokens:
+                continue
+            calls = max(int(bucket.get("calls", 0)), 1)
+            avg_output = float(bucket.get("output_tokens", 0)) / calls
+            utilization = avg_output / max_tokens
+            current_cost = float(bucket.get("cost_usd", 0.0))
+            if utilization >= 0.95:
+                proposed_cost = current_cost * 0.9
+                proposal_text = "Increase max_tokens slightly and compress prompt headers to reduce truncation retries."
+                risk = "More tokens can increase spend if truncation diagnosis is wrong."
+            elif utilization < 0.50:
+                proposed_cost = current_cost * 0.92
+                proposal_text = "Reduce max_tokens allocation for this state/task to better match observed output usage."
+                risk = "Tighter caps may clip rare high-complexity outputs."
+            else:
+                continue
+            proposals.append(
+                {
+                    "category": "TOKEN_BUDGET_WASTE",
+                    "component": task,
+                    "evidence": {
+                        "calls": calls,
+                        "avg_output_tokens": round(avg_output, 2),
+                        "max_tokens": max_tokens,
+                        "budget_utilization_pct": round(utilization * 100, 2),
+                    },
+                    "proposal": proposal_text,
+                    "cost_delta": {
+                        "current_cost_per_run_usd": round(current_cost, 6),
+                        "proposed_cost_per_run_usd": round(proposed_cost, 6),
+                        "estimated_savings_per_run_usd": round(current_cost - proposed_cost, 6),
+                    },
+                    "risk_assessment": risk,
+                }
+            )
+        return proposals
+
+    def _extract_task_token_limits(self, run_dir: Path) -> dict[str, int]:
+        states_path = run_dir.parent.parent / "governance" / "states.py"
+        if not states_path.exists():
+            states_path = Path("governance/states.py")
+        text = states_path.read_text(encoding="utf-8")
+        pattern = re.compile(r'task_type\s*=\s*"([a-z_]+)"[\s\S]{0,240}?max_tokens\s*=\s*(\d+)')
+        out: dict[str, int] = {}
+        for task, tok in pattern.findall(text):
+            out[task] = max(out.get(task, 0), int(tok))
+        return out
 
     def _rank_failures(self, archive: dict[str, Any]) -> list[FailurePattern]:
         entries = archive.get("archive_entries", [])
