@@ -32,7 +32,7 @@ function useScrollReveal(deps: unknown[] = []) {
 
 // Generate domain filters dynamically from actual data
 const allDomains = Array.from(
-  new Set(HYPOTHESES.map((h) => h.domain).filter((d) => d !== "Unknown"))
+  new Set(HYPOTHESES.map((h) => h.domain))
 ).sort();
 const DOMAIN_FILTERS = ["All", ...allDomains] as const;
 type DomainFilter = (typeof DOMAIN_FILTERS)[number];
