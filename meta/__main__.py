@@ -26,7 +26,7 @@ def main() -> None:
     optimize.add_argument("--run", help="Run directory to analyze (defaults to latest)")
     optimize.add_argument("--cost", action="store_true", help="Include cost optimization analysis")
     optimize.add_argument("--dry-run", action="store_true", help="Show proposals without applying")
-    optimize.add_argument("--max", type=int, default=10, help="Limit to top N proposals (default 10, max 10)")
+    optimize.add_argument("--max", type=int, default=None, help="Limit to top N proposals (default: unlimited)")
     optimize.add_argument(
         "--llm-mode",
         default="auto",

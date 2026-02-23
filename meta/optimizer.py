@@ -23,7 +23,9 @@ SEVERITY = {
     "CRITIC_TOO_PASSIVE": 5,
 }
 
-DEFAULT_MAX_PROPOSALS = 10
+# No default cap - generate as many proposals as the data justifies
+# Users can impose a limit via --max flag if desired
+DEFAULT_MAX_PROPOSALS = None
 
 PROMPT_MARKERS = {
     "RESEARCHER_PROMPT": ("# === RESEARCHER_PROMPT_START ===", "# === RESEARCHER_PROMPT_END ==="),
@@ -64,11 +66,14 @@ class MetaOptimizer:
         if self.llm.mode == "local":
             print("[OPTIMIZER] WARNING: Running in local simulation mode - set ANTHROPIC_API_KEY to use real API")
 
-    def run(self, run_path: str | None = None, cost_mode: bool = False, max_proposals: int = DEFAULT_MAX_PROPOSALS) -> Path:
+    def run(self, run_path: str | None = None, cost_mode: bool = False, max_proposals: int | None = DEFAULT_MAX_PROPOSALS) -> Path:
         run_dir = self._resolve_run(run_path)
         archive = self._load_archive(run_dir)
         history = self._load_history()
-        max_proposals = max(1, min(int(max_proposals), DEFAULT_MAX_PROPOSALS))
+        # No hard cap - only apply user-imposed limit via --max flag
+        if max_proposals is not None:
+            max_proposals = max(1, int(max_proposals))
+        print(f"[OPTIMIZER] Max proposals: {'unlimited' if max_proposals is None else max_proposals}")
 
         if cost_mode:
             payload = self._run_cost_optimization(run_dir, archive)
@@ -93,7 +98,8 @@ class MetaOptimizer:
 
             for gi, guidance_text in enumerate(guidance_items):
                 proposal_rank += 1
-                print(f"[OPTIMIZER] Drafting proposal {proposal_rank}/{max_proposals} for {pattern.pattern} ({gi+1}/{len(guidance_items)})")
+                limit_str = 'unlimited' if max_proposals is None else str(max_proposals)
+                print(f"[OPTIMIZER] Drafting proposal {proposal_rank}/{limit_str} for {pattern.pattern} ({gi+1}/{len(guidance_items)})")
 
                 sub_pattern = FailurePattern(
                     pattern=pattern.pattern,
@@ -124,10 +130,11 @@ class MetaOptimizer:
                     # Continue to next proposal instead of failing entire run
                     continue
 
-                if len(proposals) >= max_proposals:
-                    print(f"[OPTIMIZER] Reached max_proposals limit ({max_proposals})")
+                # Only enforce limit if user explicitly set --max
+                if max_proposals is not None and len(proposals) >= max_proposals:
+                    print(f"[OPTIMIZER] Reached user-imposed max_proposals limit ({max_proposals})")
                     break
-            if len(proposals) >= max_proposals:
+            if max_proposals is not None and len(proposals) >= max_proposals:
                 break
 
         print(f"[OPTIMIZER] Generated {len(proposals)} total proposals")
