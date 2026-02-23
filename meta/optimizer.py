@@ -694,5 +694,8 @@ class MetaOptimizer:
 
     @staticmethod
     def _prompt_version() -> str:
-        m = re.search(r'VERSION\s*=\s*"([^"]+)"', Path("config/settings.py").read_text(encoding="utf-8"))
-        return f"v{m.group(1)}" if m else "unknown"
+        history_path = Path("meta/history.json")
+        if history_path.exists():
+            history = json.loads(history_path.read_text(encoding="utf-8"))
+            return history.get("current_version", "unknown")
+        return "unknown"
