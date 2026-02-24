@@ -94,13 +94,19 @@ export default function Home() {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
+        // Split on newlines and process each line individually
+        const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line.startsWith("data:")) continue;
+
+          const jsonStr = line.slice(5).trim();
+          if (!jsonStr || jsonStr === "[DONE]") continue;
+
           try {
-            const data = JSON.parse(line.slice(6));
+            const data = JSON.parse(jsonStr);
 
             if (data.type === "status") {
               setConversation((prev) =>
@@ -120,6 +126,15 @@ export default function Home() {
                         isLoading: false,
                         pipelineStatus: "",
                       }
+                    : e
+                )
+              );
+            } else if (data.type === "done") {
+              // Mark loading complete if result hasn't arrived yet
+              setConversation((prev) =>
+                prev.map((e) =>
+                  e.id === entryId && e.isLoading
+                    ? { ...e, isLoading: false, pipelineStatus: "" }
                     : e
                 )
               );
