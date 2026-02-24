@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { SearchBar } from "@/components/search-bar";
 import { SearchResults } from "@/components/search-results";
@@ -188,43 +187,18 @@ export default function Home() {
           />
         </div>
 
-        {/* Taglines - below search bar, only before search */}
+        {/* Powered by Sydyn - subtle footnote below search bar */}
         {!hasSearched && (
-          <div className="mt-6 flex flex-col items-center gap-1.5">
-            <p
-              className="hero-wave-line-1 text-center"
-              style={{
-                fontFamily: "var(--font-cormorant)",
-                fontSize: "clamp(14px, 2vw, 18px)",
-                fontWeight: 600,
-                color: "#525252",
-              }}
-            >
-              Hypotheses are proposed.
-            </p>
-            <p
-              className="hero-wave-line-2 text-center"
-              style={{
-                fontFamily: "var(--font-cormorant)",
-                fontSize: "clamp(14px, 2vw, 18px)",
-                fontWeight: 600,
-                color: "#525252",
-              }}
-            >
-              Challenges are issued.
-            </p>
-            <p
-              className="hero-wave-line-3 text-center"
-              style={{
-                fontFamily: "var(--font-cormorant)",
-                fontSize: "clamp(14px, 2vw, 18px)",
-                fontWeight: 600,
-                color: "#525252",
-              }}
-            >
-              Only validated knowledge survives.
-            </p>
-          </div>
+          <p
+            className="hero-wave-line-1 mt-3 text-center"
+            style={{
+              fontFamily: "var(--font-ibm-plex-mono)",
+              fontSize: "12px",
+              color: "#444",
+            }}
+          >
+            Powered by Sydyn
+          </p>
         )}
 
         {/* Results area */}
@@ -276,19 +250,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* Footer flame logo - bottom center */}
-      {!hasSearched && (
-        <div className="hero-wave-scroll absolute bottom-6 left-1/2 z-10 -translate-x-1/2">
-          <Image
-            src="/images/hero-emblem.png"
-            alt="Atlantis emblem"
-            width={40}
-            height={40}
-            className="object-contain opacity-20"
-            style={{ width: "40px", height: "40px" }}
-          />
-        </div>
-      )}
+
     </div>
   );
 }
