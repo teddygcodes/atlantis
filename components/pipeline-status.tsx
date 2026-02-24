@@ -1,33 +1,41 @@
 "use client";
 
-const STAGE_ORDER = [
-  "Searching sources...",
-  "Researcher drafting...",
-  "Adversary attacking...",
-  "Judge reviewing...",
-];
+import { useState, useEffect, useRef } from "react";
 
-export function PipelineStatus({ currentStatus }: { currentStatus: string }) {
-  const currentIndex = STAGE_ORDER.indexOf(currentStatus);
+interface PipelineStatusProps {
+  currentStatus: string;
+}
+
+export function PipelineStatus({ currentStatus }: PipelineStatusProps) {
+  const [history, setHistory] = useState<string[]>([]);
+  const prevStatus = useRef("");
+
+  // Accumulate status messages as they arrive
+  useEffect(() => {
+    if (currentStatus && currentStatus !== prevStatus.current) {
+      prevStatus.current = currentStatus;
+      setHistory((prev) => [...prev, currentStatus]);
+    }
+  }, [currentStatus]);
+
+  if (history.length === 0 && !currentStatus) return null;
 
   return (
-    <div className="flex w-full max-w-2xl flex-col gap-2">
-      {STAGE_ORDER.map((stage, i) => {
-        const isActive = stage === currentStatus;
-        const isComplete = i < currentIndex;
-        const isPending = i > currentIndex;
+    <div className="flex w-full flex-col gap-1.5">
+      {history.map((message, i) => {
+        const isLatest = i === history.length - 1;
 
         return (
           <div
-            key={stage}
+            key={`${i}-${message}`}
             className="flex items-center gap-3 transition-all"
             style={{
-              opacity: isPending ? 0.25 : isComplete ? 0.5 : 1,
+              opacity: isLatest ? 1 : 0.35,
             }}
           >
-            {/* Status indicator */}
-            <div className="relative flex h-4 w-4 items-center justify-center">
-              {isActive && (
+            {/* Status indicator dot */}
+            <div className="relative flex h-4 w-4 flex-shrink-0 items-center justify-center">
+              {isLatest && (
                 <span
                   className="pipeline-pulse absolute h-4 w-4 rounded-full"
                   style={{ backgroundColor: "rgba(220, 38, 38, 0.3)" }}
@@ -36,32 +44,24 @@ export function PipelineStatus({ currentStatus }: { currentStatus: string }) {
               <span
                 className="relative h-1.5 w-1.5 rounded-full"
                 style={{
-                  backgroundColor: isActive
-                    ? "#dc2626"
-                    : isComplete
-                      ? "#525252"
-                      : "#1a1a1a",
+                  backgroundColor: isLatest ? "#dc2626" : "#525252",
                 }}
               />
             </div>
 
-            {/* Stage label */}
+            {/* Status message */}
             <span
-              className="text-[11px] tracking-[0.15em]"
+              className="text-[11px] tracking-[0.1em]"
               style={{
                 fontFamily: "var(--font-ibm-plex-mono)",
-                color: isActive
-                  ? "#dc2626"
-                  : isComplete
-                    ? "#525252"
-                    : "#1a1a1a",
+                color: isLatest ? "#dc2626" : "#525252",
               }}
             >
-              {stage}
+              {message}
             </span>
 
-            {/* Checkmark for completed stages */}
-            {isComplete && (
+            {/* Checkmark for completed steps */}
+            {!isLatest && (
               <svg
                 width="10"
                 height="8"

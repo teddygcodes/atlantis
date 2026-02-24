@@ -9,11 +9,11 @@ import { ParticleField } from "@/components/particle-field";
 
 interface SearchResultData {
   answer_bullets: string[];
-  confidence: "HIGH" | "MODERATE" | "LOW";
-  confidence_score: number;
-  sources: { title: string; url: string; grade: string }[];
+  confidence?: string;
+  confidence_score?: number;
+  sources: { title: string; url: string; grade?: string; credibility?: string | number }[];
   constitutional_violations: string[];
-  audit_trail: {
+  audit_trail?: {
     mode: string;
     researcher_claims: number;
     adversary_attacks: number;
@@ -94,13 +94,19 @@ export default function Home() {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
+        // Split on newlines and process each line individually
+        const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line.startsWith("data:")) continue;
+
+          const jsonStr = line.slice(5).trim();
+          if (!jsonStr || jsonStr === "[DONE]") continue;
+
           try {
-            const data = JSON.parse(line.slice(6));
+            const data = JSON.parse(jsonStr);
 
             if (data.type === "status") {
               setConversation((prev) =>
@@ -120,6 +126,15 @@ export default function Home() {
                         isLoading: false,
                         pipelineStatus: "",
                       }
+                    : e
+                )
+              );
+            } else if (data.type === "done") {
+              // Mark loading complete if result hasn't arrived yet
+              setConversation((prev) =>
+                prev.map((e) =>
+                  e.id === entryId && e.isLoading
+                    ? { ...e, isLoading: false, pipelineStatus: "" }
                     : e
                 )
               );
