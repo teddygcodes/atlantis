@@ -50,12 +50,12 @@ export function SearchBar({
       style={{
         maxWidth: isCompact ? "640px" : "600px",
         border: isLoading
-          ? "1.5px solid rgba(220, 38, 38, 0.4)"
-          : "1.5px solid rgba(220, 38, 38, 0.2)",
+          ? "1.5px solid rgba(220, 38, 38, 0.7)"
+          : "1.5px solid rgba(220, 38, 38, 0.45)",
         backgroundColor: "#0a0a0a",
         boxShadow: isLoading
-          ? "0 0 24px rgba(220, 38, 38, 0.12)"
-          : "0 4px 24px rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(220, 38, 38, 0.08)",
+          ? "0 0 28px rgba(220, 38, 38, 0.2)"
+          : "0 4px 24px rgba(0, 0, 0, 0.35), 0 0 12px rgba(220, 38, 38, 0.1)",
       }}
     >
       <div className="flex flex-shrink-0 items-start justify-center pl-4 pt-3.5">
