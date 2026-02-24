@@ -191,7 +191,32 @@ def calculate_confidence(
     confidence_score = max(0.0, min(1.0, confidence_score))
     print(f"  Final Score: {confidence_score:.3f}")
 
-    # Determine confidence band
+    # HARD OVERRIDE: Judge verdict must affect confidence
+    # Infer verdict from violation severities
+    fatal_count = sum(1 for v in constitutional_violations if v.get("severity") == "FATAL")
+    major_count = sum(1 for v in constitutional_violations if v.get("severity") == "MAJOR")
+    minor_count = sum(1 for v in constitutional_violations if v.get("severity") == "MINOR")
+
+    if fatal_count > 0:
+        # BLOCK verdict - hard override to LOW confidence
+        confidence_score = 0.35
+        confidence_band = "VERY_LOW"
+        print(f"  [HARD OVERRIDE] BLOCK verdict detected ({fatal_count} FATAL violations) → confidence = 0.35 (VERY_LOW)")
+    elif major_count > 0:
+        # WARN verdict with MAJOR violations
+        original_score = confidence_score
+        confidence_score = max(confidence_score - 0.20, 0.40)
+        print(f"  [HARD OVERRIDE] WARN verdict with MAJOR violations → {original_score:.3f} - 0.20 = {confidence_score:.3f} (min 0.40)")
+    elif minor_count > 0:
+        # WARN verdict with only MINOR violations
+        original_score = confidence_score
+        confidence_score = max(confidence_score - 0.10, 0.50)
+        print(f"  [HARD OVERRIDE] WARN verdict with MINOR violations → {original_score:.3f} - 0.10 = {confidence_score:.3f} (min 0.50)")
+    else:
+        # PASS verdict - use calculated score as-is
+        print(f"  [VERDICT] PASS - using calculated score {confidence_score:.3f}")
+
+    # Determine confidence band (after override)
     if confidence_score >= 0.85:
         confidence_band = "HIGH"
     elif confidence_score >= 0.65:
