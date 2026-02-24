@@ -12,7 +12,19 @@ import {
 interface Source {
   title: string;
   url: string;
-  grade: string;
+  grade?: string;
+  credibility?: string | number;
+}
+
+function credibilityToGrade(source: Source): string {
+  if (source.grade) return source.grade;
+  const score = typeof source.credibility === "string"
+    ? parseFloat(source.credibility)
+    : source.credibility ?? 0;
+  if (score >= 0.90) return "A";
+  if (score >= 0.75) return "B";
+  if (score >= 0.60) return "C";
+  return "D";
 }
 
 interface AuditTrail {
@@ -26,11 +38,27 @@ interface AuditTrail {
 
 interface SearchResultData {
   answer_bullets: string[];
-  confidence: "HIGH" | "MODERATE" | "LOW";
-  confidence_score: number;
+  confidence?: string;
+  confidence_score?: number;
   sources: Source[];
   constitutional_violations: string[];
   audit_trail: AuditTrail;
+}
+
+function resolveConfidence(data: SearchResultData): { label: string; score: number } {
+  // If confidence string is provided, use it
+  if (data.confidence) {
+    const label = data.confidence.toUpperCase();
+    const score = data.confidence_score ?? (label === "HIGH" ? 0.95 : label === "MODERATE" ? 0.7 : 0.4);
+    return { label, score };
+  }
+  // If only score is provided, derive label
+  if (data.confidence_score != null) {
+    const s = data.confidence_score;
+    const label = s >= 0.8 ? "HIGH" : s >= 0.5 ? "MODERATE" : "LOW";
+    return { label, score: s };
+  }
+  return { label: "MODERATE", score: 0.5 };
 }
 
 function ConfidenceBadge({
@@ -138,16 +166,19 @@ function VerdictBadge({ verdict }: { verdict: string }) {
 
 export function SearchResults({ data }: { data: SearchResultData }) {
   const [auditOpen, setAuditOpen] = useState(false);
+  const { label: confidenceLabel, score: confidenceScore } = resolveConfidence(data);
 
   return (
     <div className="search-result-enter flex w-full max-w-2xl flex-col gap-6">
       {/* Confidence badge */}
       <div className="flex items-center gap-3">
         <ConfidenceBadge
-          confidence={data.confidence}
-          score={data.confidence_score}
+          confidence={confidenceLabel}
+          score={confidenceScore}
         />
-        <VerdictBadge verdict={data.audit_trail.judge_verdict} />
+        {data.audit_trail?.judge_verdict && (
+          <VerdictBadge verdict={data.audit_trail.judge_verdict} />
+        )}
       </div>
 
       {/* Answer bullets */}
@@ -194,7 +225,7 @@ export function SearchResults({ data }: { data: SearchResultData }) {
                 rel="noopener noreferrer"
                 className="group flex items-center gap-2 rounded px-2 py-1.5 transition-colors hover:bg-[#111]"
               >
-                <SourceGrade grade={source.grade} />
+                <SourceGrade grade={credibilityToGrade(source)} />
                 <span
                   className="flex-1 truncate text-sm transition-colors group-hover:text-foreground"
                   style={{
@@ -254,7 +285,7 @@ export function SearchResults({ data }: { data: SearchResultData }) {
       )}
 
       {/* Collapsible audit trail */}
-      <div
+      {data.audit_trail && <div
         className="rounded-lg border"
         style={{
           borderColor: "#1a1a1a",
@@ -319,7 +350,7 @@ export function SearchResults({ data }: { data: SearchResultData }) {
             </div>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

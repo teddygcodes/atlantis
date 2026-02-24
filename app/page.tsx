@@ -9,11 +9,11 @@ import { ParticleField } from "@/components/particle-field";
 
 interface SearchResultData {
   answer_bullets: string[];
-  confidence: "HIGH" | "MODERATE" | "LOW";
-  confidence_score: number;
-  sources: { title: string; url: string; grade: string }[];
+  confidence?: string;
+  confidence_score?: number;
+  sources: { title: string; url: string; grade?: string; credibility?: string | number }[];
   constitutional_violations: string[];
-  audit_trail: {
+  audit_trail?: {
     mode: string;
     researcher_claims: number;
     adversary_attacks: number;
