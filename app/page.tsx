@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import { SearchBar } from "@/components/search-bar";
 import { SearchResults } from "@/components/search-results";
@@ -23,40 +23,65 @@ interface SearchResultData {
   };
 }
 
+interface ConversationEntry {
+  id: string;
+  query: string;
+  result: SearchResultData | null;
+  error: string | null;
+  isLoading: boolean;
+  pipelineStatus: string;
+}
+
 export default function Home() {
   const [query, setQuery] = useState("");
-  const [hasSearched, setHasSearched] = useState(false);
+  const [conversation, setConversation] = useState<ConversationEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [pipelineStatus, setPipelineStatus] = useState("");
-  const [result, setResult] = useState<SearchResultData | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const hasSearched = conversation.length > 0;
+
+  // Auto-scroll to bottom when new content arrives
+  useEffect(() => {
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [conversation]);
 
   const handleSearch = useCallback(async () => {
     if (!query.trim() || isLoading) return;
 
-    // Abort any previous request
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setHasSearched(true);
+    const entryId = Date.now().toString();
+    const currentQuery = query.trim();
+
+    // Add new conversation entry
+    const newEntry: ConversationEntry = {
+      id: entryId,
+      query: currentQuery,
+      result: null,
+      error: null,
+      isLoading: true,
+      pipelineStatus: "",
+    };
+
+    setConversation((prev) => [...prev, newEntry]);
+    setQuery("");
     setIsLoading(true);
-    setResult(null);
-    setError(null);
-    setPipelineStatus("");
 
     try {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim() }),
+        body: JSON.stringify({ query: currentQuery }),
         signal: controller.signal,
       });
 
-      if (!res.ok) {
-        throw new Error("Search request failed");
-      }
+      if (!res.ok) throw new Error("Search request failed");
 
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No response stream");
@@ -78,12 +103,34 @@ export default function Home() {
             const data = JSON.parse(line.slice(6));
 
             if (data.type === "status") {
-              setPipelineStatus(data.message);
+              setConversation((prev) =>
+                prev.map((e) =>
+                  e.id === entryId
+                    ? { ...e, pipelineStatus: data.message }
+                    : e
+                )
+              );
             } else if (data.type === "result") {
-              setResult(data.data);
-              setPipelineStatus("");
+              setConversation((prev) =>
+                prev.map((e) =>
+                  e.id === entryId
+                    ? {
+                        ...e,
+                        result: data.data,
+                        isLoading: false,
+                        pipelineStatus: "",
+                      }
+                    : e
+                )
+              );
             } else if (data.type === "error") {
-              setError(data.message);
+              setConversation((prev) =>
+                prev.map((e) =>
+                  e.id === entryId
+                    ? { ...e, error: data.message, isLoading: false }
+                    : e
+                )
+              );
             }
           } catch {
             // Skip malformed JSON
@@ -92,7 +139,17 @@ export default function Home() {
       }
     } catch (err) {
       if (err instanceof Error && err.name !== "AbortError") {
-        setError(err.message || "Something went wrong");
+        setConversation((prev) =>
+          prev.map((e) =>
+            e.id === entryId
+              ? {
+                  ...e,
+                  error: err.message || "Something went wrong",
+                  isLoading: false,
+                }
+              : e
+          )
+        );
       }
     } finally {
       setIsLoading(false);
@@ -100,13 +157,10 @@ export default function Home() {
   }, [query, isLoading]);
 
   return (
-    <div
-      className="relative flex min-h-screen flex-col"
-      style={{ height: "100dvh", overflow: hasSearched ? "auto" : "hidden" }}
-    >
+    <div className="relative flex h-dvh flex-col overflow-hidden">
       <ParticleField />
 
-      {/* About link - top right */}
+      {/* About link - top right, always visible */}
       <div className="absolute right-6 top-5 z-20">
         <Link
           href="/about"
@@ -123,17 +177,9 @@ export default function Home() {
         </Link>
       </div>
 
-      {/* Main content area */}
-      <main
-        className="relative z-10 flex flex-1 flex-col items-center"
-        style={{
-          paddingTop: hasSearched ? "24px" : "0",
-          justifyContent: hasSearched ? "flex-start" : "center",
-          transition: "padding-top 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-      >
-        {/* ATLANTIS title - visible before search, hidden during results */}
-        {!hasSearched && (
+      {/* ===== LANDING STATE: centered title + search ===== */}
+      {!hasSearched && (
+        <main className="relative z-10 flex flex-1 flex-col items-center justify-center">
           <div className="hero-wave-title mb-6 flex flex-col items-center">
             <h1
               className="text-center tracking-[0.3em] text-foreground"
@@ -145,50 +191,18 @@ export default function Home() {
               ATLANTIS
             </h1>
           </div>
-        )}
 
-        {/* Compact header when searching */}
-        {hasSearched && (
-          <div className="mb-4 flex items-center gap-3">
-            <Link href="/" onClick={() => {
-              setHasSearched(false);
-              setResult(null);
-              setError(null);
-              setQuery("");
-            }}>
-              <h1
-                className="search-title-enter tracking-[0.2em] text-foreground transition-opacity hover:opacity-70"
-                style={{
-                  fontFamily: "var(--font-cinzel)",
-                  fontSize: "22px",
-                  cursor: "pointer",
-                }}
-              >
-                ATLANTIS
-              </h1>
-            </Link>
+          <div className="flex w-full justify-center px-6">
+            <SearchBar
+              query={query}
+              onQueryChange={setQuery}
+              onSubmit={handleSearch}
+              isCompact={false}
+              isLoading={false}
+              placeholder="Ask anything..."
+            />
           </div>
-        )}
 
-        {/* Search bar */}
-        <div
-          className="flex w-full justify-center px-6"
-          style={{
-            marginBottom: hasSearched ? "24px" : "0",
-            transition: "margin-bottom 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
-          }}
-        >
-          <SearchBar
-            query={query}
-            onQueryChange={setQuery}
-            onSubmit={handleSearch}
-            isCompact={hasSearched}
-            isLoading={isLoading}
-          />
-        </div>
-
-        {/* Powered by Sydyn - subtle footnote below search bar */}
-        {!hasSearched && (
           <p
             className="hero-wave-line-1 mt-3 text-center"
             style={{
@@ -199,58 +213,147 @@ export default function Home() {
           >
             Powered by Sydyn
           </p>
-        )}
+        </main>
+      )}
 
-        {/* Results area */}
-        {hasSearched && (
-          <div className="flex w-full flex-col items-center px-6 pb-24">
-            {/* Pipeline status (during loading) */}
-            {isLoading && pipelineStatus && (
-              <PipelineStatus currentStatus={pipelineStatus} />
-            )}
+      {/* ===== CHAT STATE: header, scrollable conversation, bottom input ===== */}
+      {hasSearched && (
+        <>
+          {/* Compact header */}
+          <header className="relative z-10 flex items-center justify-center pb-2 pt-5">
+            <button
+              onClick={() => {
+                setConversation([]);
+                setQuery("");
+              }}
+              className="transition-opacity hover:opacity-70"
+            >
+              <h1
+                className="search-title-enter tracking-[0.2em] text-foreground"
+                style={{
+                  fontFamily: "var(--font-cinzel)",
+                  fontSize: "22px",
+                  cursor: "pointer",
+                }}
+              >
+                ATLANTIS
+              </h1>
+            </button>
+          </header>
 
-            {/* Loading without pipeline status yet */}
-            {isLoading && !pipelineStatus && (
-              <div className="flex items-center gap-2">
-                <span
-                  className="search-loading-dot h-1.5 w-1.5 rounded-full"
-                  style={{ backgroundColor: "#dc2626" }}
-                />
-                <span
-                  className="text-[11px] tracking-[0.15em]"
-                  style={{
-                    fontFamily: "var(--font-ibm-plex-mono)",
-                    color: "#525252",
-                  }}
-                >
-                  Initializing pipeline...
-                </span>
-              </div>
-            )}
+          {/* Scrollable conversation area */}
+          <div
+            ref={scrollRef}
+            className="relative z-10 flex-1 overflow-y-auto"
+            style={{
+              scrollbarWidth: "thin",
+              scrollbarColor: "#1a1a1a transparent",
+            }}
+          >
+            <div className="mx-auto flex w-full max-w-2xl flex-col px-6 py-4">
+              {conversation.map((entry, index) => (
+                <div key={entry.id}>
+                  {/* Divider between entries */}
+                  {index > 0 && (
+                    <div
+                      className="my-8 h-px w-full"
+                      style={{ backgroundColor: "#1a1a1a" }}
+                    />
+                  )}
 
-            {/* Error state */}
-            {error && (
-              <div className="flex max-w-2xl flex-col items-center gap-2">
-                <p
-                  className="text-center text-sm"
-                  style={{
-                    fontFamily: "var(--font-ibm-plex-mono)",
-                    color: "#dc2626",
-                    fontSize: "12px",
-                  }}
-                >
-                  {error}
-                </p>
-              </div>
-            )}
+                  {/* User query bubble */}
+                  <div className="mb-5 flex justify-end">
+                    <div
+                      className="rounded-xl px-4 py-2.5"
+                      style={{
+                        backgroundColor: "rgba(220, 38, 38, 0.08)",
+                        border: "1px solid rgba(220, 38, 38, 0.15)",
+                        maxWidth: "85%",
+                      }}
+                    >
+                      <p
+                        className="leading-relaxed"
+                        style={{
+                          fontFamily: "var(--font-cormorant)",
+                          fontSize: "16px",
+                          fontWeight: 500,
+                          color: "#d4d4d4",
+                        }}
+                      >
+                        {entry.query}
+                      </p>
+                    </div>
+                  </div>
 
-            {/* Results */}
-            {result && <SearchResults data={result} />}
+                  {/* Pipeline status (during loading) */}
+                  {entry.isLoading && entry.pipelineStatus && (
+                    <div className="mb-4">
+                      <PipelineStatus currentStatus={entry.pipelineStatus} />
+                    </div>
+                  )}
+
+                  {/* Loading without pipeline status */}
+                  {entry.isLoading && !entry.pipelineStatus && (
+                    <div className="mb-4 flex items-center gap-2">
+                      <span
+                        className="search-loading-dot h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: "#dc2626" }}
+                      />
+                      <span
+                        className="text-[11px] tracking-[0.15em]"
+                        style={{
+                          fontFamily: "var(--font-ibm-plex-mono)",
+                          color: "#525252",
+                        }}
+                      >
+                        Initializing pipeline...
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Error state */}
+                  {entry.error && (
+                    <p
+                      className="mb-4 text-center text-sm"
+                      style={{
+                        fontFamily: "var(--font-ibm-plex-mono)",
+                        color: "#dc2626",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {entry.error}
+                    </p>
+                  )}
+
+                  {/* Results */}
+                  {entry.result && <SearchResults data={entry.result} />}
+                </div>
+              ))}
+
+              {/* Scroll anchor */}
+              <div ref={bottomRef} className="h-1" />
+            </div>
           </div>
-        )}
-      </main>
 
-
+          {/* Bottom search bar - pinned */}
+          <div
+            className="relative z-10 flex w-full justify-center px-6 pb-5 pt-3"
+            style={{
+              background:
+                "linear-gradient(to top, #000000 60%, transparent 100%)",
+            }}
+          >
+            <SearchBar
+              query={query}
+              onQueryChange={setQuery}
+              onSubmit={handleSearch}
+              isCompact={true}
+              isLoading={isLoading}
+              placeholder="Ask a follow-up..."
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
