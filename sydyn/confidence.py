@@ -42,6 +42,18 @@ def calculate_confidence(
     Returns:
         Dict with confidence score and features
     """
+    # DEBUG: Log inputs
+    print(f"\n[CONFIDENCE] Inputs:")
+    print(f"  Claims: {len(claims)}")
+    print(f"  Attacks: {len(attacks)}")
+    print(f"  Critic responses: {len(critic_responses)}")
+    print(f"  Constitutional violations: {len(constitutional_violations)}")
+    if constitutional_violations:
+        for v in constitutional_violations:
+            print(f"    - {v.get('severity', 'UNKNOWN')}: {v.get('rule', 'Unknown rule')}")
+    print(f"  Mode: {mode}")
+    print(f"  Sources: {len(sources)}")
+
     features = {}
 
     # Feature 1: Direct support ratio
@@ -141,15 +153,43 @@ def calculate_confidence(
 
     # Calculate weighted confidence
     base_confidence = 0.5
+
+    # DEBUG: Print feature breakdown
+    print(f"\n[CONFIDENCE] Feature Breakdown:")
+    print(f"  Base: {base_confidence:.3f}")
+    for feature, weight in FEATURE_WEIGHTS.items():
+        value = features.get(feature, 0.0)
+        contribution = value * weight
+        print(f"  {feature}: {value:.3f} × {weight:+.3f} = {contribution:+.3f}")
+
     weighted_sum = sum(
         features.get(feature, 0.0) * weight
         for feature, weight in FEATURE_WEIGHTS.items()
     )
 
+    print(f"  Weighted Sum: {weighted_sum:+.3f}")
     confidence_score = base_confidence + weighted_sum
+    print(f"  Pre-penalty Score: {confidence_score:.3f}")
+
+    # Apply HARD penalties for constitutional violations
+    # The weighted feature approach is too weak - violations must have bite
+    violation_penalty = 0.0
+    for v in constitutional_violations:
+        severity = v.get("severity", "MINOR")
+        if severity == "MAJOR":
+            violation_penalty += 0.15
+            print(f"  MAJOR violation penalty: -0.15")
+        elif severity == "MINOR":
+            violation_penalty += 0.05
+            print(f"  MINOR violation penalty: -0.05")
+
+    if violation_penalty > 0:
+        confidence_score -= violation_penalty
+        print(f"  After violation penalties (-{violation_penalty:.3f}): {confidence_score:.3f}")
 
     # Clamp to [0.0, 1.0]
     confidence_score = max(0.0, min(1.0, confidence_score))
+    print(f"  Final Score: {confidence_score:.3f}")
 
     # Determine confidence band
     if confidence_score >= 0.85:
