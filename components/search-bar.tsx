@@ -20,24 +20,33 @@ export function SearchBar({
   isLoading,
   placeholder = "Ask anything...",
 }: SearchBarProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    // Focus on landing state or after loading finishes in chat state
     if (!isLoading) {
-      inputRef.current?.focus();
+      textareaRef.current?.focus();
     }
   }, [isLoading]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && query.trim() && !isLoading) {
+  // Auto-resize textarea to fit content
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = "0px";
+      el.style.height = Math.min(el.scrollHeight, 160) + "px";
+    }
+  }, [query]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && query.trim() && !isLoading) {
+      e.preventDefault();
       onSubmit();
     }
   };
 
   return (
     <div
-      className="group relative flex w-full items-center overflow-hidden rounded-xl transition-all"
+      className="group relative flex w-full items-start overflow-hidden rounded-xl transition-all"
       style={{
         maxWidth: isCompact ? "640px" : "600px",
         border: isLoading
@@ -49,7 +58,7 @@ export function SearchBar({
           : "0 4px 24px rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(220, 38, 38, 0.08)",
       }}
     >
-      <div className="flex h-12 flex-shrink-0 items-center justify-center pl-4">
+      <div className="flex flex-shrink-0 items-start justify-center pl-4 pt-3.5">
         <Search
           size={16}
           style={{
@@ -59,20 +68,23 @@ export function SearchBar({
         />
       </div>
 
-      <input
-        ref={inputRef}
-        type="text"
+      <textarea
+        ref={textareaRef}
         value={query}
         onChange={(e) => onQueryChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={isLoading}
-        className="h-12 flex-1 border-none bg-transparent px-3 outline-none placeholder:text-[#333]"
+        rows={1}
+        className="flex-1 resize-none border-none bg-transparent px-3 py-3 outline-none placeholder:text-[#333]"
         style={{
           fontFamily: "var(--font-cormorant)",
           fontSize: isCompact ? "15px" : "17px",
           fontWeight: 500,
           color: "#e5e5e5",
+          lineHeight: "1.5",
+          maxHeight: "160px",
+          overflow: "auto",
         }}
         aria-label="Search query"
       />
@@ -80,7 +92,7 @@ export function SearchBar({
       {query.trim() && !isLoading && (
         <button
           onClick={onSubmit}
-          className="mr-2 flex h-8 items-center justify-center rounded-lg px-3 transition-all hover:opacity-80"
+          className="mr-2 mt-2 flex h-8 flex-shrink-0 items-center justify-center rounded-lg px-3 transition-all hover:opacity-80"
           style={{
             backgroundColor: "rgba(220, 38, 38, 0.15)",
             border: "1px solid rgba(220, 38, 38, 0.25)",
@@ -100,7 +112,7 @@ export function SearchBar({
       )}
 
       {isLoading && (
-        <div className="mr-3 flex items-center">
+        <div className="mr-3 mt-3.5 flex flex-shrink-0 items-center">
           <span
             className="search-loading-dot h-1.5 w-1.5 rounded-full"
             style={{ backgroundColor: "#dc2626" }}
