@@ -301,6 +301,16 @@ class SydynEngine:
         # Build answer text
         answer_text = self._build_answer_text(researcher_response.claims)
 
+        # Format sources for API response
+        sources = []
+        for source in evidence_pack.sources[:8]:  # Top 8 sources
+            sources.append({
+                "source_id": source.source_id,
+                "url": source.url,
+                "title": source.title or source.url,
+                "credibility_score": source.credibility_score
+            })
+
         return {
             "query_id": query_id,
             "query": query_text,
@@ -310,7 +320,13 @@ class SydynEngine:
             "confidence_explanation": format_confidence_explanation(confidence_result),
             "verdict": judge_result["verdict"],
             "violations": judge_result["violations"],
-            "mode": "fast"
+            "mode": "fast",
+            "sources": sources,
+            "claims": {
+                "researcher": len(researcher_response.claims),
+                "adversary": len(adversary_response.claims),
+                "critic": 0  # No critic in fast mode
+            }
         }
 
     def _run_strict_mode(
@@ -447,6 +463,16 @@ class SydynEngine:
 
         answer_text = self._build_answer_text(researcher_response.claims)
 
+        # Format sources for API response
+        sources = []
+        for source in evidence_pack.sources[:8]:  # Top 8 sources
+            sources.append({
+                "source_id": source.source_id,
+                "url": source.url,
+                "title": source.title or source.url,
+                "credibility_score": source.credibility_score
+            })
+
         return {
             "query_id": query_id,
             "query": query_text,
@@ -456,7 +482,13 @@ class SydynEngine:
             "confidence_explanation": format_confidence_explanation(confidence_result),
             "verdict": judge_result["verdict"],
             "violations": judge_result["violations"],
-            "mode": "strict"
+            "mode": "strict",
+            "sources": sources,
+            "claims": {
+                "researcher": len(researcher_response.claims),
+                "adversary": len(adversary_response.claims),
+                "critic": len(critic_response.claims) if critic_response else 0
+            }
         }
 
     def _run_liability_mode(
