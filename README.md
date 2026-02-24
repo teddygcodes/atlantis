@@ -189,7 +189,7 @@ python3 __main__.py --demo-10-domains --force-clean
 
 ## Built By
 
-Tyler Gilstrap — self-taught developer, electrical distribution sales. Built this in 3 weeks on a MacBook. Independently arrived at the same multi-agent adversarial architecture that xAI shipped as Grok 4.20 on February 17, 2026.
+Tyler Gilstrap — self-taught developer, electrical distribution sales. Built this in 2 weeks on a MacBook. Independently arrived at the same multi-agent adversarial architecture that xAI shipped as Grok 4.20 on February 17, 2026.
 
 No CS degree. No funding. Just Claude and stubbornness.
 
