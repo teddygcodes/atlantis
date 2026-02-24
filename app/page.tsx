@@ -117,6 +117,9 @@ export default function Home() {
                 )
               );
             } else if (data.type === "result") {
+              console.log("[v0] Result event raw:", JSON.stringify(data).slice(0, 1000));
+              console.log("[v0] data.data keys:", data.data ? Object.keys(data.data) : "no data.data");
+              console.log("[v0] data keys:", Object.keys(data));
               setConversation((prev) =>
                 prev.map((e) =>
                   e.id === entryId

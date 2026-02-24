@@ -21,9 +21,9 @@ function credibilityToGrade(source: Source): string {
   const score = typeof source.credibility === "string"
     ? parseFloat(source.credibility)
     : source.credibility ?? 0;
-  if (score >= 0.90) return "A";
-  if (score >= 0.75) return "B";
-  if (score >= 0.60) return "C";
+  if (score >= 0.85) return "A";
+  if (score >= 0.70) return "B";
+  if (score >= 0.50) return "C";
   return "D";
 }
 
@@ -124,10 +124,9 @@ function ConfidenceBadge({
 function SourceGrade({ grade }: { grade: string }) {
   const gradeColors: Record<string, string> = {
     A: "#22c55e",
-    B: "#4ade80",
-    C: "#eab308",
-    D: "#f97316",
-    F: "#dc2626",
+    B: "#eab308",
+    C: "#f97316",
+    D: "#dc2626",
   };
 
   return (
@@ -167,6 +166,11 @@ function VerdictBadge({ verdict }: { verdict: string }) {
 export function SearchResults({ data }: { data: SearchResultData }) {
   const [auditOpen, setAuditOpen] = useState(false);
   const { label: confidenceLabel, score: confidenceScore } = resolveConfidence(data);
+  const sources = Array.isArray(data.sources) ? data.sources : [];
+
+  console.log("[v0] SearchResults data keys:", Object.keys(data));
+  console.log("[v0] SearchResults sources:", JSON.stringify(data.sources));
+  console.log("[v0] SearchResults full data:", JSON.stringify(data).slice(0, 500));
 
   return (
     <div className="search-result-enter flex w-full max-w-2xl flex-col gap-6">
@@ -205,7 +209,7 @@ export function SearchResults({ data }: { data: SearchResultData }) {
       </div>
 
       {/* Sources */}
-      {data.sources.length > 0 && (
+      {sources.length > 0 && (
         <div className="flex flex-col gap-2">
           <h4
             className="text-[10px] uppercase tracking-[0.25em]"
@@ -217,7 +221,7 @@ export function SearchResults({ data }: { data: SearchResultData }) {
             Sources
           </h4>
           <div className="flex flex-col gap-1.5">
-            {data.sources.map((source, i) => (
+            {sources.map((source, i) => (
               <a
                 key={i}
                 href={source.url}
