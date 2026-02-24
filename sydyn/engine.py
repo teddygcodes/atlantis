@@ -53,7 +53,8 @@ class SydynEngine:
         self,
         query_text: str,
         mode: Optional[str] = None,
-        save_kb: bool = True
+        save_kb: bool = True,
+        status_callback: Optional[callable] = None
     ) -> Dict:
         """Execute Sydyn query with full pipeline.
 
@@ -61,10 +62,19 @@ class SydynEngine:
             query_text: User query
             mode: Optional mode override ("fast" | "strict" | "liability")
             save_kb: Whether to save validated answers to KB
+            status_callback: Optional callback for status updates (for SSE streaming)
 
         Returns:
             Dict with answer, confidence, and metadata
         """
+        # Store callback for access by helper methods
+        self._status_callback = status_callback
+
+        def emit_status(message: str):
+            """Emit status update if callback provided."""
+            if status_callback:
+                status_callback(message)
+
         # Generate query ID
         query_id = str(uuid.uuid4())[:8]
 
@@ -75,29 +85,30 @@ class SydynEngine:
         print(f"\n[SYDYN] Query ID: {query_id}")
         print(f"[SYDYN] Query: {query_text}\n")
 
+        emit_status("Initializing Sydyn pipeline...")
+
         # Step 1: Check knowledge base
-        cached_answer = self.kb.get_cached_answer(query_text)
-        if cached_answer:
+        emit_status("Checking knowledge base...")
+        cached_result = self.kb.get_cached_answer(query_text)
+        if cached_result:
             print(f"[SYDYN] Returning cached answer (instant)")
-            return {
-                "query_id": query_id,
-                "query": query_text,
-                "answer": cached_answer["answer_text"],
-                "confidence": cached_answer["confidence_score"],
-                "cached": True,
-                "latency_ms": int(timeout_mgr.elapsed() * 1000)
-            }
+            emit_status("Retrieved from knowledge base (instant)")
+            full_result = self._reconstruct_cached_result(query_id, query_text, cached_result, timeout_mgr)
+            return full_result
 
         # Step 2: Classify query
+        emit_status("Classifying query...")
         classified_mode = classify_query(query_text, self.model_router, override_mode=mode)
 
         print(f"[SYDYN] Mode: {classified_mode.upper()}\n")
+        emit_status(f"Query classified as {classified_mode.upper()} mode")
 
         # Store query metadata
         self.db.store_query(query_id, query_text, classified_mode)
 
         # Step 3: Build Evidence Pack
         print(f"[SYDYN] Building Evidence Pack...")
+        emit_status("Building evidence pack...")
         evidence_pack = build_evidence_pack(query_text, search_provider=self.search_provider)
 
         if not evidence_pack.sufficient_evidence:
@@ -174,25 +185,35 @@ class SydynEngine:
         """
         print(f"[SYDYN] Running FAST mode pipeline\n")
 
+        # Emit status helper
+        def emit(msg):
+            if hasattr(self, '_status_callback') and self._status_callback:
+                self._status_callback(msg)
+
         # Researcher
         print(f"[SYDYN] Researcher generating answer...")
+        emit("Researcher analyzing evidence and drafting claims...")
         researcher_response = self.researcher.generate_answer(query_text, evidence_pack)
         print(f"[SYDYN] Researcher produced {len(researcher_response.claims)} claims\n")
+        emit(f"Researcher drafted {len(researcher_response.claims)} claims")
 
         # Adversary
         print(f"[SYDYN] Adversary generating attacks...")
+        emit("Adversary generating counter-arguments...")
         adversary_response = self.adversary.generate_attacks(
             query_text,
             researcher_response.claims,
             evidence_pack
         )
         print(f"[SYDYN] Adversary produced {len(adversary_response.claims)} attacks\n")
+        emit(f"Adversary generated {len(adversary_response.claims)} attacks")
 
         # Skip Critic in fast mode
         critic_response = None
 
         # Citation verification
         print(f"[SYDYN] Verifying citations...")
+        emit("Verifying citations...")
 
         def llm_function(prompt, task_type, temperature):
             return self.model_router.complete(
@@ -210,6 +231,7 @@ class SydynEngine:
 
         # Judge
         print(f"[SYDYN] Judge evaluating against constitution...")
+        emit("Judge evaluating against constitutional rules...")
         all_claims = researcher_response.claims + adversary_response.claims
 
         try:
@@ -220,6 +242,7 @@ class SydynEngine:
                 evidence_pack,
                 mode="fast"
             )
+            emit(f"Judge verdict: {judge_result.get('verdict', 'UNKNOWN')}")
         except LLMTimeoutException as e:
             print(f"[SYDYN] WARNING: Judge timed out after 30s - using degraded evaluation")
             # Return degraded judge result with WARN verdict
@@ -303,29 +326,41 @@ class SydynEngine:
         """
         print(f"[SYDYN] Running STRICT mode pipeline\n")
 
+        # Emit status helper
+        def emit(msg):
+            if hasattr(self, '_status_callback') and self._status_callback:
+                self._status_callback(msg)
+
         # Researcher
         print(f"[SYDYN] Researcher generating answer...")
+        emit("Researcher analyzing evidence and drafting claims...")
         researcher_response = self.researcher.generate_answer(query_text, evidence_pack)
+        emit(f"Researcher drafted {len(researcher_response.claims)} claims")
 
         # Adversary
         print(f"[SYDYN] Adversary generating attacks...")
+        emit("Adversary generating counter-arguments...")
         adversary_response = self.adversary.generate_attacks(
             query_text,
             researcher_response.claims,
             evidence_pack
         )
+        emit(f"Adversary generated {len(adversary_response.claims)} attacks")
 
         # Critic (if not timed out)
         if timeout_mgr.should_skip_critic():
             critic_response = None
+            emit("Critic skipped due to timeout")
         else:
             print(f"[SYDYN] Critic addressing attacks...")
+            emit("Critic addressing adversary attacks...")
             critic_response = self.critic.address_attacks(
                 query_text,
                 researcher_response.claims,
                 adversary_response.claims,
                 evidence_pack
             )
+            emit(f"Critic produced {len(critic_response.claims)} responses")
 
         # Citation verification
         def llm_function(prompt, task_type, temperature):
@@ -343,6 +378,7 @@ class SydynEngine:
         )
 
         # Judge
+        emit("Judge evaluating against constitutional rules...")
         all_claims = researcher_response.claims + adversary_response.claims
         if critic_response:
             all_claims += critic_response.claims
@@ -355,6 +391,7 @@ class SydynEngine:
                 evidence_pack,
                 mode="strict"
             )
+            emit(f"Judge verdict: {judge_result.get('verdict', 'UNKNOWN')}")
         except LLMTimeoutException as e:
             print(f"[SYDYN] WARNING: Judge timed out after 30s - using degraded evaluation")
             # Return degraded judge result with WARN verdict
@@ -434,6 +471,130 @@ class SydynEngine:
         result = self._run_strict_mode(query_id, query_text, evidence_pack, timeout_mgr)
         result["mode"] = "liability"
         return result
+
+    def _reconstruct_cached_result(
+        self,
+        query_id: str,
+        query_text: str,
+        cached_data: Dict,
+        timeout_mgr
+    ) -> Dict:
+        """Reconstruct full result from cached KB entry.
+
+        Args:
+            query_id: New query ID
+            query_text: Query text
+            cached_data: Cached answer data from KB
+            timeout_mgr: TimeoutManager instance
+
+        Returns:
+            Full result dict with all metadata
+        """
+        import time
+
+        # Get the original query_id (answer_id) from KB entry
+        qhash = self.kb.query_hash(query_text)
+        kb_entry = self.db.get_kb_entry(qhash)
+        original_query_id = kb_entry.get("answer_id") if kb_entry else None
+
+        # Calculate cache age
+        last_validated = kb_entry.get("last_validated", time.time()) if kb_entry else time.time()
+        cache_age_days = int((time.time() - last_validated) / 86400)
+
+        # Parse confidence features to get confidence band
+        confidence_features = cached_data.get("confidence_features", "{}")
+        try:
+            features = json.loads(confidence_features) if isinstance(confidence_features, str) else confidence_features
+            confidence_band = features.get("band", "UNKNOWN")
+        except:
+            confidence_band = "UNKNOWN"
+
+        # Get sources from database (if original_query_id available)
+        sources = []
+        if original_query_id:
+            # Query sources that were cited for this query's claims
+            source_rows = self.db.conn.execute("""
+                SELECT DISTINCT s.source_id, s.url, s.title, s.credibility_score
+                FROM sources s
+                JOIN citation_grades cg ON s.source_id = cg.source_id
+                JOIN claims c ON cg.claim_id = c.claim_id
+                WHERE c.query_id = ?
+                ORDER BY s.credibility_score DESC
+                LIMIT 8
+            """, (original_query_id,)).fetchall()
+
+            for row in source_rows:
+                sources.append({
+                    "source_id": row[0],
+                    "url": row[1],
+                    "title": row[2] or row[1],
+                    "credibility_score": row[3] or 0.0
+                })
+
+        # Get claims counts for audit trail
+        researcher_claims = 0
+        adversary_claims = 0
+        critic_claims = 0
+
+        if original_query_id:
+            claim_counts = self.db.conn.execute("""
+                SELECT agent_role, COUNT(*) as count
+                FROM claims
+                WHERE query_id = ?
+                GROUP BY agent_role
+            """, (original_query_id,)).fetchall()
+
+            for row in claim_counts:
+                role, count = row[0], row[1]
+                if role == "researcher":
+                    researcher_claims = count
+                elif role == "adversary":
+                    adversary_claims = count
+                elif role == "critic":
+                    critic_claims = count
+
+        # Get violations (already stored as JSON string)
+        violations_json = self.db.conn.execute("""
+            SELECT constitutional_violations
+            FROM answers
+            WHERE query_id = ?
+        """, (original_query_id,)).fetchone() if original_query_id else None
+
+        violations = []
+        if violations_json and violations_json[0]:
+            try:
+                violations = json.loads(violations_json[0])
+            except:
+                violations = []
+
+        # Get query mode
+        mode_row = self.db.conn.execute("""
+            SELECT mode FROM queries WHERE query_id = ?
+        """, (original_query_id,)).fetchone() if original_query_id else None
+        mode = mode_row[0] if mode_row else "unknown"
+
+        # Build full result matching non-cached format
+        return {
+            "query_id": query_id,
+            "query": query_text,
+            "answer": cached_data["answer_text"],
+            "confidence": cached_data["confidence_score"],
+            "confidence_band": confidence_band,
+            "confidence_explanation": f"Cached result validated {cache_age_days} days ago",
+            "verdict": "PASS",  # Cached answers always passed
+            "violations": violations,
+            "mode": mode,
+            "sources": sources,
+            "claims": {
+                "researcher": researcher_claims,
+                "adversary": adversary_claims,
+                "critic": critic_claims
+            },
+            "cached": True,
+            "cache_age_days": cache_age_days,
+            "validation_count": cached_data.get("validation_count", 1),
+            "latency_ms": int(timeout_mgr.elapsed() * 1000)
+        }
 
     def _build_answer_text(self, claims: list) -> str:
         """Build final answer text from claims.
