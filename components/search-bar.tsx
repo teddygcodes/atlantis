@@ -9,6 +9,7 @@ interface SearchBarProps {
   onSubmit: () => void;
   isCompact: boolean;
   isLoading: boolean;
+  placeholder?: string;
 }
 
 export function SearchBar({
@@ -17,14 +18,16 @@ export function SearchBar({
   onSubmit,
   isCompact,
   isLoading,
+  placeholder = "Ask anything...",
 }: SearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!isCompact) {
+    // Focus on landing state or after loading finishes in chat state
+    if (!isLoading) {
       inputRef.current?.focus();
     }
-  }, [isCompact]);
+  }, [isLoading]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && query.trim() && !isLoading) {
@@ -62,7 +65,7 @@ export function SearchBar({
         value={query}
         onChange={(e) => onQueryChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Ask anything..."
+        placeholder={placeholder}
         disabled={isLoading}
         className="h-12 flex-1 border-none bg-transparent px-3 outline-none placeholder:text-[#333]"
         style={{
