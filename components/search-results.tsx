@@ -42,7 +42,7 @@ interface SearchResultData {
   confidence_score?: number;
   sources: Source[];
   constitutional_violations: string[];
-  audit_trail: AuditTrail;
+  audit_trail?: AuditTrail;
 }
 
 function resolveConfidence(data: SearchResultData): { label: string; score: number } {
