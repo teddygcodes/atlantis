@@ -86,7 +86,7 @@ AI generation failed or API key missing.
 ## Implementation Details
 
 ### AI Model
-- **Model:** Claude Sonnet 4 (claude-sonnet-4-20250514)
+- **Model:** Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)
 - **Max Tokens:** 180 (ensures concise responses)
 - **System Prompt:** Configured to explain complex academic content in everyday English
 

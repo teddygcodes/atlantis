@@ -180,7 +180,7 @@ class LLMProvider:
             while True:
                 try:
                     if self.mode == "api" and self.client:
-                        response = self._call_api(system_prompt, user_prompt, max_tokens, temperature, model)
+                        response = self._call_api(system_prompt, user_prompt, max_tokens, temperature, model, task_type)
                     else:
                         response = self._simulate_local(system_prompt, user_prompt, max_tokens, model)
                     break
@@ -266,15 +266,25 @@ class LLMProvider:
         return False
 
     def _call_api(self, system_prompt: str, user_prompt: str,
-                  max_tokens: int, temperature: float, model: str) -> LLMResponse:
-        """Make a real API call to Anthropic with 30s timeout."""
+                  max_tokens: int, temperature: float, model: str, task_type: str = "unknown") -> LLMResponse:
+        """Make a real API call to Anthropic with configurable timeout.
+
+        Sydyn tasks use 30s timeout for real-time responsiveness.
+        Other tasks use 120s timeout for complex reasoning.
+        """
+        # Determine timeout based on task type
+        if task_type.startswith("sydyn_"):
+            timeout = 30.0  # 30s for real-time Sydyn agents
+        else:
+            timeout = 120.0  # 120s for Atlantis governance (research claims can take >30s)
+
         message = self.client.messages.create(
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
-            timeout=120.0  # 120 second timeout - Sonnet research claims can take >30s
+            timeout=timeout
         )
 
         return LLMResponse(

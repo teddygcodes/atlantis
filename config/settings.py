@@ -106,6 +106,15 @@ MODEL_ALLOCATION = {
     "supreme_court": "opus",
     # Sonnet/Opus: judge is the quality gate — use strongest available
     "judge": "sonnet",
+    # Sydyn: real-time adversarial search (no Opus in v1)
+    "sydyn_evidence_pack": "haiku",
+    "sydyn_extract_claims": "haiku",
+    "sydyn_researcher": "haiku",
+    "sydyn_adversary": "haiku",
+    "sydyn_critic": "sonnet",
+    "sydyn_judge": "sonnet",
+    "sydyn_verify_citations": "haiku",
+    "sydyn_query_classifier": "haiku",
 }
 
 MODEL_IDS = {

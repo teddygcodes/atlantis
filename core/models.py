@@ -40,6 +40,15 @@ class ModelRouter:
         "federal_lab": 0.7,
         # Higher temp for creative content
         "content_generation": 0.8,
+        # Sydyn task temperatures
+        "sydyn_evidence_pack": 0.0,
+        "sydyn_extract_claims": 0.0,
+        "sydyn_verify_citations": 0.3,
+        "sydyn_query_classifier": 0.0,
+        "sydyn_researcher": 0.7,
+        "sydyn_adversary": 0.7,
+        "sydyn_critic": 0.7,
+        "sydyn_judge": 0.2,
     }
 
     # Approximate Anthropic prices (USD / 1M tokens)
