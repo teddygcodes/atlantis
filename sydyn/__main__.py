@@ -9,6 +9,12 @@ Usage:
 import argparse
 import json
 import sys
+import os
+
+# Load environment variables FIRST (critical for API keys)
+# Use override=True to ensure .env values take precedence over shell environment
+from dotenv import load_dotenv
+load_dotenv(override=True)
 
 from sydyn.engine import SydynEngine
 
@@ -77,6 +83,46 @@ Examples:
     )
 
     args = parser.parse_args()
+
+    # Verify API keys before running (prevents wasting search credits)
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    if not anthropic_key:
+        print("[ERROR] ANTHROPIC_API_KEY not found in environment", file=sys.stderr)
+        print("[ERROR] Make sure you have a .env file with ANTHROPIC_API_KEY=sk-ant-...", file=sys.stderr)
+        sys.exit(1)
+
+    # Test API key with a minimal call
+    print("[SYDYN] Verifying Anthropic API key...")
+    try:
+        from core.llm import LLMProvider
+        test_provider = LLMProvider(api_key=anthropic_key, mode="api")
+        test_response = test_provider.complete(
+            system_prompt="You are a test assistant.",
+            user_prompt="Reply with just 'OK'",
+            max_tokens=10,
+            temperature=0.0,
+            model="claude-haiku-4-5-20251001",
+            task_type="sydyn_test"
+        )
+
+        # Check if response contains an error
+        if "[LLM ERROR" in test_response.content:
+            print(f"[ERROR] API call failed: {test_response.content}", file=sys.stderr)
+            print("[ERROR] Your ANTHROPIC_API_KEY may be invalid, expired, or lack access to Claude models", file=sys.stderr)
+            sys.exit(1)
+
+        # Check for expected response
+        if "OK" not in test_response.content and "ok" not in test_response.content.lower():
+            print(f"[WARN] Unexpected test response: {test_response.content[:50]}", file=sys.stderr)
+
+        print("[SYDYN] ✓ API key verified\n")
+    except Exception as e:
+        print(f"[ERROR] Anthropic API key verification failed: {e}", file=sys.stderr)
+        print(f"[ERROR] Error type: {type(e).__name__}", file=sys.stderr)
+        if hasattr(e, 'status_code'):
+            print(f"[ERROR] Status code: {e.status_code}", file=sys.stderr)
+        print("[ERROR] Make sure your API key is valid and has access to Claude models", file=sys.stderr)
+        sys.exit(1)
 
     # Initialize engine
     try:

@@ -485,17 +485,20 @@ class SydynEngine:
             json.dumps(judge_result["violations"])
         )
 
-        # Store claims
+        # Store claims (prefix claim_id with query_id for global uniqueness)
         for claim in researcher_response.claims:
-            self.db.store_claim(claim.claim_id, query_id, claim.text, "researcher")
+            unique_claim_id = f"{query_id}_{claim.claim_id}"
+            self.db.store_claim(unique_claim_id, query_id, claim.text, "researcher")
 
         for attack in adversary_response.claims:
-            self.db.store_claim(attack.claim_id, query_id, attack.text, "adversary")
+            unique_claim_id = f"{query_id}_{attack.claim_id}"
+            self.db.store_claim(unique_claim_id, query_id, attack.text, "adversary")
             self.db.store_attack(query_id, attack.text, "unknown", "unknown")
 
         if critic_response:
             for response in critic_response.claims:
-                self.db.store_claim(response.claim_id, query_id, response.text, "critic")
+                unique_claim_id = f"{query_id}_{response.claim_id}"
+                self.db.store_claim(unique_claim_id, query_id, response.text, "critic")
 
         # Store sources
         for source in evidence_pack.sources:
@@ -508,10 +511,11 @@ class SydynEngine:
                 source.fetch_failed
             )
 
-        # Store citation grades
+        # Store citation grades (use prefixed claim_ids)
         for claim_id, source_grades in citation_grades.items():
+            unique_claim_id = f"{query_id}_{claim_id}"
             for source_id, (grade, explanation) in source_grades.items():
-                self.db.store_citation_grade(claim_id, source_id, grade, explanation)
+                self.db.store_citation_grade(unique_claim_id, source_id, grade, explanation)
 
     def _estimate_cost(self, mode: str, degradation_level: Optional[str]) -> float:
         """Estimate query cost based on mode and degradation.
