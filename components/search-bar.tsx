@@ -34,16 +34,16 @@ export function SearchBar({
 
   return (
     <div
-      className="group relative flex w-full items-center overflow-hidden rounded-xl border transition-all"
+      className="group relative flex w-full items-center overflow-hidden rounded-xl transition-all"
       style={{
         maxWidth: isCompact ? "640px" : "600px",
-        borderColor: isLoading
-          ? "rgba(220, 38, 38, 0.3)"
-          : "rgba(255, 255, 255, 0.08)",
+        border: isLoading
+          ? "1.5px solid rgba(220, 38, 38, 0.4)"
+          : "1.5px solid rgba(220, 38, 38, 0.2)",
         backgroundColor: "#0a0a0a",
         boxShadow: isLoading
-          ? "0 0 20px rgba(220, 38, 38, 0.08)"
-          : "0 4px 20px rgba(0, 0, 0, 0.3)",
+          ? "0 0 24px rgba(220, 38, 38, 0.12)"
+          : "0 4px 24px rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(220, 38, 38, 0.08)",
       }}
     >
       <div className="flex h-12 flex-shrink-0 items-center justify-center pl-4">

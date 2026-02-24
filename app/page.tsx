@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { SearchBar } from "@/components/search-bar";
 import { SearchResults } from "@/components/search-results";
@@ -132,9 +133,17 @@ export default function Home() {
           transition: "padding-top 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
-        {/* ATLANTIS title - visible before search, hidden during results */}
+        {/* Logo + ATLANTIS title - visible before search, hidden during results */}
         {!hasSearched && (
           <div className="hero-wave-title mb-6 flex flex-col items-center">
+            <Image
+              src="/images/atlantis-logo.png"
+              alt="Atlantis logo"
+              width={80}
+              height={80}
+              className="mb-4 object-contain"
+              priority
+            />
             <h1
               className="text-center tracking-[0.3em] text-foreground"
               style={{
