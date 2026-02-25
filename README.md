@@ -10,8 +10,6 @@ Atlantis is a search engine where 4 AI agents research, attack, and judge every 
 
 Ask a question → agents search the web, build an evidence pack, draft claims, attack those claims, verify every citation, and deliver a confidence-scored answer with a full audit trail. 30–60 seconds. $0.05–$0.10 per query.
 
-This is what people assume ChatGPT already does. It doesn't.
-
 ## How Sydyn Works
 
 ```
@@ -191,7 +189,7 @@ python3 __main__.py --demo-10-domains --force-clean
 
 Tyler Gilstrap — self-taught developer, electrical distribution sales. Built this in 2 weeks on a MacBook. Independently arrived at the same multi-agent adversarial architecture that xAI shipped as Grok 4.20 on February 17, 2026.
 
-No CS degree. No funding. Just Claude and stubbornness.
+ 
 
 ## License
 
