@@ -11,10 +11,10 @@ export type SnippetLabel =
 export interface Snippet {
   id: string;
   label: SnippetLabel;
-  subLabel?: string; // area name for RCPs
-  pageNumber: number;
+  sub_label: string;
+  page_number: number;
   bbox: { x: number; y: number; width: number; height: number };
-  thumbnailDataUrl?: string; // base64 cropped image
+  image_data?: string;
 }
 
 export type TakeoffMode = "fast" | "strict" | "liability";
@@ -27,34 +27,43 @@ export type AppState =
   | "running"
   | "complete";
 
+export interface ReadinessStatus {
+  ready: boolean;
+  message: string;
+  counts: Record<string, number>;
+}
+
 export interface FixtureRow {
-  typeTag: string;
+  type_tag: string;
   description: string;
   total: number;
-  revised: number;
-  delta: number;
+  revised?: number;
+  delta?: number;
   difficulty: string;
-  flags: string[];
-  countsbyArea?: Record<string, number>;
+  flags?: string[];
+  counts_by_area?: Record<string, number>;
+  notes?: string;
+  accessories?: string[];
 }
 
 export interface AdversarialEntry {
-  attackId: string;
+  attack_id: string;
   severity: "critical" | "major" | "minor";
   category: string;
   description: string;
-  resolution: "CONCEDED" | "DEFENDED" | "PARTIAL";
-  explanation: string;
+  resolution?: string;
+  explanation?: string;
+  verdict?: string;
 }
 
-export interface ConfidenceFeatures {
-  scheduleMatch: number;
-  areaCoverage: number;
-  adversarialResolved: number;
-  constitutionalClean: number;
-  crossReference: number;
-  noteCompliance: number;
-  reconcilerCoverage: number;
+export interface ConfidenceBreakdown {
+  schedule_match?: number;
+  area_coverage?: number;
+  adversarial_resolved?: number;
+  constitutional_clean?: number;
+  cross_reference?: number;
+  note_compliance?: number;
+  reconciler_coverage?: number;
 }
 
 export interface Violation {
@@ -66,15 +75,27 @@ export interface Violation {
 export type Verdict = "PASS" | "WARN" | "BLOCK";
 
 export interface TakeoffResult {
-  verdict: Verdict;
-  grandTotal: number;
-  confidence: number;
-  confidenceBand: string;
-  fixtureTable: FixtureRow[];
-  areasCovered: string[];
-  adversarialLog: AdversarialEntry[];
-  confidenceFeatures: ConfidenceFeatures;
-  violations: Violation[];
+  job_id?: string;
+  drawing_name?: string;
+  mode?: string;
+  error?: string;
+  judge_verdict: Verdict;
+  grand_total: number;
+  revised_total?: number;
+  confidence_score: number;
+  confidence_band: string;
+  confidence_breakdown?: ConfidenceBreakdown;
+  fixture_counts: FixtureRow[];
+  areas_covered: string[];
+  adversarial_log: AdversarialEntry[];
+  constitutional_violations: Violation[];
+  flags?: string[];
+  ruling_summary?: string;
+}
+
+export interface MockPage {
+  number: number;
+  title: string;
 }
 
 export interface PipelineStep {

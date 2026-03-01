@@ -1,119 +1,32 @@
 "use client";
 
 import { useState, useCallback } from "react";
-
-interface FixtureCount {
-  type_tag: string;
-  description: string;
-  total: number;
-  counts_by_area: Record<string, number>;
-  difficulty: string;
-  notes?: string;
-  accessories?: string[];
-  flags?: string[];
-  confidence?: number;
-}
-
-interface AdversarialEntry {
-  attack_id: string;
-  severity: "critical" | "major" | "minor";
-  category: string;
-  description: string;
-  resolution?: string;
-  verdict?: string;
-}
-
-interface ConstitutionalViolation {
-  rule: string;
-  severity: string;
-  explanation: string;
-}
-
-interface ConfidenceBreakdown {
-  schedule_match_rate?: number;
-  area_coverage?: number;
-  adversarial_resolved?: number;
-  constitutional_clean?: number;
-  cross_reference_match?: number;
-  note_compliance?: number;
-  fast_mode_penalty?: number;
-}
-
-export interface TakeoffResultData {
-  job_id?: string;
-  drawing_name?: string;
-  mode?: string;
-  error?: string;
-  fixture_counts: FixtureCount[];
-  grand_total: number;
-  areas_covered: string[];
-  confidence_score: number;
-  confidence_band: string;
-  confidence_breakdown?: ConfidenceBreakdown;
-  confidence_explanation?: string;
-  constitutional_violations: ConstitutionalViolation[];
-  adversarial_log: AdversarialEntry[];
-  judge_verdict: string;
-  flags: string[];
-  ruling_summary?: string;
-}
+import type { TakeoffResult } from "@/lib/types";
 
 interface ResultsPanelProps {
-  data: TakeoffResultData;
+  data: TakeoffResult;
   pipelineStatus?: string;
   isLoading?: boolean;
+  onClose: () => void;
 }
 
-const DIFFICULTY_LABELS: Record<string, { label: string; color: string }> = {
-  S: { label: "Standard", color: "#10b981" },
-  M: { label: "Moderate", color: "#f59e0b" },
-  D: { label: "Difficult", color: "#f97316" },
-  E: { label: "Extreme", color: "#dc2626" },
-};
-
-const SEVERITY_COLORS: Record<string, string> = {
-  critical: "#dc2626",
-  major: "#f59e0b",
-  minor: "#3b82f6",
-  FATAL: "#dc2626",
-  MAJOR: "#f59e0b",
-  MINOR: "#3b82f6",
-};
-
-const BAND_COLORS: Record<string, string> = {
-  HIGH: "#10b981",
-  MODERATE: "#f59e0b",
-  LOW: "#f97316",
-  VERY_LOW: "#dc2626",
-};
-
-const VERDICT_COLORS: Record<string, string> = {
-  PASS: "#10b981",
-  WARN: "#f59e0b",
-  BLOCK: "#dc2626",
-};
-
-function exportToCSV(data: TakeoffResultData) {
+function exportCSV(data: TakeoffResult) {
   const rows = [
-    ["Type Tag", "Description", "Total", "Difficulty", ...data.areas_covered, "Flags"],
+    ["TYPE", "DESCRIPTION", "COUNT", "REVISED", "DIFF", "DIFFICULTY"],
     ...data.fixture_counts.map((f) => [
       f.type_tag,
       f.description,
       String(f.total),
+      String(f.revised ?? f.total),
+      f.delta ? (f.delta > 0 ? `+${f.delta}` : String(f.delta)) : "0",
       f.difficulty,
-      ...data.areas_covered.map((area) => String(f.counts_by_area[area] ?? 0)),
-      (f.flags || []).join("; "),
     ]),
     [],
-    ["GRAND TOTAL", "", String(data.grand_total)],
-    ["Confidence", "", `${(data.confidence_score * 100).toFixed(0)}% (${data.confidence_band})`],
-    ["Verdict", "", data.judge_verdict],
+    ["TOTAL", "", String(data.grand_total), String(data.revised_total ?? data.grand_total)],
+    ["Confidence", `${(data.confidence_score * 100).toFixed(0)}% (${data.confidence_band})`],
+    ["Verdict", data.judge_verdict],
   ];
-
-  const csv = rows
-    .map((row) => row.map((cell) => `"${cell}"`).join(","))
-    .join("\n");
-
+  const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -123,275 +36,146 @@ function exportToCSV(data: TakeoffResultData) {
   URL.revokeObjectURL(url);
 }
 
-export function ResultsPanel({ data, pipelineStatus, isLoading }: ResultsPanelProps) {
-  const [activeTab, setActiveTab] = useState<"counts" | "adversarial" | "confidence">("counts");
-  const [expandedArea, setExpandedArea] = useState<string | null>(null);
+function exportJSON(data: TakeoffResult) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `takeoff_${data.drawing_name || "results"}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
-  const confidenceColor = BAND_COLORS[data.confidence_band] || "#666";
-  const verdictColor = VERDICT_COLORS[data.judge_verdict] || "#666";
+function copyTable(data: TakeoffResult) {
+  const header = "TYPE\tDESCRIPTION\tCOUNT\tREVISED\tDIFF\tDIFFICULTY";
+  const rows = data.fixture_counts.map(
+    (f) =>
+      `${f.type_tag}\t${f.description}\t${f.total}\t${f.revised ?? f.total}\t${f.delta ? (f.delta > 0 ? "+" + f.delta : f.delta) : "—"}\t${f.difficulty}`
+  );
+  const total = `TOTAL\t\t${data.grand_total}\t${data.revised_total ?? data.grand_total}`;
+  navigator.clipboard.writeText([header, ...rows, total].join("\n"));
+}
 
-  const handleExport = useCallback(() => exportToCSV(data), [data]);
+const VERDICT_STYLES: Record<string, { bg: string; border: string; text: string; icon: string; label: string }> = {
+  PASS: { bg: "bg-green-50", border: "border-l-green-600", text: "text-green-700", icon: "\u2713", label: "Takeoff Approved" },
+  WARN: { bg: "bg-amber-50", border: "border-l-amber-500", text: "text-amber-700", icon: "\u26A0", label: "Approved with Warnings" },
+  BLOCK: { bg: "bg-red-50", border: "border-l-red-600", text: "text-red-700", icon: "\u2717", label: "Takeoff Blocked \u2014 constitutional violations" },
+};
 
-  // H4: Show error banner if result data contains an error field
+const SEVERITY_STYLES: Record<string, { bg: string; text: string }> = {
+  critical: { bg: "bg-red-100", text: "text-red-700" },
+  major: { bg: "bg-amber-100", text: "text-amber-700" },
+  minor: { bg: "bg-blue-100", text: "text-blue-700" },
+};
+
+const RESOLUTION_STYLES: Record<string, { text: string; label: string }> = {
+  CONCEDED: { text: "text-green-600", label: "CONCEDED \u2713" },
+  DEFENDED: { text: "text-muted-foreground", label: "DEFENDED \u2717" },
+  PARTIAL: { text: "text-amber-600", label: "PARTIAL ~" },
+};
+
+const DIFF_LABELS: Record<string, string> = {
+  S: "Standard",
+  M: "Moderate",
+  D: "Difficult",
+  E: "Extreme",
+};
+
+export function ResultsPanel({ data, pipelineStatus, isLoading, onClose }: ResultsPanelProps) {
+  const [activeTab, setActiveTab] = useState<"counts" | "adversarial" | "confidence" | "export">("counts");
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    copyTable(data);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [data]);
+
   if (data.error) {
     return (
-      <div
-        className="flex h-full flex-col items-center justify-center p-8"
-        style={{ background: "#060606" }}
-      >
-        <p
-          className="mb-2 text-xs uppercase"
-          style={{
-            fontFamily: "var(--font-ibm-plex-mono)",
-            color: "#dc2626",
-            letterSpacing: "0.15em",
-            fontSize: "10px",
-          }}
-        >
-          Pipeline Error
-        </p>
-        <p
-          className="text-sm"
-          style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#525252", maxWidth: "400px", textAlign: "center" }}
-        >
-          {data.error}
-        </p>
+      <div className="flex h-full items-center justify-center bg-background p-8">
+        <div className="text-center">
+          <p className="mb-2 font-mono text-xs font-semibold uppercase tracking-wider text-accent">Pipeline Error</p>
+          <p className="max-w-md text-sm text-muted-foreground">{data.error}</p>
+        </div>
       </div>
     );
   }
 
   if (isLoading) {
     return (
-      <div
-        className="flex h-full flex-col items-center justify-center gap-4 p-8"
-        style={{ background: "#060606" }}
-      >
-        <div
-          className="h-2 w-2 animate-pulse rounded-full"
-          style={{ background: "#dc2626" }}
-        />
-        <p
-          className="text-center text-xs"
-          style={{
-            fontFamily: "var(--font-ibm-plex-mono)",
-            color: "#525252",
-            letterSpacing: "0.1em",
-          }}
-        >
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-background p-8">
+        <div className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+        <p className="font-mono text-xs tracking-wide text-muted-foreground">
           {pipelineStatus || "RUNNING PIPELINE..."}
         </p>
       </div>
     );
   }
 
+  const verdict = VERDICT_STYLES[data.judge_verdict] || VERDICT_STYLES.WARN;
+  const tabs = [
+    { key: "counts" as const, label: "Fixture Counts" },
+    { key: "adversarial" as const, label: "Adversarial Log" },
+    { key: "confidence" as const, label: "Confidence" },
+    { key: "export" as const, label: "Export" },
+  ];
+
   return (
-    <div
-      className="flex h-full flex-col"
-      style={{ background: "#060606" }}
-    >
-      {/* ── Summary Header ── */}
-      <div
-        className="border-b px-5 py-4"
-        style={{ borderColor: "#1a1a1a", background: "#0a0a0a" }}
-      >
-        <div className="mb-3 flex items-start justify-between">
-          <div>
-            <h2
-              className="mb-0.5 tracking-[0.2em]"
-              style={{
-                fontFamily: "var(--font-cinzel)",
-                fontSize: "11px",
-                color: "#525252",
-              }}
-            >
-              TAKEOFF RESULTS
-            </h2>
-            {data.drawing_name && (
-              <p
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  fontSize: "10px",
-                  color: "#333",
-                }}
-              >
-                {data.drawing_name}
-                {data.mode && (
-                  <span className="ml-2 uppercase" style={{ color: "#444" }}>
-                    ({data.mode})
-                  </span>
-                )}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={handleExport}
-            className="rounded px-3 py-1.5 text-xs transition-colors hover:opacity-80"
-            style={{
-              fontFamily: "var(--font-ibm-plex-mono)",
-              background: "#1a1a1a",
-              color: "#d4d4d4",
-              letterSpacing: "0.08em",
-              fontSize: "10px",
-            }}
-          >
-            ↓ CSV
-          </button>
-        </div>
+    <div className="flex h-full flex-col bg-background">
+      {/* Close/minimize bar */}
+      <div className="flex items-center justify-between border-b border-border px-4 py-2">
+        <h2 className="text-sm font-semibold text-foreground">Takeoff Results</h2>
+        <button
+          onClick={onClose}
+          className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Close results"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+        </button>
+      </div>
 
-        {/* Key metrics row */}
-        <div className="flex gap-6">
-          <div>
-            <p
-              className="mb-0.5 text-xs"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#525252", fontSize: "9px" }}
-            >
-              TOTAL FIXTURES
-            </p>
-            <p
-              className="text-2xl font-bold"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#d4d4d4" }}
-            >
-              {data.grand_total.toLocaleString()}
-            </p>
-          </div>
-
-          <div>
-            <p
-              className="mb-0.5 text-xs"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#525252", fontSize: "9px" }}
-            >
-              CONFIDENCE
-            </p>
-            <p
-              className="text-2xl font-bold"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)", color: confidenceColor }}
-            >
-              {(data.confidence_score * 100).toFixed(0)}%
-              <span className="ml-2 text-sm" style={{ color: confidenceColor }}>
-                {data.confidence_band}
-              </span>
-            </p>
-          </div>
-
-          <div>
-            <p
-              className="mb-0.5 text-xs"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#525252", fontSize: "9px" }}
-            >
-              VERDICT
-            </p>
-            <p
-              className="text-xl font-bold"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)", color: verdictColor }}
-            >
-              {data.judge_verdict === "PASS" ? "✓ PASS" : data.judge_verdict === "WARN" ? "⚠ WARN" : "✗ BLOCK"}
-            </p>
-          </div>
-        </div>
-
-        {/* Ruling summary */}
+      {/* Verdict banner */}
+      <div className={`border-l-4 px-4 py-2.5 ${verdict.bg} ${verdict.border}`}>
+        <p className={`text-sm font-semibold ${verdict.text}`}>
+          {verdict.icon} {verdict.label}
+        </p>
         {data.ruling_summary && (
-          <p
-            className="mt-2 text-xs"
-            style={{
-              fontFamily: "var(--font-cormorant)",
-              color: "#525252",
-              fontSize: "13px",
-              fontStyle: "italic",
-            }}
-          >
-            {data.ruling_summary}
-          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{data.ruling_summary}</p>
         )}
       </div>
 
-      {/* ── Tabs ── */}
-      <div
-        className="flex border-b"
-        style={{ borderColor: "#1a1a1a", background: "#0a0a0a" }}
-      >
-        {(["counts", "adversarial", "confidence"] as const).map((tab) => (
+      {/* Tabs */}
+      <div className="flex border-b border-border">
+        {tabs.map((tab) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className="px-4 py-2.5 text-xs uppercase transition-colors"
-            style={{
-              fontFamily: "var(--font-ibm-plex-mono)",
-              fontSize: "9px",
-              letterSpacing: "0.1em",
-              color: activeTab === tab ? "#d4d4d4" : "#444",
-              borderBottom: activeTab === tab ? "1px solid #dc2626" : "1px solid transparent",
-              marginBottom: "-1px",
-            }}
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2.5 text-sm transition-colors ${
+              activeTab === tab.key
+                ? "border-b-2 border-accent font-semibold text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            style={{ marginBottom: activeTab === tab.key ? "-1px" : undefined }}
           >
-            {tab === "counts" && `Counts (${data.fixture_counts.length})`}
-            {tab === "adversarial" && `Adversarial (${data.adversarial_log.length})`}
-            {tab === "confidence" && "Confidence"}
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {/* ── Tab Content ── */}
-      <div
-        className="flex-1 overflow-y-auto"
-        style={{ scrollbarWidth: "thin", scrollbarColor: "#1a1a1a transparent" }}
-      >
-        {/* COUNTS TAB */}
+      {/* Tab content */}
+      <div className="flex-1 overflow-y-auto">
+        {/* FIXTURE COUNTS */}
         {activeTab === "counts" && (
           <div>
-            {/* Areas covered */}
-            <div
-              className="border-b px-5 py-3"
-              style={{ borderColor: "#1a1a1a" }}
-            >
-              <p
-                className="mb-1.5 text-xs"
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  color: "#444",
-                  fontSize: "9px",
-                  letterSpacing: "0.1em",
-                }}
-              >
-                AREAS COVERED
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {data.areas_covered.map((area) => (
-                  <span
-                    key={area}
-                    className="rounded px-2 py-0.5 text-xs"
-                    style={{
-                      fontFamily: "var(--font-ibm-plex-mono)",
-                      fontSize: "10px",
-                      background: "#1a1a1a",
-                      color: "#666",
-                    }}
-                  >
-                    {area}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Fixture count table */}
             <table className="w-full">
               <thead>
-                <tr
-                  style={{
-                    borderBottom: "1px solid #1a1a1a",
-                    background: "#0a0a0a",
-                  }}
-                >
-                  {["TYPE", "DESCRIPTION", "TOTAL", "DIFF"].map((h) => (
+                <tr className="border-b border-border bg-sidebar">
+                  {["TYPE", "DESCRIPTION", "COUNT", "REVISED", "DIFF", "DIFFICULTY"].map((h) => (
                     <th
                       key={h}
-                      className="px-3 py-2 text-left text-xs"
-                      style={{
-                        fontFamily: "var(--font-ibm-plex-mono)",
-                        fontSize: "9px",
-                        letterSpacing: "0.1em",
-                        color: "#444",
-                      }}
+                      className="px-4 py-2.5 text-left font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
                     >
                       {h}
                     </th>
@@ -399,304 +183,159 @@ export function ResultsPanel({ data, pipelineStatus, isLoading }: ResultsPanelPr
                 </tr>
               </thead>
               <tbody>
-                {data.fixture_counts.map((fixture) => {
-                  const diffInfo = DIFFICULTY_LABELS[fixture.difficulty] || { label: fixture.difficulty, color: "#666" };
-                  const isExpanded = expandedArea === fixture.type_tag;
-                  const hasAreas = Object.keys(fixture.counts_by_area).length > 0;
+                {data.fixture_counts.map((f) => {
+                  const hasDelta = f.delta && f.delta !== 0;
+                  const isExpanded = expandedRow === f.type_tag;
 
                   return (
-                    <>
-                      <tr
-                        key={fixture.type_tag}
-                        onClick={() => hasAreas && setExpandedArea(isExpanded ? null : fixture.type_tag)}
-                        className="transition-colors"
-                        style={{
-                          borderBottom: "1px solid #0f0f0f",
-                          cursor: hasAreas ? "pointer" : "default",
-                          background: isExpanded ? "#0a0a0a" : "transparent",
-                        }}
-                      >
-                        <td className="px-3 py-2.5">
-                          <span
-                            className="rounded px-1.5 py-0.5 text-xs font-bold"
-                            style={{
-                              fontFamily: "var(--font-ibm-plex-mono)",
-                              fontSize: "11px",
-                              background: "rgba(220,38,38,0.12)",
-                              color: "#dc2626",
-                            }}
-                          >
-                            {fixture.type_tag}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <p
-                            className="text-xs"
-                            style={{
-                              fontFamily: "var(--font-cormorant)",
-                              fontSize: "13px",
-                              color: "#d4d4d4",
-                            }}
-                          >
-                            {fixture.description}
-                          </p>
-                          {(fixture.flags || []).length > 0 && (
-                            <p
-                              className="mt-0.5 text-xs"
-                              style={{
-                                fontFamily: "var(--font-ibm-plex-mono)",
-                                fontSize: "9px",
-                                color: "#f59e0b",
-                              }}
-                            >
-                              ⚠ {fixture.flags?.join("; ")}
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <span
-                            className="text-sm font-bold"
-                            style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#d4d4d4" }}
-                          >
-                            {fixture.total}
-                          </span>
-                          {hasAreas && (
-                            <span
-                              className="ml-1 text-xs"
-                              style={{ color: "#333" }}
-                            >
-                              {isExpanded ? "▲" : "▼"}
+                    <tr key={f.type_tag} className="group" >
+                      <td colSpan={6} className="p-0">
+                        <div
+                          className={`flex cursor-pointer items-center border-b transition-colors ${
+                            hasDelta ? "bg-amber-50/50" : "bg-background"
+                          } hover:bg-muted/50`}
+                          onClick={() => setExpandedRow(isExpanded ? null : f.type_tag)}
+                        >
+                          <div className="w-[80px] px-4 py-3">
+                            <span className="rounded bg-red-50 px-2 py-0.5 font-mono text-xs font-bold text-accent">
+                              {f.type_tag}
                             </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span
-                            className="text-xs"
-                            style={{
-                              fontFamily: "var(--font-ibm-plex-mono)",
-                              fontSize: "10px",
-                              color: diffInfo.color,
-                            }}
-                          >
-                            {fixture.difficulty}
-                          </span>
-                        </td>
-                      </tr>
+                          </div>
+                          <div className="flex-1 px-4 py-3">
+                            <p className="text-sm text-foreground">{f.description}</p>
+                            {(f.flags || []).length > 0 && (
+                              <p className="mt-0.5 text-xs text-amber-600">
+                                {"\u26A0"} {f.flags?.join("; ")}
+                              </p>
+                            )}
+                          </div>
+                          <div className="w-[80px] px-4 py-3 text-right font-mono text-sm font-medium text-foreground">
+                            {f.total}
+                          </div>
+                          <div className="w-[80px] px-4 py-3 text-right font-mono text-sm font-medium text-foreground">
+                            {f.revised ?? f.total}
+                          </div>
+                          <div className="w-[80px] px-4 py-3 text-right font-mono text-sm">
+                            {hasDelta ? (
+                              <span className={f.delta! > 0 ? "font-semibold text-amber-600" : "text-green-600"}>
+                                {f.delta! > 0 ? `+${f.delta} \u25B2` : `${f.delta} \u25BC`}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">{"\u2014"}</span>
+                            )}
+                          </div>
+                          <div className="w-[100px] px-4 py-3 font-mono text-xs text-muted-foreground">
+                            {DIFF_LABELS[f.difficulty] || f.difficulty}
+                          </div>
+                        </div>
 
-                      {/* Per-area breakdown */}
-                      {isExpanded && hasAreas && (
-                        <tr key={`${fixture.type_tag}-areas`}>
-                          <td colSpan={4} className="pb-2">
-                            <div
-                              className="mx-3 rounded p-3"
-                              style={{ background: "#0f0f0f", border: "1px solid #1a1a1a" }}
-                            >
-                              {Object.entries(fixture.counts_by_area).map(([area, count]) => (
-                                <div
-                                  key={area}
-                                  className="flex justify-between py-1"
-                                  style={{ borderBottom: "1px solid #111" }}
-                                >
-                                  <span
-                                    className="text-xs"
-                                    style={{
-                                      fontFamily: "var(--font-ibm-plex-mono)",
-                                      color: "#525252",
-                                      fontSize: "10px",
-                                    }}
-                                  >
-                                    {area}
-                                  </span>
-                                  <span
-                                    className="text-xs"
-                                    style={{
-                                      fontFamily: "var(--font-ibm-plex-mono)",
-                                      color: "#d4d4d4",
-                                      fontSize: "10px",
-                                    }}
-                                  >
-                                    {count}
-                                  </span>
+                        {/* Expanded row */}
+                        {isExpanded && (
+                          <div className="border-b border-border bg-sidebar px-6 py-3">
+                            {Object.keys(f.counts_by_area || {}).length > 0 && (
+                              <div className="mb-2">
+                                <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                  Per-Area Breakdown
+                                </p>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {Object.entries(f.counts_by_area || {}).map(([area, count]) => (
+                                    <div key={area} className="flex items-center justify-between rounded border border-border bg-background px-3 py-1.5">
+                                      <span className="text-xs text-muted-foreground">{area}</span>
+                                      <span className="font-mono text-xs font-medium text-foreground">{count}</span>
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                              </div>
+                            )}
+                            {f.notes && (
+                              <p className="text-xs text-muted-foreground">
+                                <span className="font-semibold">Notes:</span> {f.notes}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
               <tfoot>
-                <tr style={{ borderTop: "1px solid #1a1a1a", background: "#0a0a0a" }}>
-                  <td colSpan={2} className="px-3 py-3">
-                    <span
-                      className="text-xs uppercase"
-                      style={{
-                        fontFamily: "var(--font-ibm-plex-mono)",
-                        color: "#525252",
-                        letterSpacing: "0.1em",
-                        fontSize: "10px",
-                      }}
-                    >
+                <tr className="border-t-2 border-border bg-sidebar">
+                  <td className="px-4 py-3" />
+                  <td className="px-4 py-3">
+                    <span className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Grand Total
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-right">
-                    <span
-                      className="text-lg font-bold"
-                      style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#d4d4d4" }}
-                    >
-                      {data.grand_total.toLocaleString()}
-                    </span>
+                  <td className="px-4 py-3 text-right font-mono text-base font-bold text-foreground">
+                    {data.grand_total}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-base font-bold text-foreground">
+                    {data.revised_total ?? data.grand_total}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-sm font-semibold">
+                    {(data.revised_total ?? data.grand_total) !== data.grand_total ? (
+                      <span className="text-amber-600">
+                        +{(data.revised_total ?? data.grand_total) - data.grand_total}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">{"\u2014"}</span>
+                    )}
                   </td>
                   <td />
                 </tr>
               </tfoot>
             </table>
-
-            {/* Flags */}
-            {data.flags.length > 0 && (
-              <div
-                className="m-4 rounded p-4"
-                style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)" }}
-              >
-                <p
-                  className="mb-2 text-xs uppercase"
-                  style={{
-                    fontFamily: "var(--font-ibm-plex-mono)",
-                    color: "#f59e0b",
-                    fontSize: "9px",
-                    letterSpacing: "0.15em",
-                  }}
-                >
-                  Flagged Items
-                </p>
-                {data.flags.map((flag, i) => (
-                  <p
-                    key={i}
-                    className="text-xs"
-                    style={{
-                      fontFamily: "var(--font-ibm-plex-mono)",
-                      color: "#d4d4d4",
-                      fontSize: "11px",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    ⚠ {flag}
-                  </p>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
-        {/* ADVERSARIAL TAB */}
+        {/* ADVERSARIAL LOG */}
         {activeTab === "adversarial" && (
           <div className="p-4">
+            {/* Summary */}
+            <div className="mb-4 rounded-lg border border-border bg-sidebar p-3">
+              <p className="text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">{data.adversarial_log.length} attacks</span> found:
+                {" "}{data.adversarial_log.filter((a) => a.severity === "critical").length} critical,
+                {" "}{data.adversarial_log.filter((a) => a.severity === "major").length} major,
+                {" "}{data.adversarial_log.filter((a) => a.severity === "minor").length} minor
+              </p>
+            </div>
+
             {data.adversarial_log.length === 0 ? (
-              <p
-                className="py-8 text-center text-xs"
-                style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#333" }}
-              >
+              <p className="py-8 text-center text-sm italic text-muted-foreground">
                 No adversarial challenges in this run
               </p>
             ) : (
               data.adversarial_log.map((entry, i) => {
-                const severityColor = SEVERITY_COLORS[entry.severity] || "#666";
-                const verdictColor = entry.verdict === "concede"
-                  ? "#dc2626"
-                  : entry.verdict === "defend"
-                  ? "#10b981"
-                  : "#f59e0b";
+                const sev = SEVERITY_STYLES[entry.severity] || SEVERITY_STYLES.minor;
+                const res = RESOLUTION_STYLES[entry.resolution || ""] || { text: "text-muted-foreground", label: entry.resolution };
 
                 return (
                   <div
                     key={i}
-                    className="mb-3 rounded p-4"
-                    style={{
-                      border: `1px solid rgba(${entry.severity === "critical" ? "220,38,38" : "255,255,255"},0.08)`,
-                      background: "#0a0a0a",
-                    }}
+                    className="mb-3 rounded-lg border border-border bg-background p-4"
                   >
-                    <div className="mb-2 flex items-center gap-3">
-                      <span
-                        className="rounded px-2 py-0.5 text-xs"
-                        style={{
-                          fontFamily: "var(--font-ibm-plex-mono)",
-                          fontSize: "9px",
-                          letterSpacing: "0.1em",
-                          background: `rgba(${entry.severity === "critical" ? "220,38,38" : entry.severity === "major" ? "245,158,11" : "59,130,246"},0.12)`,
-                          color: severityColor,
-                        }}
-                      >
-                        {entry.severity?.toUpperCase()}
-                      </span>
-                      <span
-                        className="text-xs"
-                        style={{
-                          fontFamily: "var(--font-ibm-plex-mono)",
-                          color: "#444",
-                          fontSize: "10px",
-                        }}
-                      >
-                        {entry.attack_id}
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase ${sev.bg} ${sev.text}`}>
+                        {entry.severity}
                       </span>
                       {entry.category && (
-                        <span
-                          className="text-xs"
-                          style={{
-                            fontFamily: "var(--font-ibm-plex-mono)",
-                            color: "#333",
-                            fontSize: "9px",
-                            letterSpacing: "0.05em",
-                          }}
-                        >
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                           {entry.category.replace(/_/g, " ")}
                         </span>
                       )}
+                      <span className="font-mono text-[11px] text-muted-foreground">{entry.attack_id}</span>
                     </div>
 
-                    <p
-                      className="mb-2 text-sm"
-                      style={{
-                        fontFamily: "var(--font-cormorant)",
-                        color: "#d4d4d4",
-                        fontSize: "14px",
-                      }}
-                    >
-                      {entry.description}
-                    </p>
+                    <p className="mb-2 text-sm leading-relaxed text-foreground">{entry.description}</p>
 
-                    {entry.resolution && (
-                      <div
-                        className="flex items-start gap-2 rounded p-2"
-                        style={{ background: "#0f0f0f", border: "1px solid #1a1a1a" }}
-                      >
-                        {entry.verdict && (
-                          <span
-                            className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs uppercase"
-                            style={{
-                              fontFamily: "var(--font-ibm-plex-mono)",
-                              fontSize: "8px",
-                              letterSpacing: "0.1em",
-                              color: verdictColor,
-                              background: `${verdictColor}18`,
-                            }}
-                          >
-                            {entry.verdict}
-                          </span>
-                        )}
-                        <p
-                          className="text-xs"
-                          style={{
-                            fontFamily: "var(--font-ibm-plex-mono)",
-                            color: "#525252",
-                            fontSize: "10px",
-                          }}
-                        >
-                          {entry.resolution}
-                        </p>
+                    {entry.explanation && (
+                      <div className="rounded-md border border-border bg-sidebar p-3">
+                        <span className={`mr-2 font-mono text-xs font-bold ${res.text}`}>
+                          {res.label}
+                        </span>
+                        <span className="text-xs leading-relaxed text-muted-foreground">{entry.explanation}</span>
                       </div>
                     )}
                   </div>
@@ -706,46 +345,16 @@ export function ResultsPanel({ data, pipelineStatus, isLoading }: ResultsPanelPr
 
             {/* Constitutional violations */}
             {data.constitutional_violations.length > 0 && (
-              <div
-                className="mt-4 rounded p-4"
-                style={{
-                  background: "rgba(220,38,38,0.04)",
-                  border: "1px solid rgba(220,38,38,0.15)",
-                }}
-              >
-                <p
-                  className="mb-3 text-xs uppercase"
-                  style={{
-                    fontFamily: "var(--font-ibm-plex-mono)",
-                    color: "#dc2626",
-                    fontSize: "9px",
-                    letterSpacing: "0.15em",
-                  }}
-                >
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
+                <p className="mb-3 font-mono text-[11px] font-semibold uppercase tracking-wider text-red-700">
                   Constitutional Violations
                 </p>
                 {data.constitutional_violations.map((v, i) => (
-                  <div key={i} className="mb-2">
-                    <p
-                      className="text-xs font-semibold"
-                      style={{
-                        fontFamily: "var(--font-ibm-plex-mono)",
-                        color: SEVERITY_COLORS[v.severity] || "#666",
-                        fontSize: "10px",
-                      }}
-                    >
-                      {v.severity} — {v.rule}
+                  <div key={i} className="mb-2 last:mb-0">
+                    <p className="text-xs font-semibold text-red-600">
+                      {v.severity} {"\u2014"} {v.rule}
                     </p>
-                    <p
-                      className="text-xs"
-                      style={{
-                        fontFamily: "var(--font-ibm-plex-mono)",
-                        color: "#525252",
-                        fontSize: "10px",
-                      }}
-                    >
-                      {v.explanation}
-                    </p>
+                    <p className="text-xs text-red-700/70">{v.explanation}</p>
                   </div>
                 ))}
               </div>
@@ -753,59 +362,42 @@ export function ResultsPanel({ data, pipelineStatus, isLoading }: ResultsPanelPr
           </div>
         )}
 
-        {/* CONFIDENCE TAB */}
+        {/* CONFIDENCE */}
         {activeTab === "confidence" && (
           <div className="p-4">
-            {/* M3: Confidence explanation from backend */}
-            {data.confidence_explanation && (
-              <div
-                className="mb-4 rounded p-3"
-                style={{ background: "#0a0a0a", border: "1px solid #1a1a1a" }}
-              >
-                <pre
-                  className="whitespace-pre-wrap"
-                  style={{
-                    fontFamily: "var(--font-ibm-plex-mono)",
-                    fontSize: "10px",
-                    color: "#525252",
-                    lineHeight: "1.6",
-                  }}
-                >
-                  {data.confidence_explanation}
-                </pre>
-              </div>
-            )}
-
             {/* Overall score */}
-            <div
-              className="mb-4 rounded p-4"
-              style={{ background: "#0a0a0a", border: "1px solid #1a1a1a" }}
-            >
-              <div className="mb-2 flex items-baseline gap-3">
-                <span
-                  className="text-4xl font-bold"
-                  style={{ fontFamily: "var(--font-ibm-plex-mono)", color: confidenceColor }}
-                >
+            <div className="mb-6 rounded-lg border border-border bg-sidebar p-5">
+              <div className="mb-3 flex items-baseline gap-3">
+                <span className="font-mono text-4xl font-bold text-foreground">
                   {(data.confidence_score * 100).toFixed(0)}%
                 </span>
                 <span
-                  className="text-sm font-semibold"
-                  style={{ fontFamily: "var(--font-ibm-plex-mono)", color: confidenceColor }}
+                  className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                  style={{
+                    backgroundColor:
+                      data.confidence_band === "HIGH" ? "#dcfce7" :
+                      data.confidence_band === "MODERATE" ? "#fef3c7" :
+                      data.confidence_band === "LOW" ? "#ffedd5" : "#fef2f2",
+                    color:
+                      data.confidence_band === "HIGH" ? "#16a34a" :
+                      data.confidence_band === "MODERATE" ? "#d97706" :
+                      data.confidence_band === "LOW" ? "#ea580c" : "#dc2626",
+                  }}
                 >
                   {data.confidence_band}
                 </span>
               </div>
 
-              {/* Confidence bar */}
-              <div
-                className="h-1.5 w-full rounded-full"
-                style={{ background: "#1a1a1a" }}
-              >
+              {/* Overall bar */}
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                 <div
                   className="h-full rounded-full transition-all"
                   style={{
                     width: `${data.confidence_score * 100}%`,
-                    background: confidenceColor,
+                    backgroundColor:
+                      data.confidence_band === "HIGH" ? "#16a34a" :
+                      data.confidence_band === "MODERATE" ? "#d97706" :
+                      data.confidence_band === "LOW" ? "#ea580c" : "#dc2626",
                   }}
                 />
               </div>
@@ -813,94 +405,46 @@ export function ResultsPanel({ data, pipelineStatus, isLoading }: ResultsPanelPr
 
             {/* Feature breakdown */}
             {data.confidence_breakdown && (
-              <div>
-                <p
-                  className="mb-3 text-xs uppercase"
-                  style={{
-                    fontFamily: "var(--font-ibm-plex-mono)",
-                    color: "#444",
-                    fontSize: "9px",
-                    letterSpacing: "0.15em",
-                  }}
-                >
+              <div className="mb-6">
+                <h3 className="mb-3 font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Feature Breakdown
-                </p>
+                </h3>
 
                 {Object.entries(data.confidence_breakdown).map(([feature, value]) => {
                   const displayNames: Record<string, string> = {
-                    schedule_match_rate: "Schedule Match Rate",
+                    schedule_match: "Schedule Match",
                     area_coverage: "Area Coverage",
                     adversarial_resolved: "Adversarial Resolved",
-                    constitutional_clean: "Constitutional Clean",
-                    cross_reference_match: "Panel Cross-Reference",
-                    note_compliance: "Plan Note Compliance",
-                    fast_mode_penalty: "Fast Mode Penalty",
+                    constitutional_clean: "Constitutional",
+                    cross_reference: "Panel Cross-Ref",
+                    note_compliance: "Note Compliance",
+                    reconciler_coverage: "Reconciler Coverage",
                   };
-                  const weights: Record<string, number> = {
-                    schedule_match_rate: 0.25,
-                    area_coverage: 0.20,
-                    adversarial_resolved: 0.15,
-                    constitutional_clean: 0.15,
-                    cross_reference_match: 0.10,
-                    note_compliance: 0.10,
-                    fast_mode_penalty: -0.05,
-                  };
-                  const isNegative = (value as number) < 0;
-                  const barColor = isNegative ? "#dc2626" : (value as number) >= 0.8 ? "#10b981" : (value as number) >= 0.5 ? "#f59e0b" : "#f97316";
+                  const numVal = value as number;
+                  const pct = Math.round(numVal * 100);
+                  const barColor =
+                    pct >= 85 ? "#16a34a" :
+                    pct >= 65 ? "#d97706" :
+                    pct >= 40 ? "#ea580c" : "#dc2626";
 
                   return (
                     <div key={feature} className="mb-3">
-                      <div className="mb-1 flex justify-between">
-                        <span
-                          className="text-xs"
-                          style={{
-                            fontFamily: "var(--font-ibm-plex-mono)",
-                            color: "#525252",
-                            fontSize: "10px",
-                          }}
-                        >
-                          {displayNames[feature] || feature}
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">
+                          {displayNames[feature] || feature.replace(/_/g, " ")}
                         </span>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="text-xs"
-                            style={{
-                              fontFamily: "var(--font-ibm-plex-mono)",
-                              color: "#333",
-                              fontSize: "9px",
-                            }}
-                          >
-                            w={weights[feature]}
-                          </span>
-                          <span
-                            className="text-xs font-bold"
-                            style={{
-                              fontFamily: "var(--font-ibm-plex-mono)",
-                              color: barColor,
-                              fontSize: "11px",
-                            }}
-                          >
-                            {typeof value === "number"
-                              ? isNegative
-                                ? `${(value * 100).toFixed(0)}%`
-                                : `${(value * 100).toFixed(0)}%`
-                              : "—"}
-                          </span>
-                        </div>
+                        <span className="font-mono text-xs font-semibold" style={{ color: barColor }}>
+                          {pct >= 0 ? `${pct}%` : numVal === 1 ? "Clean \u2713" : `${pct}%`}
+                        </span>
                       </div>
-                      <div
-                        className="h-1 w-full rounded-full"
-                        style={{ background: "#1a1a1a" }}
-                      >
-                        {!isNegative && (
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${Math.abs((value as number) * 100)}%`,
-                              background: barColor,
-                            }}
-                          />
-                        )}
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.max(0, pct)}%`,
+                            backgroundColor: barColor,
+                          }}
+                        />
                       </div>
                     </div>
                   );
@@ -908,43 +452,70 @@ export function ResultsPanel({ data, pipelineStatus, isLoading }: ResultsPanelPr
               </div>
             )}
 
-            {/* Confidence band legend */}
-            <div
-              className="mt-4 rounded p-3"
-              style={{ background: "#0a0a0a", border: "1px solid #1a1a1a" }}
-            >
-              <p
-                className="mb-2 text-xs uppercase"
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  color: "#333",
-                  fontSize: "9px",
-                  letterSpacing: "0.1em",
-                }}
-              >
+            {/* Legend */}
+            <div className="rounded-lg border border-border bg-sidebar p-4">
+              <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Confidence Bands
               </p>
               {[
-                { band: "HIGH", range: "85–100%", color: "#10b981" },
-                { band: "MODERATE", range: "65–84%", color: "#f59e0b" },
-                { band: "LOW", range: "40–64%", color: "#f97316" },
-                { band: "VERY LOW", range: "0–39%", color: "#dc2626" },
+                { band: "HIGH", range: "85\u2013100%", color: "#16a34a" },
+                { band: "MODERATE", range: "65\u201384%", color: "#d97706" },
+                { band: "LOW", range: "40\u201364%", color: "#ea580c" },
+                { band: "VERY LOW", range: "0\u201339%", color: "#dc2626" },
               ].map(({ band, range, color }) => (
                 <div key={band} className="flex items-center justify-between py-0.5">
-                  <span
-                    className="text-xs"
-                    style={{ fontFamily: "var(--font-ibm-plex-mono)", color, fontSize: "10px" }}
-                  >
-                    {band}
-                  </span>
-                  <span
-                    className="text-xs"
-                    style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#333", fontSize: "10px" }}
-                  >
-                    {range}
-                  </span>
+                  <span className="text-xs font-medium" style={{ color }}>{band}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{range}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* EXPORT */}
+        {activeTab === "export" && (
+          <div className="p-6">
+            <div className="mb-6 flex flex-wrap gap-3">
+              <button
+                onClick={() => exportCSV(data)}
+                className="flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                Download CSV
+              </button>
+              <button
+                onClick={() => exportJSON(data)}
+                className="flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                Download JSON
+              </button>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                {copied ? "Copied!" : "Copy to Clipboard"}
+              </button>
+            </div>
+
+            {/* Preview */}
+            <div className="rounded-lg border border-border bg-sidebar p-4">
+              <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Export Preview
+              </p>
+              <pre className="overflow-x-auto whitespace-pre font-mono text-xs leading-relaxed text-muted-foreground">
+{`TYPE  DESCRIPTION                        COUNT  REVISED  DIFF
+${"\u2500".repeat(68)}
+${data.fixture_counts
+  .map(
+    (f) =>
+      `${f.type_tag.padEnd(6)}${f.description.padEnd(35)}${String(f.total).padStart(5)}  ${String(f.revised ?? f.total).padStart(7)}  ${f.delta ? (f.delta > 0 ? "+" + f.delta : String(f.delta)) : "\u2014"}`
+  )
+  .join("\n")}
+${"\u2500".repeat(68)}
+${"TOTAL".padEnd(41)}${String(data.grand_total).padStart(5)}  ${String(data.revised_total ?? data.grand_total).padStart(7)}  ${(data.revised_total ?? data.grand_total) !== data.grand_total ? "+" + ((data.revised_total ?? data.grand_total) - data.grand_total) : ""}`}
+              </pre>
             </div>
           </div>
         )}

@@ -9,7 +9,9 @@
   --color-surface: #f9fafb;
   --color-canvas: #f3f4f6;
   --color-border: #e5e7eb;
-  --color-muted: #6b7280;
+  --color-muted: #f3f4f6;
+  --color-muted-foreground: #6b7280;
+  --color-sidebar: #f9fafb;
   --color-accent: #dc2626;
   --color-accent-hover: #b91c1c;
   --color-success: #16a34a;

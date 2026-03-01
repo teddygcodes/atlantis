@@ -120,11 +120,11 @@ export function DrawingViewer({
   }, [snipRect, onSnipComplete]);
 
   /* Current page snippets */
-  const pageSnippets = snippets.filter((s) => s.pageNumber === currentPage);
+  const pageSnippets = snippets.filter((s) => s.page_number === currentPage);
 
   /* Snippet counts per page for sidebar badges */
   const snippetsByPage = snippets.reduce<Record<number, number>>((acc, s) => {
-    acc[s.pageNumber] = (acc[s.pageNumber] || 0) + 1;
+    acc[s.page_number] = (acc[s.page_number] || 0) + 1;
     return acc;
   }, {});
 
@@ -133,7 +133,7 @@ export function DrawingViewer({
     if (!pdfLoaded) return null;
     return (
       <div className="flex w-[140px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-surface p-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Pages
         </span>
         {Array.from({ length: pageCount }, (_, i) => i + 1).map((pg) => (
@@ -146,14 +146,14 @@ export function DrawingViewer({
                 : "border-border bg-background hover:border-muted"
             }`}
           >
-            <div className="flex h-[72px] w-full items-center justify-center rounded bg-canvas text-[10px] font-mono text-muted">
+            <div className="flex h-[72px] w-full items-center justify-center rounded bg-canvas text-[10px] font-mono text-muted-foreground">
               {pg}
             </div>
             <span
               className={`mt-1 block text-center text-[10px] ${
                 pg === currentPage
                   ? "font-semibold text-accent"
-                  : "text-muted"
+                  : "text-muted-foreground"
               }`}
             >
               Page {pg}
@@ -178,7 +178,7 @@ export function DrawingViewer({
         className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
           snipMode
             ? "bg-accent text-white"
-            : "text-muted hover:bg-canvas hover:text-foreground disabled:opacity-40"
+            : "text-muted-foreground hover:bg-canvas hover:text-foreground disabled:opacity-40"
         }`}
       >
         <Scissors className="h-3.5 w-3.5" />
@@ -190,7 +190,7 @@ export function DrawingViewer({
       <button
         onClick={fitPage}
         disabled={!pdfLoaded}
-        className="rounded-md px-2 py-1.5 text-xs text-muted hover:bg-canvas hover:text-foreground disabled:opacity-40"
+        className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-canvas hover:text-foreground disabled:opacity-40"
       >
         <Maximize2 className="inline h-3 w-3 mr-1" />
         Fit
@@ -198,7 +198,7 @@ export function DrawingViewer({
       <button
         onClick={fitWidth}
         disabled={!pdfLoaded}
-        className="rounded-md px-2 py-1.5 text-xs text-muted hover:bg-canvas hover:text-foreground disabled:opacity-40"
+        className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-canvas hover:text-foreground disabled:opacity-40"
       >
         Width
       </button>
@@ -206,22 +206,22 @@ export function DrawingViewer({
       <button
         onClick={zoomOut}
         disabled={!pdfLoaded}
-        className="rounded-md p-1.5 text-muted hover:bg-canvas hover:text-foreground disabled:opacity-40"
+        className="rounded-md p-1.5 text-muted-foreground hover:bg-canvas hover:text-foreground disabled:opacity-40"
       >
         <ZoomOut className="h-3.5 w-3.5" />
       </button>
-      <span className="w-12 text-center font-mono text-xs text-muted">
+      <span className="w-12 text-center font-mono text-xs text-muted-foreground">
         {zoom}%
       </span>
       <button
         onClick={zoomIn}
         disabled={!pdfLoaded}
-        className="rounded-md p-1.5 text-muted hover:bg-canvas hover:text-foreground disabled:opacity-40"
+        className="rounded-md p-1.5 text-muted-foreground hover:bg-canvas hover:text-foreground disabled:opacity-40"
       >
         <ZoomIn className="h-3.5 w-3.5" />
       </button>
 
-      <div className="ml-auto text-xs text-muted">
+      <div className="ml-auto text-xs text-muted-foreground">
         {pdfLoaded && (
           <span>
             Page {currentPage} of {pageCount}
@@ -313,15 +313,15 @@ export function DrawingViewer({
                 <span
                   className={
                     step.status === "done"
-                      ? "text-muted line-through"
+                      ? "text-muted-foreground line-through"
                       : step.status === "running"
                         ? "font-medium text-foreground"
-                        : "text-muted"
+                        : "text-muted-foreground"
                   }
                 >
                   {step.label}
                   {step.detail && (
-                    <span className="text-muted">
+                    <span className="text-muted-foreground">
                       {" -- "}
                       {step.detail}
                     </span>
@@ -331,7 +331,7 @@ export function DrawingViewer({
             ))}
           </div>
           {currentStep && (
-            <p className="mt-4 text-[11px] text-muted">
+            <p className="mt-4 text-[11px] text-muted-foreground">
               {currentStep.label}...
             </p>
           )}
@@ -353,12 +353,12 @@ export function DrawingViewer({
           onKeyDown={(e) => e.key === "Enter" && onUpload()}
         >
           <div className="flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed border-border p-16 transition-colors hover:border-muted">
-            <Upload className="h-12 w-12 text-muted" />
+            <Upload className="h-12 w-12 text-muted-foreground" />
             <div className="text-center">
               <p className="text-sm font-medium text-foreground">
                 Drop PDF here or click to upload
               </p>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Supports multi-page construction drawing sets
               </p>
             </div>
@@ -410,10 +410,10 @@ export function DrawingViewer({
 
           {/* Drawing label */}
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-            <span className="relative text-sm font-medium text-muted">
+            <span className="relative text-sm font-medium text-muted-foreground">
               Drawing Page {currentPage}
             </span>
-            <span className="relative text-[10px] text-muted">
+            <span className="relative text-[10px] text-muted-foreground">
               E-{String(currentPage).padStart(3, "0")} Lighting Plan
             </span>
           </div>
@@ -436,7 +436,7 @@ export function DrawingViewer({
             >
               <span className="absolute -top-5 left-0 rounded bg-accent px-1.5 py-0.5 text-[9px] font-semibold text-white whitespace-nowrap">
                 {s.label === "rcp"
-                  ? `RCP: ${s.subLabel}`
+                  ? `RCP: ${s.sub_label}`
                   : s.label.replace(/_/g, " ")}
               </span>
             </div>

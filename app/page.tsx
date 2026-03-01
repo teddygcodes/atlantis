@@ -1,376 +1,262 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
-import Link from "next/link";
-import { SearchBar } from "@/components/search-bar";
-import { SearchResults } from "@/components/search-results";
-import { PipelineStatus } from "@/components/pipeline-status";
-import { ParticleField } from "@/components/particle-field";
+import { useState, useCallback, useRef } from "react";
+import { DrawingViewer } from "@/components/takeoff/drawing-viewer";
+import { SnippetTray } from "@/components/takeoff/snippet-tray";
+import { ResultsPanel } from "@/components/takeoff/results-panel";
+import { LabelModal } from "@/components/takeoff/label-modal";
+import type { Snippet, TakeoffResult, PipelineStep, AppState } from "@/lib/types";
+import { MOCK_PAGES, MOCK_RESULT, PIPELINE_STEPS, PIPELINE_MESSAGES } from "@/lib/mock-data";
 
-interface SearchResultData {
-  answer_bullets: string[];
-  confidence?: string;
-  confidence_score?: number;
-  sources: { title: string; url: string; grade?: string; credibility?: string | number }[];
-  constitutional_violations: string[];
-  audit_trail?: {
-    mode: string;
-    researcher_claims: number;
-    adversary_attacks: number;
-    attacks_survived: number;
-    judge_verdict: string;
-    reasoning: string;
-  };
-}
+export default function TakeoffPage() {
+  /* ── State ─────────────────────────────────────────────────────── */
+  const [appState, setAppState] = useState<AppState>("empty");
+  const [pdfLoaded, setPdfLoaded] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [snippets, setSnippets] = useState<Snippet[]>([]);
+  const [snipMode, setSnipMode] = useState(false);
+  const [showLabelModal, setShowLabelModal] = useState(false);
+  const [pendingBbox, setPendingBbox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [result, setResult] = useState<TakeoffResult | null>(null);
+  const [showResults, setShowResults] = useState(false);
+  const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[] | null>(null);
+  const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [snippetFlash, setSnippetFlash] = useState<string | null>(null);
+  const [pdfFilename, setPdfFilename] = useState("");
 
-interface ConversationEntry {
-  id: string;
-  query: string;
-  result: SearchResultData | null;
-  error: string | null;
-  isLoading: boolean;
-  pipelineStatus: string;
-}
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pageCount = MOCK_PAGES.length;
 
-export default function Home() {
-  const [query, setQuery] = useState("");
-  const [conversation, setConversation] = useState<ConversationEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  /* ── Handlers ──────────────────────────────────────────────────── */
 
-  const hasSearched = conversation.length > 0;
+  const handleUpload = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
 
-  // Auto-scroll to bottom when new content arrives
-  useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPdfLoaded(true);
+      setPdfFilename(file.name);
+      setCurrentPage(1);
+      setAppState("loaded");
     }
-  }, [conversation]);
+  }, []);
 
-  const handleSearch = useCallback(async () => {
-    if (!query.trim() || isLoading) return;
+  const handleToggleSnip = useCallback(() => {
+    setSnipMode((prev) => !prev);
+    setAppState((prev) => (prev === "snipping" ? "loaded" : "snipping"));
+  }, []);
 
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+  const handleSnipComplete = useCallback(
+    (bbox: { x: number; y: number; width: number; height: number }) => {
+      setPendingBbox(bbox);
+      setShowLabelModal(true);
+    },
+    []
+  );
 
-    const entryId = Date.now().toString();
-    const currentQuery = query.trim();
+  const handleLabelSave = useCallback(
+    (label: string, subLabel: string) => {
+      if (!pendingBbox) return;
+      const newSnippet: Snippet = {
+        id: `s-${Date.now()}`,
+        label: label as Snippet["label"],
+        sub_label: subLabel,
+        page_number: currentPage,
+        bbox: pendingBbox,
+      };
+      setSnippets((prev) => [...prev, newSnippet]);
+      setPendingBbox(null);
+      setShowLabelModal(false);
+      setSnipMode(false);
+      setAppState("ready");
+    },
+    [pendingBbox, currentPage]
+  );
 
-    // Add new conversation entry
-    const newEntry: ConversationEntry = {
-      id: entryId,
-      query: currentQuery,
-      result: null,
-      error: null,
-      isLoading: true,
-      pipelineStatus: "",
-    };
+  const handleLabelCancel = useCallback(() => {
+    setPendingBbox(null);
+    setShowLabelModal(false);
+  }, []);
 
-    setConversation((prev) => [...prev, newEntry]);
-    setQuery("");
-    setIsLoading(true);
+  const handleDeleteSnippet = useCallback((id: string) => {
+    setSnippets((prev) => prev.filter((s) => s.id !== id));
+  }, []);
 
-    try {
-      const res = await fetch("/api/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: currentQuery }),
-        signal: controller.signal,
-      });
+  const handleRelabelSnippet = useCallback(
+    (id: string, label: string, subLabel: string) => {
+      setSnippets((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, label: label as Snippet["label"], sub_label: subLabel } : s
+        )
+      );
+    },
+    []
+  );
 
-      if (!res.ok) throw new Error("Search request failed");
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response stream");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        // Split on newlines and process each line individually
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const rawLine of lines) {
-          const line = rawLine.trim();
-          if (!line.startsWith("data:")) continue;
-
-          const jsonStr = line.slice(5).trim();
-          if (!jsonStr || jsonStr === "[DONE]") continue;
-
-          try {
-            const data = JSON.parse(jsonStr);
-
-            if (data.type === "status") {
-              setConversation((prev) =>
-                prev.map((e) =>
-                  e.id === entryId
-                    ? { ...e, pipelineStatus: data.message }
-                    : e
-                )
-              );
-            } else if (data.type === "result") {
-              console.log("[v0] Result event raw:", JSON.stringify(data).slice(0, 1000));
-              console.log("[v0] data.data keys:", data.data ? Object.keys(data.data) : "no data.data");
-              console.log("[v0] data keys:", Object.keys(data));
-              setConversation((prev) =>
-                prev.map((e) =>
-                  e.id === entryId
-                    ? {
-                        ...e,
-                        result: data.data,
-                        isLoading: false,
-                        pipelineStatus: "",
-                      }
-                    : e
-                )
-              );
-            } else if (data.type === "done") {
-              // Mark loading complete if result hasn't arrived yet
-              setConversation((prev) =>
-                prev.map((e) =>
-                  e.id === entryId && e.isLoading
-                    ? { ...e, isLoading: false, pipelineStatus: "" }
-                    : e
-                )
-              );
-            } else if (data.type === "error") {
-              setConversation((prev) =>
-                prev.map((e) =>
-                  e.id === entryId
-                    ? { ...e, error: data.message, isLoading: false }
-                    : e
-                )
-              );
-            }
-          } catch {
-            // Skip malformed JSON
-          }
-        }
+  const handleHighlightSnippet = useCallback(
+    (snippet: Snippet | null) => {
+      if (snippet) {
+        setCurrentPage(snippet.page_number);
+        setSnippetFlash(snippet.id);
+        setTimeout(() => setSnippetFlash(null), 1500);
+      } else {
+        setSnippetFlash(null);
       }
-    } catch (err) {
-      if (err instanceof Error && err.name !== "AbortError") {
-        setConversation((prev) =>
-          prev.map((e) =>
-            e.id === entryId
-              ? {
-                  ...e,
-                  error: err.message || "Something went wrong",
-                  isLoading: false,
-                }
-              : e
-          )
-        );
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [query, isLoading]);
+    },
+    []
+  );
 
+  /* ── Simulated Pipeline ────────────────────────────────────────── */
+  const handleRunTakeoff = useCallback((_mode: string) => {
+    setAppState("running");
+    setPipelineRunning(true);
+    setShowResults(false);
+    setResult(null);
+
+    const steps: PipelineStep[] = PIPELINE_STEPS.map((s) => ({ ...s }));
+    setPipelineSteps(steps);
+
+    let stepIndex = 0;
+    const interval = setInterval(() => {
+      if (stepIndex < steps.length) {
+        // Mark current as running
+        steps[stepIndex] = { ...steps[stepIndex], status: "running" };
+        setPipelineSteps([...steps]);
+      }
+
+      if (stepIndex > 0) {
+        // Mark previous as done
+        steps[stepIndex - 1] = { ...steps[stepIndex - 1], status: "done" };
+        setPipelineSteps([...steps]);
+      }
+
+      stepIndex++;
+
+      if (stepIndex > steps.length) {
+        clearInterval(interval);
+        // All done
+        steps[steps.length - 1] = { ...steps[steps.length - 1], status: "done" };
+        setPipelineSteps([...steps]);
+
+        setTimeout(() => {
+          setPipelineRunning(false);
+          setPipelineSteps(null);
+          setResult(MOCK_RESULT);
+          setShowResults(true);
+          setAppState("complete");
+        }, 600);
+      }
+    }, 1200);
+  }, []);
+
+  const handleCloseResults = useCallback(() => {
+    setShowResults(false);
+  }, []);
+
+  /* ── Render ────────────────────────────────────────────────────── */
   return (
-    <div className="relative flex h-dvh flex-col overflow-hidden">
-      <ParticleField />
+    <div className="flex h-dvh flex-col overflow-hidden bg-canvas">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
-      {/* About link - top right, always visible */}
-      <div className="absolute right-6 top-5 z-20">
-        <Link
-          href="/about"
-          className="transition-colors hover:opacity-70"
-          style={{
-            fontFamily: "var(--font-ibm-plex-mono)",
-            fontSize: "11px",
-            textTransform: "uppercase" as const,
-            letterSpacing: "0.15em",
-            color: "#525252",
-          }}
-        >
-          About
-        </Link>
+      {/* Header Bar */}
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-4">
+        <div className="flex items-center gap-3">
+          {/* Red diamond icon */}
+          <div className="flex h-7 w-7 items-center justify-center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L22 12L12 22L2 12L12 2Z" fill="#DC2626" />
+            </svg>
+          </div>
+          <span className="text-sm font-semibold text-foreground">TAKEOFF</span>
+          <span className="hidden text-sm text-muted-foreground sm:inline">
+            Adversarial Lighting Takeoff
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {pdfLoaded && pdfFilename && (
+            <span className="hidden text-xs text-muted-foreground md:inline">
+              {pdfFilename} {"\u00B7"} {pageCount} pages {"\u00B7"}{" "}
+              <button onClick={handleUpload} className="text-accent hover:underline">
+                Change
+              </button>
+            </span>
+          )}
+          <button
+            onClick={handleUpload}
+            className="flex items-center gap-2 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-hover"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" x2="12" y1="3" y2="15" />
+            </svg>
+            Upload PDF
+          </button>
+        </div>
+      </header>
+
+      {/* Main workspace */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Drawing viewer (page sidebar + toolbar + canvas) */}
+        <div className={`flex flex-1 flex-col overflow-hidden ${showResults ? "" : ""}`}>
+          <div className={`flex flex-1 overflow-hidden ${showResults ? "h-[55%]" : "h-full"}`}>
+            <DrawingViewer
+              pageCount={pageCount}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              snippets={snippets}
+              snipMode={snipMode}
+              onToggleSnip={handleToggleSnip}
+              onSnipComplete={handleSnipComplete}
+              onUpload={handleUpload}
+              pdfLoaded={pdfLoaded}
+              pipelineSteps={pipelineSteps}
+              pipelineRunning={pipelineRunning}
+              snippetFlash={snippetFlash}
+            />
+          </div>
+
+          {/* Results panel - slides up from bottom */}
+          {showResults && result && (
+            <div
+              className="shrink-0 border-t border-border"
+              style={{ height: "45vh" }}
+            >
+              <ResultsPanel
+                data={result}
+                onClose={handleCloseResults}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Snippet tray - right side */}
+        <div className="w-[300px] shrink-0">
+          <SnippetTray
+            snippets={snippets}
+            onDeleteSnippet={handleDeleteSnippet}
+            onRelabelSnippet={handleRelabelSnippet}
+            onHighlightSnippet={handleHighlightSnippet}
+            onRunTakeoff={handleRunTakeoff}
+            isRunning={pipelineRunning}
+            hasPdf={pdfLoaded}
+          />
+        </div>
       </div>
 
-      {/* ===== LANDING STATE: centered title + search ===== */}
-      {!hasSearched && (
-        <main className="relative z-10 flex flex-1 flex-col items-center justify-center">
-          <div className="hero-wave-title mb-6 flex flex-col items-center">
-            <h1
-              className="text-center tracking-[0.3em] text-foreground"
-              style={{
-                fontFamily: "var(--font-cinzel)",
-                fontSize: "clamp(36px, 6vw, 64px)",
-              }}
-            >
-              ATLANTIS
-            </h1>
-          </div>
-
-          <div className="flex w-full justify-center px-6">
-            <SearchBar
-              query={query}
-              onQueryChange={setQuery}
-              onSubmit={handleSearch}
-              isCompact={false}
-              isLoading={false}
-              placeholder="Ask anything..."
-            />
-          </div>
-
-          <p
-            className="hero-wave-line-1 mt-3 text-center"
-            style={{
-              fontFamily: "var(--font-ibm-plex-mono)",
-              fontSize: "12px",
-              color: "#444",
-            }}
-          >
-            Powered by Sydyn
-          </p>
-        </main>
-      )}
-
-      {/* ===== CHAT STATE: header, scrollable conversation, bottom input ===== */}
-      {hasSearched && (
-        <>
-          {/* Compact header */}
-          <header className="relative z-10 flex items-center justify-center pb-2 pt-5">
-            <button
-              onClick={() => {
-                setConversation([]);
-                setQuery("");
-              }}
-              className="transition-opacity hover:opacity-70"
-            >
-              <h1
-                className="search-title-enter tracking-[0.2em] text-foreground"
-                style={{
-                  fontFamily: "var(--font-cinzel)",
-                  fontSize: "22px",
-                  cursor: "pointer",
-                }}
-              >
-                ATLANTIS
-              </h1>
-            </button>
-          </header>
-
-          {/* Scrollable conversation area */}
-          <div
-            ref={scrollRef}
-            className="relative z-10 flex-1 overflow-y-auto"
-            style={{
-              scrollbarWidth: "thin",
-              scrollbarColor: "#1a1a1a transparent",
-            }}
-          >
-            <div className="mx-auto flex w-full max-w-2xl flex-col px-6 py-4">
-              {conversation.map((entry, index) => (
-                <div key={entry.id}>
-                  {/* Divider between entries */}
-                  {index > 0 && (
-                    <div
-                      className="my-8 h-px w-full"
-                      style={{ backgroundColor: "#1a1a1a" }}
-                    />
-                  )}
-
-                  {/* User query bubble */}
-                  <div className="mb-5 flex justify-end">
-                    <div
-                      className="rounded-xl px-4 py-2.5"
-                      style={{
-                        backgroundColor: "rgba(220, 38, 38, 0.08)",
-                        border: "1px solid rgba(220, 38, 38, 0.15)",
-                        maxWidth: "85%",
-                      }}
-                    >
-                      <p
-                        className="leading-relaxed"
-                        style={{
-                          fontFamily: "var(--font-cormorant)",
-                          fontSize: "16px",
-                          fontWeight: 500,
-                          color: "#d4d4d4",
-                        }}
-                      >
-                        {entry.query}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Pipeline status (during loading) */}
-                  {entry.isLoading && entry.pipelineStatus && (
-                    <div className="mb-4">
-                      <PipelineStatus currentStatus={entry.pipelineStatus} />
-                    </div>
-                  )}
-
-                  {/* Loading without pipeline status */}
-                  {entry.isLoading && !entry.pipelineStatus && (
-                    <div className="mb-4 flex items-center gap-2">
-                      <span
-                        className="search-loading-dot h-1.5 w-1.5 rounded-full"
-                        style={{ backgroundColor: "#dc2626" }}
-                      />
-                      <span
-                        className="text-[11px] tracking-[0.15em]"
-                        style={{
-                          fontFamily: "var(--font-ibm-plex-mono)",
-                          color: "#525252",
-                        }}
-                      >
-                        Initializing pipeline...
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Error state */}
-                  {entry.error && (
-                    <p
-                      className="mb-4 text-center text-sm"
-                      style={{
-                        fontFamily: "var(--font-ibm-plex-mono)",
-                        color: "#dc2626",
-                        fontSize: "12px",
-                      }}
-                    >
-                      {entry.error}
-                    </p>
-                  )}
-
-                  {/* Results */}
-                  {entry.result && <SearchResults data={entry.result} />}
-                </div>
-              ))}
-
-              {/* Scroll anchor */}
-              <div ref={bottomRef} className="h-1" />
-            </div>
-          </div>
-
-          {/* Bottom search bar - pinned */}
-          <div
-            className="relative z-10 flex w-full justify-center px-6 pb-5 pt-3"
-            style={{
-              background:
-                "linear-gradient(to top, #000000 60%, transparent 100%)",
-            }}
-          >
-            <SearchBar
-              query={query}
-              onQueryChange={setQuery}
-              onSubmit={handleSearch}
-              isCompact={true}
-              isLoading={isLoading}
-              placeholder="Ask a follow-up..."
-            />
-          </div>
-        </>
+      {/* Label Modal */}
+      {showLabelModal && (
+        <LabelModal onSave={handleLabelSave} onCancel={handleLabelCancel} />
       )}
     </div>
   );
