@@ -288,6 +288,17 @@ class TakeoffEngine:
             if panel_data is None:
                 panel_data = extracted
             else:
+                # Warn when panel names disagree — may be two distinct panels being merged
+                if (
+                    extracted.panel_name
+                    and panel_data.panel_name
+                    and extracted.panel_name != panel_data.panel_name
+                ):
+                    emit(
+                        f"WARNING: Panel names differ across snippets "
+                        f"('{panel_data.panel_name}' vs '{extracted.panel_name}') — "
+                        "merging circuits; verify these are the same panel"
+                    )
                 # Merge circuits from additional panels.
                 # Deduplicate by (panel_name, circuit) to prevent double-counting
                 # when the same panel snippet is submitted twice.

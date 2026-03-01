@@ -7,6 +7,7 @@ same response dataclasses. Domain logic replaced with lighting takeoff specifics
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 
@@ -152,6 +153,9 @@ Produce the complete fixture count. Aggregate all per-area counts, assign diffic
             data = extract_json_from_response(response.content, "COUNTER")
             if "fixture_counts" not in data:
                 logger.warning("[COUNTER] WARNING: Response missing 'fixture_counts' key — got keys: %s", list(data.keys()))
+                # Treat missing fixture_counts as a parse failure so the engine returns
+                # "agent_parse_error" instead of the misleading "blank_drawing" short-circuit
+                return TakeoffResponse(agent_role="counter", data=data, raw_response=response.content, parse_error=True)
             print(f"[COUNTER] {len(data.get('fixture_counts', []))} fixture types, {data.get('grand_total_fixtures', 0)} total fixtures")
             return TakeoffResponse(
                 agent_role="counter",
@@ -307,7 +311,6 @@ Check for: missed areas, double-counted overlapping views, wrong fixture type as
                 vision_client = None
 
             if vision_client:
-                _vision_attack_counter = 1
                 # Build fixture schedule context once, reuse for all areas
                 schedule_lines = []
                 for tag, info in fixture_schedule.fixtures.items():
@@ -315,12 +318,13 @@ Check for: missed areas, double-counted overlapping views, wrong fixture type as
                     schedule_lines.append(f"  Type {tag}: {desc}")
                 schedule_context = "\n".join(schedule_lines) or "  (No schedule available)"
 
-                for rcp in rcp_images:
+                def _check_one_area(rcp: Dict) -> List[Dict]:
+                    """Run one vision check for a single RCP area; returns list of attack dicts."""
                     area_label = rcp.get("area_label", "Unknown area")
                     image_data = rcp.get("image_data", "")
                     if not image_data:
                         logger.warning("[CHECKER] No image_data for area '%s' — skipping vision check", area_label)
-                        continue
+                        return []
 
                     # Counter's claimed counts for this specific area
                     claimed_lines = []
@@ -388,6 +392,7 @@ Return JSON ONLY — no explanatory text:
                             temperature=0.3,
                         )
                         vision_data = extract_json_from_response(vision_resp, "CHECKER_VISION")
+                        area_attacks = []
                         for disc in vision_data.get("discrepancies", []):
                             tag = disc.get("type_tag", "UNKNOWN")
                             found = disc.get("checker_found", 0)
@@ -397,8 +402,9 @@ Return JSON ONLY — no explanatory text:
                             confidence = disc.get("confidence", "medium")
                             notes = disc.get("notes", "")
                             direction_label = "over-count" if direction == "over_count" else "under-count"
-                            vision_attacks.append({
-                                "attack_id": f"VIS{_vision_attack_counter:03d}",
+                            area_attacks.append({
+                                # attack_id assigned after collection to ensure stable ordering
+                                "_area_label": area_label,
                                 "severity": severity,
                                 "category": "missed_fixtures",
                                 "affected_type_tag": tag,
@@ -411,9 +417,33 @@ Return JSON ONLY — no explanatory text:
                                 "suggested_correction": found,
                                 "evidence": f"Direct image analysis of RCP for '{area_label}' (confidence: {confidence})",
                             })
-                            _vision_attack_counter += 1
+                        return area_attacks
                     except Exception as e:
                         logger.warning("[CHECKER] Vision check failed for area '%s': %s — skipping", area_label, e)
+                        return []
+
+                # Run all vision checks in parallel (max 4 concurrent to avoid rate limits)
+                valid_rcp = [r for r in rcp_images if r.get("image_data")]
+                max_vis_workers = min(len(valid_rcp), 4)
+                all_area_attacks: List[List[Dict]] = [[] for _ in valid_rcp]
+                if max_vis_workers > 0:
+                    with ThreadPoolExecutor(max_workers=max_vis_workers) as _vis_ex:
+                        _vis_futures = {_vis_ex.submit(_check_one_area, r): i for i, r in enumerate(valid_rcp)}
+                        for fut in as_completed(_vis_futures):
+                            idx = _vis_futures[fut]
+                            try:
+                                all_area_attacks[idx] = fut.result()
+                            except Exception as _ve:
+                                logger.warning("[CHECKER] Vision future raised: %s", _ve)
+
+                # Flatten results in deterministic order and assign VIS IDs
+                _vision_attack_counter = 1
+                for area_attack_list in all_area_attacks:
+                    for atk in area_attack_list:
+                        atk.pop("_area_label", None)
+                        atk["attack_id"] = f"VIS{_vision_attack_counter:03d}"
+                        _vision_attack_counter += 1
+                        vision_attacks.append(atk)
 
         # ── Text-based LLM attack phase ────────────────────────────────────────
         try:
@@ -659,7 +689,12 @@ class Judge:
             source = "Reconciler (post-adversarial)"
         else:
             final_counts_list = counter_output.get("fixture_counts", [])
-            final_counts = {fc.get("type_tag"): {"total": fc.get("total")} for fc in final_counts_list}
+            # Guard: skip entries missing type_tag to prevent a {None: ...} phantom dict key
+            final_counts = {
+                fc.get("type_tag"): {"total": fc.get("total")}
+                for fc in final_counts_list
+                if fc.get("type_tag")
+            }
             grand_total = counter_output.get("grand_total_fixtures", 0)
             source = "Counter (pre-adversarial)"
 

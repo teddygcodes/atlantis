@@ -10,8 +10,10 @@ text-only prompts. All extraction functions send base64 images to Claude Sonnet.
 import json
 import logging
 import os
+import random
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict
 
@@ -39,8 +41,20 @@ _vision_output_tokens: int = 0
 # Approximate cost per token for vision model (configurable via env vars).
 # Defaults match claude-sonnet-4-6 pricing: $3/1M input, $15/1M output.
 # Override with: TAKEOFF_VISION_INPUT_COST_PER_M, TAKEOFF_VISION_OUTPUT_COST_PER_M
-_VISION_INPUT_COST_PER_TOKEN = float(os.getenv("TAKEOFF_VISION_INPUT_COST_PER_M", "3")) / 1_000_000
-_VISION_OUTPUT_COST_PER_TOKEN = float(os.getenv("TAKEOFF_VISION_OUTPUT_COST_PER_M", "15")) / 1_000_000
+def _parse_cost_per_million(env_var: str, default_str: str) -> float:
+    """Parse a cost-per-million-tokens env var, falling back to default on bad input."""
+    raw = os.getenv(env_var, default_str)
+    try:
+        return float(raw) / 1_000_000
+    except (ValueError, TypeError):
+        logger.warning(
+            "[EXTRACTION] Invalid value for %s: %r — using default %s per M tokens",
+            env_var, raw, default_str
+        )
+        return float(default_str) / 1_000_000
+
+_VISION_INPUT_COST_PER_TOKEN = _parse_cost_per_million("TAKEOFF_VISION_INPUT_COST_PER_M", "3")
+_VISION_OUTPUT_COST_PER_TOKEN = _parse_cost_per_million("TAKEOFF_VISION_OUTPUT_COST_PER_M", "15")
 
 
 def reset_vision_cost() -> None:
@@ -177,7 +191,13 @@ def _get_vision_client() -> 'anthropic.Anthropic':
                         "[TAKEOFF] FATAL: ANTHROPIC_API_KEY not set. "
                         "Cannot run vision extraction. Set the key and retry."
                     )
-                timeout = float(os.getenv("TAKEOFF_VISION_TIMEOUT", "180"))
+                try:
+                    timeout = float(os.getenv("TAKEOFF_VISION_TIMEOUT", "180"))
+                    if timeout <= 0:
+                        raise ValueError("timeout must be positive")
+                except (ValueError, TypeError):
+                    logger.warning("[EXTRACTION] Invalid TAKEOFF_VISION_TIMEOUT — using 180s default")
+                    timeout = 180.0
                 _vision_client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
     return _vision_client
 
@@ -270,8 +290,6 @@ def _call_vision_with_retry(
     max_retries: int = 2
 ) -> str:
     """Call vision API with exponential backoff retry on transient failures."""
-    import time
-    import random
     last_error = None
     for attempt in range(max_retries + 1):
         try:

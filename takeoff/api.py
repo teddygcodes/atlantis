@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from takeoff.engine import TakeoffEngine
-from takeoff.llm import LLMProvider
+from takeoff.models import verify_api_key
 
 # Load env vars
 load_dotenv(override=True)
@@ -64,23 +64,10 @@ async def lifespan(app: FastAPI):
     print("[TAKEOFF API] Starting up...")
 
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if not anthropic_key:
-        raise RuntimeError("ANTHROPIC_API_KEY not set in environment")
 
-    # Verify Anthropic API key
+    # Verify Anthropic API key using the shared helper
     try:
-        test_provider = LLMProvider(api_key=anthropic_key, mode="api")
-        test_response = test_provider.complete(
-            system_prompt="You are a test assistant.",
-            user_prompt="Reply with OK",
-            max_tokens=5,
-            temperature=0.0,
-            model="claude-haiku-4-5-20251001",
-            task_type="takeoff_test"
-        )
-        content = test_response.content or ""
-        if not content or content.startswith("[LLM ERROR"):
-            raise RuntimeError(f"Anthropic API test returned error: {content}")
+        verify_api_key(anthropic_key or "")
         print("[TAKEOFF API] ✓ Anthropic API key verified")
     except Exception as e:
         raise RuntimeError(f"Anthropic API verification failed: {e}")

@@ -91,3 +91,32 @@ class ModelRouter:
             "provider_input_tokens": self._provider.total_input_tokens,
             "provider_output_tokens": self._provider.total_output_tokens,
         }
+
+    @property
+    def is_mock(self) -> bool:
+        return False
+
+
+def verify_api_key(api_key: str) -> None:
+    """Verify an Anthropic API key by making a minimal test call.
+
+    Used at startup by both api.py and __main__.py to fail fast with a clear
+    error before running a job.
+
+    Raises:
+        RuntimeError: If the key is missing, invalid, or the API is unreachable.
+    """
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY is not set")
+    provider = LLMProvider(api_key=api_key, mode="api")
+    response = provider.complete(
+        system_prompt="You are a test assistant.",
+        user_prompt="Reply with OK",
+        max_tokens=5,
+        temperature=0.0,
+        model="claude-haiku-4-5-20251001",
+        task_type="takeoff_test",
+    )
+    content = response.content or ""
+    if not content or content.startswith("[LLM ERROR"):
+        raise RuntimeError(f"Anthropic API test returned error: {content}")

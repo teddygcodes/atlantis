@@ -427,55 +427,60 @@ class TakeoffDB:
 
     def get_full_result(self, job_id: str) -> Optional[Dict]:
         """Retrieve the full formatted result for a completed job."""
-        row = self.conn.execute(
-            "SELECT full_result_json FROM results WHERE job_id = ?", (job_id,)
-        ).fetchone()
-        if row and row["full_result_json"]:
-            return json.loads(row["full_result_json"])
-        return None
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT full_result_json FROM results WHERE job_id = ?", (job_id,)
+            ).fetchone()
+            if row and row["full_result_json"]:
+                return json.loads(row["full_result_json"])
+            return None
 
     def get_job(self, job_id: str) -> Optional[Dict]:
         """Retrieve a job record."""
-        row = self.conn.execute("""
-            SELECT j.*, r.grand_total, r.confidence_score, r.confidence_band,
-                   r.violations_json, r.flags_json, r.judge_verdict, r.approved_at
-            FROM takeoff_jobs j
-            LEFT JOIN results r ON j.job_id = r.job_id
-            WHERE j.job_id = ?
-        """, (job_id,)).fetchone()
-        return dict(row) if row else None
+        with self._lock:
+            row = self.conn.execute("""
+                SELECT j.*, r.grand_total, r.confidence_score, r.confidence_band,
+                       r.violations_json, r.flags_json, r.judge_verdict, r.approved_at
+                FROM takeoff_jobs j
+                LEFT JOIN results r ON j.job_id = r.job_id
+                WHERE j.job_id = ?
+            """, (job_id,)).fetchone()
+            return dict(row) if row else None
 
     def get_job_counts(self, job_id: str) -> List[Dict]:
         """Retrieve fixture counts for a job."""
-        rows = self.conn.execute("""
-            SELECT type_tag, area, count, confidence, difficulty_code, flags
-            FROM fixture_counts
-            WHERE job_id = ?
-            ORDER BY type_tag, area
-        """, (job_id,)).fetchall()
-        return [dict(r) for r in rows]
+        with self._lock:
+            rows = self.conn.execute("""
+                SELECT type_tag, area, count, confidence, difficulty_code, flags
+                FROM fixture_counts
+                WHERE job_id = ?
+                ORDER BY type_tag, area
+            """, (job_id,)).fetchall()
+            return [dict(r) for r in rows]
 
     def get_job_adversarial_log(self, job_id: str) -> List[Dict]:
         """Retrieve adversarial log for a job."""
-        rows = self.conn.execute("""
-            SELECT agent, attack_id, severity, category, description, resolution, final_verdict
-            FROM adversarial_log
-            WHERE job_id = ?
-            ORDER BY id
-        """, (job_id,)).fetchall()
-        return [dict(r) for r in rows]
+        with self._lock:
+            rows = self.conn.execute("""
+                SELECT agent, attack_id, severity, category, description, resolution, final_verdict
+                FROM adversarial_log
+                WHERE job_id = ?
+                ORDER BY id
+            """, (job_id,)).fetchall()
+            return [dict(r) for r in rows]
 
     def list_jobs(self, limit: int = 20) -> List[Dict]:
         """List recent takeoff jobs."""
-        rows = self.conn.execute("""
-            SELECT j.job_id, j.created_at, j.drawing_name, j.mode, j.status,
-                   j.snippet_count, r.grand_total, r.confidence_band, r.judge_verdict
-            FROM takeoff_jobs j
-            LEFT JOIN results r ON j.job_id = r.job_id
-            ORDER BY j.created_at DESC
-            LIMIT ?
-        """, (limit,)).fetchall()
-        return [dict(r) for r in rows]
+        with self._lock:
+            rows = self.conn.execute("""
+                SELECT j.job_id, j.created_at, j.drawing_name, j.mode, j.status,
+                       j.snippet_count, r.grand_total, r.confidence_band, r.judge_verdict
+                FROM takeoff_jobs j
+                LEFT JOIN results r ON j.job_id = r.job_id
+                ORDER BY j.created_at DESC
+                LIMIT ?
+            """, (limit,)).fetchall()
+            return [dict(r) for r in rows]
 
     def close(self):
         """Close database connection, waiting for any active write to finish."""

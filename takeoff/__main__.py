@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from takeoff.engine import TakeoffEngine
+from takeoff.models import verify_api_key
 
 
 def main():
@@ -98,29 +99,10 @@ Snippet JSON format (single file):
 
     args = parser.parse_args()
 
-    # Verify API key
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if not anthropic_key:
-        print("[ERROR] ANTHROPIC_API_KEY not found in environment", file=sys.stderr)
-        print("[ERROR] Set it in .env file: ANTHROPIC_API_KEY=sk-ant-...", file=sys.stderr)
-        sys.exit(1)
-
-    # Verify API connectivity
+    # Verify API key and connectivity using the shared helper
     print("[TAKEOFF] Verifying Anthropic API key...")
     try:
-        from takeoff.llm import LLMProvider
-        test_provider = LLMProvider(api_key=anthropic_key, mode="api")
-        test_response = test_provider.complete(
-            system_prompt="You are a test assistant.",
-            user_prompt="Reply with just 'OK'",
-            max_tokens=10,
-            temperature=0.0,
-            model="claude-haiku-4-5-20251001",
-            task_type="takeoff_test"
-        )
-        if "[LLM ERROR" in test_response.content:
-            print(f"[ERROR] API call failed: {test_response.content}", file=sys.stderr)
-            sys.exit(1)
+        verify_api_key(os.getenv("ANTHROPIC_API_KEY", ""))
         print("[TAKEOFF] ✓ API key verified\n")
     except Exception as e:
         print(f"[ERROR] API verification failed: {e}", file=sys.stderr)

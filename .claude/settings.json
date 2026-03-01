@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(grep:*)",
-      "Read(//Users/tylergilstrap/.claude/projects/**)"
+      "Read(//Users/tylergilstrap/.claude/projects/**)",
+      "Bash(\"\\)[0]:*)"
     ],
     "additionalDirectories": [
       "/Users/tylergilstrap/.claude/projects/-Users-tylergilstrap-Desktop-atlantis"

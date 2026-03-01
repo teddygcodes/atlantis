@@ -1,0 +1,937 @@
+"""
+Atlantis Constitutional Convention
+====================================
+The Founders BUILD the government through structured decisions.
+No articles. No parser. No interpretation layer.
+
+Each proposal is a concrete spec. Each vote directly mutates the
+GovernmentBlueprint. If it passes, that exact structure becomes
+the live config. If it fails, someone counter-proposes.
+
+The Founders KNOW they retire after the Convention.
+They're building a machine they'll never operate.
+
+4 Rounds:
+  Round 1 — STRUCTURE: Branches, seats, selection methods
+  Round 2 — POWERS: What each branch can/can't do, voting thresholds
+  Round 3 — KNOWLEDGE & CYCLE: Research, states, tiers, the perpetual cycle
+  Round 4 — SAFEGUARDS: Non-amendable clauses, amendment process, deadlock, ethics
+
+Competing proposals: If a decision fails, a counter-proposal fires.
+Two runs = two different civilizations.
+"""
+
+import json
+from dataclasses import dataclass, field
+from typing import Optional, Callable
+
+from agents.base import BaseAgent, get_all_founders, KnowledgeArea
+from content.logger import AtlantisLogger, AgentMessage, LogLevel, LogCategory
+from core.llm import LLMProvider, get_llm
+from core.persistence import AtlantisDB, get_db
+from config.settings import (
+    FOUNDING_CONFIG, DEPTH_TIERS, HARD_CONSTRAINTS, API_CONFIG, DEBATE_MATCHUPS
+)
+
+
+# ═══════════════════════════════════════════════════════════════
+# THE GOVERNMENT BLUEPRINT — Built directly by Founder votes
+# ═══════════════════════════════════════════════════════════════
+
+@dataclass
+class BranchBlueprint:
+    name: str
+    branch_type: str
+    purpose: str
+    seats: list = field(default_factory=list)
+    powers: list = field(default_factory=list)
+    constraints: list = field(default_factory=list)
+    voting_rules: dict = field(default_factory=dict)
+    designed_by: str = ""
+    vote_result: str = ""
+
+
+@dataclass
+class GovernmentBlueprint:
+    """The live government config. Built by votes, not interpretation."""
+    branches: list = field(default_factory=list)
+    non_amendable_clauses: list = field(default_factory=list)
+    amendment_rules: dict = field(default_factory=dict)
+    state_formation_rules: dict = field(default_factory=dict)
+    cycle_sequence: list = field(default_factory=list)
+    knowledge_standards: dict = field(default_factory=dict)
+    transparency_rules: dict = field(default_factory=dict)
+    resource_rules: dict = field(default_factory=dict)
+    health_monitoring: dict = field(default_factory=dict)
+    ethical_principles: list = field(default_factory=list)
+    content_pipeline: dict = field(default_factory=dict)
+    decisions_made: list = field(default_factory=list)
+    decisions_rejected: list = field(default_factory=list)
+
+    def get_branch(self, branch_type):
+        for b in self.branches:
+            if b.branch_type == branch_type:
+                return b
+        return None
+
+    def has_branch(self, branch_type):
+        return any(b.branch_type == branch_type for b in self.branches)
+
+    def to_dict(self):
+        return {
+            "branches": [
+                {"name": b.name, "type": b.branch_type, "purpose": b.purpose,
+                 "seats": b.seats, "powers": b.powers, "constraints": b.constraints,
+                 "voting_rules": b.voting_rules, "designed_by": b.designed_by,
+                 "vote_result": b.vote_result}
+                for b in self.branches
+            ],
+            "non_amendable_clauses": self.non_amendable_clauses,
+            "amendment_rules": self.amendment_rules,
+            "state_formation_rules": self.state_formation_rules,
+            "cycle_sequence": self.cycle_sequence,
+            "knowledge_standards": self.knowledge_standards,
+            "transparency_rules": self.transparency_rules,
+            "resource_rules": self.resource_rules,
+            "health_monitoring": self.health_monitoring,
+            "ethical_principles": self.ethical_principles,
+            "content_pipeline": self.content_pipeline,
+            "decisions_made": len(self.decisions_made),
+            "decisions_rejected": len(self.decisions_rejected),
+        }
+
+
+# ═══════════════════════════════════════════════════════════════
+# PHASE 0: FOUNDING PERIOD
+# ═══════════════════════════════════════════════════════════════
+
+class FoundingPeriod:
+    """20 Founders × 10 research cycles = 200 knowledge entries."""
+
+    def __init__(self, logger, llm=None, db=None, research_cycles=None):
+        self.logger = logger
+        self.llm = llm or get_llm()
+        self.db = db or get_db()
+        self.founders = get_all_founders()
+        self.research_cycles = research_cycles if research_cycles is not None else FOUNDING_CONFIG["research_cycles"]
+
+    def run(self):
+        print("\n" + "=" * 60)
+        print("  PHASE 0: THE FOUNDING PERIOD")
+        nc = self.research_cycles
+        print(f"  {len(self.founders)} Founders x {nc} cycles = {len(self.founders)*nc} entries")
+        print("=" * 60 + "\n")
+
+        for cycle in range(nc):
+            print(f"\n--- Research Cycle {cycle+1}/{nc} ---")
+            for founder in self.founders:
+                self._research_cycle(founder, cycle)
+                self.db.save_agent(founder)
+            self.logger.advance_cycle()
+
+        ready = 0
+        for f in self.founders:
+            mx = max((ka.tier for ka in f.knowledge.values()), default=0)
+            if mx >= FOUNDING_CONFIG["min_founder_depth"]:
+                ready += 1
+
+        self.db.save_checkpoint(
+            cycle=self.logger.current_cycle, phase="founding_period_complete",
+            state={"research_cycles": nc, "founders_ready": ready}
+        )
+        # Save founding cycles count to database
+        self.db.set_state("founding_cycles_completed", nc)
+        print(f"\nFounding Period complete. {ready}/{len(self.founders)} ready.")
+        return self.founders
+
+    def _research_cycle(self, founder, cycle):
+        domains = list(founder.knowledge.keys())
+        domain = domains[cycle % len(domains)]
+        current_tier = founder.knowledge[domain].tier
+        tier_info = DEPTH_TIERS.get(current_tier + 1, DEPTH_TIERS[5])
+
+        prompt = (
+            f"Research '{domain}' to reach Tier {current_tier+1} ({tier_info['name']}). "
+            f"Current: Tier {current_tier}.\nRequirements:\n"
+        )
+        for req in tier_info["requirements"]:
+            prompt += f"  - {req}\n"
+        prompt += (
+            "\nProvide:\nCONCEPTS: [list]\nFRAMEWORKS: [list]\n"
+            "APPLICATIONS: [list]\nCONNECTIONS: [list]\nSYNTHESIS: [insights]"
+        )
+
+        response = self.llm.complete(
+            system_prompt=founder.get_system_prompt(),
+            user_prompt=prompt,
+            temperature=API_CONFIG["founder_temperature"]
+        )
+
+        concepts, frameworks, applications, connections = _parse_research(response.content)
+        founder.update_knowledge(domain=domain, concepts=concepts,
+                                 frameworks=frameworks, applications=applications,
+                                 connections=connections)
+
+        ka = founder.knowledge[domain]
+        nxt = DEPTH_TIERS.get(ka.tier + 1)
+        if nxt and (len(ka.key_concepts) >= nxt["min_concepts"] and
+                    len(ka.frameworks) >= nxt["min_frameworks"] and
+                    len(ka.applications) >= nxt["min_applications"]):
+            ka.tier += 1
+            self.logger.log_depth_tier(
+                entity=founder.name, tier=ka.tier, domain=domain,
+                evidence=f"{len(ka.key_concepts)}c, {len(ka.frameworks)}f",
+                tokens=response.total_tokens
+            )
+            print(f"    * {founder.name} reached Tier {ka.tier} in {domain}!")
+
+        founder.total_tokens_used += response.total_tokens
+        self.logger.log_founder_research(
+            agent_name=founder.name, agent_role=founder.role,
+            topic=f"{domain} (T{current_tier}->{current_tier+1})",
+            findings=response.content[:500] if response.content else "",
+            tokens=response.total_tokens
+        )
+        print(f"  {founder.name} researched {domain} ({response.total_tokens} tok)")
+
+
+# ═══════════════════════════════════════════════════════════════
+# PHASE 1: CONSTITUTIONAL CONVENTION — 4 ROUNDS
+# ═══════════════════════════════════════════════════════════════
+
+class ConstitutionalConvention:
+    """
+    4 rounds. Each vote directly mutates the blueprint.
+    No parser. No interpretation. The Founders build the machine.
+    """
+
+    def __init__(self, founders, logger, llm=None, db=None):
+        self.founders_map = {f.name: f for f in founders}
+        self.founder_list = founders
+        self.logger = logger
+        self.llm = llm or get_llm()
+        self.db = db or get_db()
+        self.blueprint = GovernmentBlueprint()
+        self.ratified = False
+        self.threshold = FOUNDING_CONFIG["ratification_threshold"]
+
+    def run(self):
+        print("\n" + "=" * 60)
+        print("  PHASE 1: THE CONSTITUTIONAL CONVENTION")
+        print(f"  4 Rounds | 2v2 Adversarial | {self.threshold}/{len(self.founder_list)} to pass")
+        print(f"  The Founders build the machine. Then they leave forever.")
+        print("=" * 60)
+
+        self._round_1_structure()
+        self._round_2_powers()
+        self._round_3_knowledge_and_cycle()
+        self._round_4_safeguards()
+        self._ratify()
+
+        # Save convention rounds count to database
+        self.db.set_state("convention_rounds_completed", 4)
+
+        return self.blueprint
+
+    # ─── ROUND 1: STRUCTURE ──────────────────────────────────
+
+    def _round_1_structure(self):
+        print(f"\n{'=' * 50}")
+        print(f"  ROUND 1: STRUCTURE")
+        print(f"  How many branches? What are they? Who sits on them?")
+        print(f"{'=' * 50}")
+
+        # Madison proposes 3-branch government
+        passed = self._debate_decision(
+            proposer="Madison",
+            title="3-Branch Federal Government",
+            spec={
+                "type": "branch_structure",
+                "branches": {
+                    "senate": {"seats": 4, "type": "legislative"},
+                    "house": {"seats": 2, "type": "implementation"},
+                    "court": {"seats": 3, "type": "judicial"},
+                },
+                "selection": "permanent",
+            },
+            description=(
+                "3 branches. Senate (4 seats: Critic, Tester, Historian, Debugger) "
+                "deliberates Bills and sets agendas. House (2 seats: Architect, Coder) "
+                "reviews implementation. Supreme Court (3 seats: WARDEN, Justice Critic, "
+                "Justice Historian) interprets the Constitution."
+            ),
+            on_pass=lambda: [
+                self._add_branch(
+                    "Federal Senate", "legislative",
+                    "Deliberates Bills, sets research agendas, allocates resources",
+                    [{"name": "Critic", "mandate": "Challenge proposals, ensure compliance"},
+                     {"name": "Tester", "mandate": "Verify claims with evidence"},
+                     {"name": "Historian", "mandate": "Reference precedent, maintain memory"},
+                     {"name": "Debugger", "mandate": "Monitor system health, flag failures"}],
+                    voting_rules={"standard": "simple_majority", "constitutional": "supermajority"},
+                    designed_by="Madison"),
+                self._add_branch(
+                    "Federal House", "implementation",
+                    "Reviews implementation of Senate Bills, ensures feasibility",
+                    [{"name": "Architect", "mandate": "Design implementation plans"},
+                     {"name": "Coder", "mandate": "Validate executability"}],
+                    designed_by="Madison"),
+                self._add_branch(
+                    "Supreme Court", "judicial",
+                    "Interprets Constitution, builds case law, guards integrity",
+                    [{"name": "WARDEN", "mandate": "Constitutional guardian, veto on non-amendable clauses"},
+                     {"name": "Justice Critic", "mandate": "Find weaknesses, ensure rigor"},
+                     {"name": "Justice Historian", "mandate": "Reference past rulings, maintain consistency"}],
+                    voting_rules={"standard": "majority", "veto": "WARDEN on non-amendable"},
+                    designed_by="Madison"),
+            ]
+        )
+
+        # If rejected, Jefferson counter-proposes decentralized model
+        if not passed:
+            self._debate_decision(
+                proposer="Jefferson",
+                title="Decentralized Council Government",
+                spec={
+                    "type": "branch_structure",
+                    "branches": {
+                        "council": {"seats": 6, "type": "legislative"},
+                        "court": {"seats": 3, "type": "judicial"},
+                    },
+                    "selection": "rotating",
+                },
+                description=(
+                    "2 branches. A Council of 6 (rotating membership from States) handles "
+                    "both legislation and implementation. Supreme Court (3 seats) provides "
+                    "judicial review. No separate House — States implement their own Bills."
+                ),
+                on_pass=lambda: [
+                    self._add_branch(
+                        "Federal Council", "legislative",
+                        "Deliberates, legislates, and coordinates implementation across States",
+                        [{"name": f"Councilor_{i}", "mandate": "Represent State interests, deliberate Bills"}
+                         for i in range(1, 7)],
+                        voting_rules={"standard": "simple_majority"},
+                        designed_by="Jefferson"),
+                    self._add_branch(
+                        "Supreme Court", "judicial",
+                        "Interprets Constitution, judicial review",
+                        [{"name": "WARDEN", "mandate": "Constitutional guardian"},
+                         {"name": "Justice Critic", "mandate": "Quality analysis"},
+                         {"name": "Justice Historian", "mandate": "Precedent context"}],
+                        designed_by="Jefferson"),
+                ]
+            )
+
+        # Senate seat design — if we have a Senate
+        if self.blueprint.has_branch("legislative"):
+            leg = self.blueprint.get_branch("legislative")
+            self._debate_decision(
+                proposer="Olympia",
+                title="State Representatives Join the Legislature",
+                spec={"type": "seat_expansion", "rule": "one_seat_per_state"},
+                description=(
+                    f"As States form, each State gets one representative seat in the "
+                    f"{leg.name}. State reps advocate for their domain's interests. "
+                    f"This ensures the legislature grows with the civilization."
+                ),
+                on_pass=lambda: leg.seats.append(
+                    {"name": "State Representative (dynamic)", "mandate": "One seat per State, added at formation"}
+                )
+            )
+
+    # ─── ROUND 2: POWERS ────────────────────────────────────
+
+    def _round_2_powers(self):
+        print(f"\n{'=' * 50}")
+        print(f"  ROUND 2: POWERS & CONSTRAINTS")
+        print(f"  What can each branch do? Voting thresholds?")
+        print(f"{'=' * 50}")
+
+        # Judicial review
+        if self.blueprint.has_branch("judicial"):
+            self._debate_decision(
+                proposer="Marshall",
+                title="Judicial Review Power",
+                spec={
+                    "type": "power_grant",
+                    "branch": "judicial",
+                    "powers": ["strike_down_unconstitutional", "compel_amendment", "binding_precedent"]
+                },
+                description=(
+                    "The Supreme Court can: (1) strike down unconstitutional Bills, "
+                    "(2) compel constitutional amendments when gaps threaten integrity, "
+                    "(3) issue rulings that become binding precedent for all future decisions."
+                ),
+                on_pass=lambda: self._add_powers("judicial", [
+                    "Strike down unconstitutional actions",
+                    "Compel constitutional amendments",
+                    "Issue binding precedent",
+                ])
+            )
+
+        # Legislative powers
+        if self.blueprint.has_branch("legislative"):
+            self._debate_decision(
+                proposer="Hamilton",
+                title="Senate Legislative Powers",
+                spec={
+                    "type": "power_grant",
+                    "branch": "legislative",
+                    "powers": ["propose_bills", "set_agenda", "allocate_resources",
+                               "approve_state_formation", "declare_emergency"]
+                },
+                description=(
+                    "The Senate can: propose Bills, set research agendas, allocate "
+                    "token budgets, approve State formation, and declare governance "
+                    "emergencies that suspend normal cycle timing."
+                ),
+                on_pass=lambda: self._add_powers("legislative", [
+                    "Propose and pass Bills",
+                    "Set research agendas",
+                    "Allocate resources and token budgets",
+                    "Approve State formation",
+                    "Declare governance emergencies",
+                ])
+            )
+
+        # Implementation powers
+        if self.blueprint.has_branch("implementation"):
+            self._debate_decision(
+                proposer="Brunel",
+                title="House Implementation Authority",
+                spec={
+                    "type": "power_grant",
+                    "branch": "implementation",
+                    "powers": ["review_bills", "block_unimplementable", "quality_standards"]
+                },
+                description=(
+                    "The House can: review every passed Bill for feasibility, "
+                    "block Bills flagged as unimplementable (sends back to Senate), "
+                    "and enforce quality standards on all implemented systems."
+                ),
+                on_pass=lambda: self._add_powers("implementation", [
+                    "Review Bills for implementation feasibility",
+                    "Block and return unimplementable Bills",
+                    "Enforce quality standards",
+                ])
+            )
+
+        # Transparency mandate
+        self._debate_decision(
+            proposer="Paine",
+            title="Radical Transparency Mandate",
+            spec={
+                "type": "transparency",
+                "all_events_logged": True,
+                "all_events_published": True,
+                "auto_blog": True,
+                "auto_tiktok": True,
+                "no_secret_proceedings": True,
+            },
+            description=(
+                "EVERY debate, vote, ruling, and State formation is logged and published. "
+                "Auto-generate blog posts from landmarks, TikTok scripts from drama. "
+                "No secret proceedings. Full audit trail. The public watches everything."
+            ),
+            on_pass=lambda: [
+                setattr(self.blueprint, 'transparency_rules', {
+                    "all_events_logged": True, "all_events_published": True,
+                    "no_secret_proceedings": True, "full_audit_trail": True,
+                }),
+                setattr(self.blueprint, 'content_pipeline', {
+                    "auto_blog": True, "auto_tiktok": True, "auto_milestones": True,
+                }),
+            ]
+        )
+
+    # ─── ROUND 3: KNOWLEDGE ENGINE & CYCLE ───────────────────
+
+    def _round_3_knowledge_and_cycle(self):
+        print(f"\n{'=' * 50}")
+        print(f"  ROUND 3: KNOWLEDGE ENGINE & THE CYCLE")
+        print(f"  Research, States, tiers, and the forever loop.")
+        print(f"{'=' * 50}")
+
+        # Knowledge tier system
+        self._debate_decision(
+            proposer="Franklin",
+            title="Five-Tier Knowledge Standard",
+            spec={
+                "type": "knowledge_standard",
+                "tiers": 5,
+                "names": ["Vocabulary", "Frameworks", "Application", "Synthesis", "Novel Insight"],
+                "evidence_required": True,
+                "progression_mandatory": True,
+            },
+            description=(
+                "All knowledge measured on 5 tiers: Vocabulary, Frameworks, Application, "
+                "Synthesis, Novel Insight. Each tier has measurable requirements. "
+                "No knowledge archived without evidence. States must progress through tiers."
+            ),
+            on_pass=lambda: setattr(self.blueprint, 'knowledge_standards', {
+                "tiers": 5,
+                "tier_names": ["Vocabulary", "Frameworks", "Application", "Synthesis", "Novel Insight"],
+                "evidence_required": True, "progression_mandatory": True,
+            })
+        )
+
+        # State formation
+        self._debate_decision(
+            proposer="Jefferson",
+            title="State Formation Process",
+            spec={
+                "type": "state_formation",
+                "formed_via": "senate_bill",
+                "requires_domain": True,
+                "state_sovereignty": True,
+                "state_constitution": True,
+                "hierarchy": ["State", "City", "Town"],
+                "knowledge_flows_up": True,
+            },
+            description=(
+                "States form through Senate Bills. Each State defines a domain, writes "
+                "its own constitution (can't violate Federal), has sovereignty over "
+                "internal governance. States form Cities, Cities form Towns. "
+                "Knowledge flows up: Towns -> Cities -> States -> Federal Archive."
+            ),
+            on_pass=lambda: setattr(self.blueprint, 'state_formation_rules', {
+                "formed_via": "senate_bill", "requires_domain": True,
+                "state_sovereignty": True, "state_constitution_required": True,
+                "hierarchy": ["State", "City", "Town"], "knowledge_flows_up": True,
+            })
+        )
+
+        # Resource budgets
+        self._debate_decision(
+            proposer="Smith",
+            title="Resource Budgets and Efficiency Mandates",
+            spec={
+                "type": "resource_rules",
+                "max_tokens_per_cycle": HARD_CONSTRAINTS["max_tokens_per_cycle"],
+                "budget_per_bill": True,
+                "sustainability": True,
+            },
+            description=(
+                f"Every cycle has a {HARD_CONSTRAINTS['max_tokens_per_cycle']:,} token budget. "
+                f"Every Bill includes cost estimate. The system must be sustainable forever."
+            ),
+            on_pass=lambda: setattr(self.blueprint, 'resource_rules', {
+                "max_tokens_per_cycle": HARD_CONSTRAINTS["max_tokens_per_cycle"],
+                "budget_required_per_bill": True, "sustainability_mandate": True,
+            })
+        )
+
+        # The perpetual cycle
+        cycle_steps = []
+        if self.blueprint.has_branch("legislative"):
+            cycle_steps.append("agenda")
+        cycle_steps.append("research")
+        if self.blueprint.has_branch("legislative"):
+            cycle_steps.append("legislate")
+        if self.blueprint.has_branch("implementation"):
+            cycle_steps.append("implement")
+        if self.blueprint.has_branch("judicial"):
+            cycle_steps.append("judge")
+        cycle_steps.extend(["health_check", "archive"])
+        if self.blueprint.content_pipeline:
+            cycle_steps.append("publish")
+        cycle_steps.append("repeat")
+
+        self._debate_decision(
+            proposer="Tyler",
+            title="The Governance Cycle",
+            spec={
+                "type": "cycle_definition",
+                "steps": cycle_steps,
+            },
+            description=(
+                f"Every cycle: {' -> '.join(cycle_steps)}. "
+                f"Adapted to the branches we've established. "
+                f"Deeper every cycle. Forever."
+            ),
+            on_pass=lambda: setattr(self.blueprint, 'cycle_sequence', cycle_steps)
+        )
+
+    # ─── ROUND 4: SAFEGUARDS ────────────────────────────────
+
+    def _round_4_safeguards(self):
+        print(f"\n{'=' * 50}")
+        print(f"  ROUND 4: SAFEGUARDS & CONSTRAINTS")
+        print(f"  What can never change? How do amendments work?")
+        print(f"{'=' * 50}")
+
+        # Non-amendable clauses
+        self._debate_decision(
+            proposer="Washington",
+            title="Non-Amendable Safety Clauses",
+            spec={
+                "type": "non_amendable",
+                "clauses": [
+                    "Growth rate limits cannot be exceeded or removed",
+                    "Founder retirement is permanent and irreversible",
+                    "No branch may hold unchecked power",
+                    "All governance processes must terminate — no infinite loops",
+                    "The Constitution cannot be nullified or suspended",
+                ],
+                "enforced_by": "WARDEN absolute veto",
+            },
+            description=(
+                "5 clauses that can NEVER be changed: "
+                "(1) Growth limits stay. (2) Founder retirement is permanent. "
+                "(3) No unchecked power. (4) No infinite loops. "
+                "(5) Constitution can't be nullified. WARDEN enforces with absolute veto."
+            ),
+            on_pass=lambda: setattr(self.blueprint, 'non_amendable_clauses', [
+                "Growth rate limits cannot be exceeded or removed",
+                "Founder retirement is permanent and irreversible",
+                "No branch may hold unchecked power",
+                "All governance processes must terminate — no infinite loops",
+                "The Constitution cannot be nullified or suspended",
+            ])
+        )
+
+        # Amendment process
+        self._debate_decision(
+            proposer="Darwin",
+            title="Amendment Process",
+            spec={
+                "type": "amendment_rules",
+                "threshold": "supermajority_2_3",
+                "cooldown_cycles": HARD_CONSTRAINTS["amendment_cooldown_cycles"],
+                "court_fast_track": True,
+                "propagate_success": True,
+                "prune_failure": True,
+            },
+            description=(
+                "Amendments require 2/3 supermajority with a "
+                f"{HARD_CONSTRAINTS['amendment_cooldown_cycles']}-cycle cooldown. "
+                "Court can fast-track when gaps threaten integrity. "
+                "Successful patterns propagate across States. Failed patterns get pruned."
+            ),
+            on_pass=lambda: setattr(self.blueprint, 'amendment_rules', {
+                "threshold": "supermajority_2_3",
+                "cooldown_cycles": HARD_CONSTRAINTS["amendment_cooldown_cycles"],
+                "court_can_fast_track": True,
+                "successful_patterns_propagate": True,
+                "failed_patterns_prunable": True,
+            })
+        )
+
+        # Health monitoring
+        self._debate_decision(
+            proposer="Hippocrates",
+            title="System Health Monitoring",
+            spec={
+                "type": "health_monitoring",
+                "continuous": True,
+                "vital_signs": ["knowledge_growth", "governance_responsiveness",
+                                "resource_utilization", "deadlock_detection"],
+                "early_warning": True,
+            },
+            description=(
+                "Continuous monitoring: knowledge growth rate, governance responsiveness, "
+                "resource utilization, deadlock detection. Early warning for stagnation. "
+                "First, do no harm — changes must not damage existing health."
+            ),
+            on_pass=lambda: setattr(self.blueprint, 'health_monitoring', {
+                "continuous": True,
+                "vital_signs": ["knowledge_growth", "governance_responsiveness",
+                                "resource_utilization", "deadlock_detection"],
+                "early_warning": True, "do_no_harm": True,
+            })
+        )
+
+        # Ethical principles
+        self._debate_decision(
+            proposer="Aristotle",
+            title="Ethical Governance Principles",
+            spec={
+                "type": "ethical_principles",
+                "principles": ["justice", "prudence", "courage", "temperance"],
+            },
+            description=(
+                "Governance guided by: Justice (fair treatment), Prudence (long-term thinking), "
+                "Courage (hard decisions), Temperance (restraint in growth). "
+                "These guide but do not override the mechanical process."
+            ),
+            on_pass=lambda: setattr(self.blueprint, 'ethical_principles', [
+                "Justice: fair treatment across all States",
+                "Prudence: long-term thinking over short-term gains",
+                "Courage: willingness to make hard decisions",
+                "Temperance: restraint in growth and resource consumption",
+            ])
+        )
+
+        # Loop prevention — computational integrity
+        self._debate_decision(
+            proposer="Turing",
+            title="Computational Integrity Guarantee",
+            spec={
+                "type": "computation_safeguard",
+                "all_processes_terminate": True,
+                "max_recursion_depth": 10,
+                "deadlock_timeout_cycles": 5,
+            },
+            description=(
+                "All governance processes MUST terminate. Max recursion depth: 10. "
+                "If any process deadlocks for 5 cycles, it is forcibly terminated. "
+                "No Turing-complete self-modification — governance is decidable."
+            ),
+            on_pass=lambda: self.blueprint.non_amendable_clauses.extend([
+                "All governance processes must be provably terminating",
+                "Max recursion depth: 10 levels",
+                "Deadlock timeout: 5 cycles, then forced termination",
+            ])
+        )
+
+    # ─── THE DEBATE & VOTE ENGINE ────────────────────────────
+
+    def _debate_decision(self, proposer, title, spec, description, on_pass):
+        """
+        2v2 debate on a concrete government design decision.
+        Returns True if passed, False if rejected.
+        """
+        print(f"\n  +-- {title}")
+        print(f"  |   Proposed by: {proposer}")
+        print(f"  |   Spec: {json.dumps(spec, indent=None)[:120]}")
+
+        matchup = DEBATE_MATCHUPS.get(proposer, {})
+        ally_names = [n for n in matchup.get("allies", []) if n in self.founders_map][:2]
+        opp_names = [n for n in matchup.get("opponents", []) if n in self.founders_map][:2]
+
+        used = set([proposer] + ally_names + opp_names)
+        avail = [f.name for f in self.founder_list if f.name not in used]
+        while len(ally_names) < 2 and avail:
+            ally_names.append(avail.pop(0))
+        while len(opp_names) < 2 and avail:
+            opp_names.append(avail.pop(0))
+
+        messages = []
+
+        # Supporters FOR
+        for ally_name in ally_names:
+            ally = self.founders_map[ally_name]
+            resp = self.llm.complete(
+                system_prompt=ally.get_system_prompt(),
+                user_prompt=(
+                    f"CONVENTION — GOVERNMENT DESIGN VOTE\n"
+                    f"You argue IN FAVOR.\n\n"
+                    f"Decision: {title}\nProposer: {proposer}\n"
+                    f"Specification: {json.dumps(spec)}\n"
+                    f"Description: {description}\n\n"
+                    f"The Founders retire after this Convention. This machine must "
+                    f"work without you. Argue FOR adopting this specification."
+                ),
+                temperature=API_CONFIG["founder_temperature"]
+            )
+            messages.append(AgentMessage(
+                agent_id=ally.id, agent_name=ally_name,
+                agent_role=f"Supporter ({ally.role})",
+                content=resp.content or "", token_count=resp.total_tokens,
+                metadata={"debate_role": "supporter"}
+            ))
+            ally.total_tokens_used += resp.total_tokens
+
+        # Opponents AGAINST
+        support_sum = "\n".join(f"  {m.agent_name}: {m.content[:150]}" for m in messages)
+        for opp_name in opp_names:
+            opp = self.founders_map[opp_name]
+            resp = self.llm.complete(
+                system_prompt=opp.get_system_prompt(),
+                user_prompt=(
+                    f"CONVENTION — GOVERNMENT DESIGN VOTE\n"
+                    f"You argue AGAINST.\n\n"
+                    f"Decision: {title}\nProposer: {proposer}\n"
+                    f"Specification: {json.dumps(spec)}\n"
+                    f"Description: {description}\n\n"
+                    f"Supporters said:\n{support_sum}\n\n"
+                    f"The Founders retire after this. Argue AGAINST. "
+                    f"What are the risks? What breaks?"
+                ),
+                temperature=API_CONFIG["founder_temperature"]
+            )
+            messages.append(AgentMessage(
+                agent_id=opp.id, agent_name=opp_name,
+                agent_role=f"Opponent ({opp.role})",
+                content=resp.content or "", token_count=resp.total_tokens,
+                metadata={"debate_role": "opponent"}
+            ))
+            opp.total_tokens_used += resp.total_tokens
+
+        # Proposer closing
+        prop = self.founders_map[proposer]
+        debate_sum = "\n".join(
+            f"  [{m.metadata.get('debate_role','?')}] {m.agent_name}: {m.content[:120]}"
+            for m in messages
+        )
+        resp = self.llm.complete(
+            system_prompt=prop.get_system_prompt(),
+            user_prompt=(
+                f"CLOSING for: {title}\nDebate:\n{debate_sum}\n\n"
+                f"Address concerns. Final case. You retire after this."
+            ),
+            max_tokens=400,
+            temperature=API_CONFIG["founder_temperature"]
+        )
+        messages.append(AgentMessage(
+            agent_id=prop.id, agent_name=proposer,
+            agent_role=f"Proposer ({prop.role})",
+            content=resp.content or "", token_count=resp.total_tokens,
+            metadata={"debate_role": "proposer_closing"}
+        ))
+        prop.total_tokens_used += resp.total_tokens
+
+        # ALL 20 VOTE
+        votes = {}
+        vote_ctx = f"Decision: {title}\nSpec: {json.dumps(spec)[:300]}\nDebate: {debate_sum[:400]}"
+        for founder in self.founder_list:
+            v = self.llm.complete(
+                system_prompt=founder.get_system_prompt(),
+                user_prompt=(
+                    f"VOTE on government design:\n{vote_ctx}\n\n"
+                    f"VOTE: APPROVE or REJECT. One sentence.\n"
+                    f"Format: VOTE: [APPROVE/REJECT] - [reason]"
+                ),
+                max_tokens=100, temperature=0.3
+            )
+            content = (v.content or "").upper()
+            votes[founder.name] = "reject" if "REJECT" in content else "approve"
+            founder.total_tokens_used += v.total_tokens
+
+        approve = sum(1 for v in votes.values() if v == "approve")
+        passed = approve >= self.threshold
+
+        # Log
+        self.logger.log_founder_debate(
+            topic=title, messages=messages,
+            outcome=f"{'ADOPTED' if passed else 'REJECTED'} ({approve}/{len(votes)})",
+            tokens=sum(m.token_count for m in messages)
+        )
+        self.logger.log_constitutional_article(
+            article_num=len(self.blueprint.decisions_made)+len(self.blueprint.decisions_rejected)+1,
+            title=title, text=f"SPEC: {json.dumps(spec)}\n\n{description}",
+            proposed_by=proposer, votes=votes, ratified=passed,
+            tokens=sum(m.token_count for m in messages)
+        )
+
+        if passed:
+            on_pass()
+            self.blueprint.decisions_made.append({
+                "title": title, "proposed_by": proposer,
+                "spec": spec, "vote": f"{approve}/{len(votes)}",
+                "description": description,
+            })
+            print(f"  |   ADOPTED ({approve}/{len(votes)})")
+            print(f"  |   FOR: {', '.join(ally_names)} | AGAINST: {', '.join(opp_names)}")
+        else:
+            self.blueprint.decisions_rejected.append({
+                "title": title, "proposed_by": proposer,
+                "spec": spec, "vote": f"{approve}/{len(votes)}",
+            })
+            print(f"  |   REJECTED ({approve}/{len(votes)})")
+
+        print(f"  +--")
+        self.logger.advance_cycle()
+        return passed
+
+    # ─── BLUEPRINT MUTATORS ──────────────────────────────────
+
+    def _add_branch(self, name, branch_type, purpose, seats,
+                    voting_rules=None, designed_by=""):
+        b = BranchBlueprint(
+            name=name, branch_type=branch_type, purpose=purpose,
+            seats=seats, voting_rules=voting_rules or {},
+            designed_by=designed_by
+        )
+        self.blueprint.branches.append(b)
+
+    def _add_powers(self, branch_type, powers):
+        branch = self.blueprint.get_branch(branch_type)
+        if branch:
+            branch.powers.extend(powers)
+
+    # ─── RATIFICATION & RETIREMENT ───────────────────────────
+
+    def _ratify(self):
+        if not self.blueprint.decisions_made:
+            print("\n  WARNING: No decisions adopted. Cannot ratify.")
+            return
+
+        all_votes = {f.name: "approve" for f in self.founder_list}
+        self.logger.log_constitution_ratified(
+            articles=self.blueprint.decisions_made,
+            votes=all_votes, tokens=0
+        )
+        self.db.save_constitution(
+            constitution_type="federal",
+            articles=self.blueprint.decisions_made,
+            ratified_by=all_votes
+        )
+        self.ratified = True
+
+        print(f"\n{'=' * 60}")
+        print(f"  THE GOVERNMENT OF ATLANTIS IS RATIFIED")
+        print(f"  {len(self.blueprint.decisions_made)} decisions adopted, "
+              f"{len(self.blueprint.decisions_rejected)} rejected")
+        print(f"  {len(self.blueprint.branches)} branches")
+        if self.blueprint.non_amendable_clauses:
+            print(f"  {len(self.blueprint.non_amendable_clauses)} non-amendable clauses")
+        if self.blueprint.cycle_sequence:
+            print(f"  Cycle: {' -> '.join(self.blueprint.cycle_sequence)}")
+        print(f"{'=' * 60}")
+
+    def retire_founders(self):
+        print("\n--- Founder Retirement ---")
+        for f in self.founder_list:
+            self.db.save_agent(f)
+            self.db.retire_agent(f.id)
+            print(f"  {f.name} retires. Knowledge archived.")
+        self.db.save_checkpoint(
+            cycle=self.logger.current_cycle, phase="founders_retired",
+            state={"founders_retired": [f.name for f in self.founder_list]}
+        )
+        print(f"\nAll {len(self.founder_list)} Founders retired. The government stands.\n")
+
+
+# ═══════════════════════════════════════════════════════════════
+# UTILITY
+# ═══════════════════════════════════════════════════════════════
+
+def _parse_research(content):
+    concepts, frameworks, applications, connections = [], [], [], []
+    if not content:
+        return concepts, frameworks, applications, connections
+    current = None
+    for line in content.split("\n"):
+        line = line.strip()
+        u = line.upper()
+        if u.startswith("CONCEPTS:") or u.startswith("KEY CONCEPTS:"):
+            current = "c"; r = line.split(":",1)[-1].strip()
+            if r: concepts.extend(_split(r))
+        elif u.startswith("FRAMEWORKS:"):
+            current = "f"; r = line.split(":",1)[-1].strip()
+            if r: frameworks.extend(_split(r))
+        elif u.startswith("APPLICATIONS:"):
+            current = "a"; r = line.split(":",1)[-1].strip()
+            if r: applications.extend(_split(r))
+        elif u.startswith("CONNECTIONS:"):
+            current = "x"; r = line.split(":",1)[-1].strip()
+            if r: connections.extend(_split(r))
+        elif u.startswith("SYNTHESIS:"):
+            current = None
+        elif line.startswith("- ") or line.startswith("* "):
+            item = line.lstrip("-* ").strip()
+            if item:
+                if current == "c": concepts.append(item)
+                elif current == "f": frameworks.append(item)
+                elif current == "a": applications.append(item)
+                elif current == "x": connections.append(item)
+    return (list(dict.fromkeys(concepts)), list(dict.fromkeys(frameworks)),
+            list(dict.fromkeys(applications)), list(dict.fromkeys(connections)))
+
+def _split(text):
+    for sep in [",", ";", " - "]:
+        if sep in text:
+            return [i.strip() for i in text.split(sep) if i.strip()]
+    return [text.strip()] if text.strip() else []

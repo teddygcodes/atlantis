@@ -1,0 +1,28 @@
+flowchart TD
+    subgraph P0["Phase 0 — Founding Era"]
+        F["20 Founders"] --> R0["Free-form research"] --> A0["Archive seeds"]
+    end
+
+    subgraph P1["Phase 1 — Founding Governance"]
+        S["Senate forms"] --> V["Votes on rival pairs"] --> ST["States spawn"]
+    end
+
+    subgraph P2["Phase 2 — Perpetual Civilization"]
+        subgraph RP["Rival Pipeline"]
+            RC["Researcher claim"] --> CC["Critic challenge"] --> RB["Rebuttal"] --> J["Judge"] --> AR["Archive"]
+        end
+
+        subgraph FL["Federal Lab"]
+            T["Targets highest-impact domain"] --> I["Inverts core assumption"] --> CH["Challenge"] --> FJ["Judge"]
+        end
+
+        subgraph EOC["End of Cycle"]
+            C["Cities form"] --> TW["Towns form"] --> AB["Abstraction"] --> BR["Bridges"] --> TC["Tier checks"] --> PR["Probation"]
+        end
+    end
+
+    A0 --> S
+    ST --> RC
+    AR --> T
+    FJ --> AR
+    AR --> C
