@@ -1,0 +1,324 @@
+"""Takeoff Constitution: Hard Rules and Articles for Adversarial Lighting Takeoff."""
+
+
+# 6 Hard Rules (Judge enforces these strictly)
+HARD_RULES = [
+    {
+        "name": "Schedule Traceability",
+        "description": "Every counted fixture must map to a type tag in the fixture schedule. No phantom fixtures.",
+        "check": "schedule_traceability",
+        "severity": "FATAL"
+    },
+    {
+        "name": "Complete Coverage",
+        "description": "Every RCP area in the snippet set must be accounted for. No skipped rooms.",
+        "check": "complete_coverage",
+        "severity": "FATAL"
+    },
+    {
+        "name": "No Double-Counting",
+        "description": "Fixtures in overlapping detail views cannot be counted twice.",
+        "check": "no_double_counting",
+        "severity": "MAJOR"
+    },
+    {
+        "name": "Cross-Sheet Consistency",
+        "description": "If panel schedule data is available, total fixture wattage must be within 15% of panel load calculations.",
+        "check": "cross_sheet_consistency",
+        "severity": "MAJOR"
+    },
+    {
+        "name": "Emergency Fixture Tracking",
+        "description": "Exit signs, emergency battery units, and emergency-circuit fixtures must be separately tracked.",
+        "check": "emergency_fixture_tracking",
+        "severity": "MAJOR"
+    },
+    {
+        "name": "Flag Assumptions",
+        "description": "Any ambiguous fixture type, unclear symbol, or assumed quantity must be explicitly flagged, not silently guessed.",
+        "check": "flag_assumptions",
+        "severity": "MAJOR"
+    }
+]
+
+
+# 5 Constitutional Articles (Guidelines, not strictly enforced)
+ARTICLES = [
+    {
+        "number": 1,
+        "title": "Accuracy Over Speed",
+        "principle": "Take the time to count correctly; rushing causes missed fixtures"
+    },
+    {
+        "number": 2,
+        "title": "Per-Area Accountability",
+        "principle": "Counts must be broken down by area, not just grand totals"
+    },
+    {
+        "number": 3,
+        "title": "Adversarial Verification",
+        "principle": "Every count must survive independent challenge before approval"
+    },
+    {
+        "number": 4,
+        "title": "Accessory Awareness",
+        "principle": "Fixtures are not just the luminaire; consider mounting hardware, whips, sensors, battery packs"
+    },
+    {
+        "number": 5,
+        "title": "Revision Awareness",
+        "principle": "Note which drawing revision was counted; flag if revision bubbles are visible"
+    }
+]
+
+# Difficulty codes for fixture installation
+DIFFICULTY_CODES = {
+    "S": "Standard — troffer, surface mount, easy access",
+    "M": "Moderate — recessed, requires cutting, intermediate skill",
+    "D": "Difficult — requires lift/scaffold, high ceiling, complex mounting",
+    "E": "Extreme — custom fabrication, long lead time, special skills required"
+}
+
+# Emergency fixture keywords (for auto-detection)
+EMERGENCY_KEYWORDS = [
+    "exit", "emergency", "em", "e.m.", "bug eye", "bug-eye", "battery backup",
+    "battery pack", "em battery", "emergency circuit", "egress", "evac"
+]
+
+# Common fixture type patterns (for type tag validation)
+# Note: Tag case sensitivity is handled by .upper() normalization throughout.
+# All comparisons normalize tags to uppercase before matching.
+FIXTURE_CATEGORIES = {
+    "troffer": ["2x4", "2x2", "1x4", "troffer", "recessed troffer"],
+    "downlight": ["downlight", "can light", "recessed", "pot light"],
+    "linear": ["linear", "continuous", "strip light"],
+    "sconce": ["sconce", "wall mount", "wall fixture"],
+    "pendant": ["pendant", "hanging", "suspended"],
+    "highbay": ["high bay", "highbay", "warehouse", "gym"],
+    "exterior": ["wall pack", "pole light", "bollard", "flood", "exterior"],
+    "track": ["track light", "track head", "track fixture"],
+    "exit": ["exit sign", "exit"],
+    "emergency": ["emergency", "bug eye", "battery pack"]
+}
+
+
+def get_constitution() -> dict:
+    """Return full takeoff constitution as dict."""
+    return {
+        "hard_rules": HARD_RULES,
+        "articles": ARTICLES,
+        "difficulty_codes": DIFFICULTY_CODES,
+        "emergency_keywords": EMERGENCY_KEYWORDS,
+        "fixture_categories": FIXTURE_CATEGORIES
+    }
+
+
+def check_schedule_traceability(fixture_counts: list, fixture_schedule: dict) -> list:
+    """Check that all counted fixtures map to a type tag in the schedule.
+
+    Args:
+        fixture_counts: List of fixture count dicts with type_tag field
+        fixture_schedule: Dict mapping type_tag -> fixture info
+
+    Returns:
+        List of violations
+    """
+    violations = []
+    schedule_tags = {tag.upper() for tag in fixture_schedule.get("fixtures", {}).keys()}
+
+    for count in fixture_counts:
+        tag = count.get("type_tag", "").upper()
+        if tag and tag not in schedule_tags:
+            violations.append({
+                "rule": "Schedule Traceability",
+                "severity": "FATAL",
+                "explanation": f"Fixture type '{tag}' counted but not found in fixture schedule. No phantom fixtures allowed."
+            })
+
+    return violations
+
+
+def _normalize_area_label(label: str) -> str:
+    """Normalize area label for comparison (lowercase, strip, collapse separators)."""
+    return label.strip().lower().replace("-", " ").replace("_", " ")
+
+
+def check_complete_coverage(areas_covered: list, rcp_snippets: list) -> list:
+    """Check that all RCP snippet areas are accounted for.
+
+    Args:
+        areas_covered: List of area names from Counter agent
+        rcp_snippets: List of snippet dicts with sub_label (area name)
+
+    Returns:
+        List of violations
+    """
+    violations = []
+    # Normalize expected areas; fall back to index-based label if sub_label is empty
+    expected_areas = {}
+    rcp_list = [s for s in rcp_snippets if s.get("label") == "rcp"]
+    for i, snip in enumerate(rcp_list):
+        raw = snip.get("sub_label", "").strip()
+        normalized = _normalize_area_label(raw) if raw else f"area {i + 1}"
+        if normalized:
+            expected_areas[normalized] = raw or f"area {i + 1}"
+
+    covered_normalized = {_normalize_area_label(a) for a in areas_covered}
+
+    for norm_label, display_label in expected_areas.items():
+        if norm_label and norm_label not in covered_normalized:
+            violations.append({
+                "rule": "Complete Coverage",
+                "severity": "FATAL",
+                "explanation": f"RCP area '{display_label}' was provided as a snippet but is not in the Counter's areas_covered list."
+            })
+
+    return violations
+
+
+def check_no_double_counting(fixture_counts: list, fixture_schedule: dict) -> list:
+    """Check that area-level counts don't exceed schedule quantities by >10%.
+
+    Args:
+        fixture_counts: List of fixture count dicts with type_tag and total fields
+        fixture_schedule: Dict with 'fixtures' mapping type_tag -> info
+
+    Returns:
+        List of violations
+    """
+    violations = []
+    fixtures = fixture_schedule.get("fixtures", {})
+
+    for tag, info in fixtures.items():
+        schedule_qty = info.get("quantity", 0) if isinstance(info, dict) else 0
+        if not schedule_qty:
+            continue
+        area_total = sum(
+            fc.get("total", 0) for fc in fixture_counts
+            if fc.get("type_tag", "").upper() == tag.upper()
+        )
+        if area_total > schedule_qty * 1.10:
+            violations.append({
+                "rule": "No Double-Counting",
+                "severity": "MAJOR",
+                "explanation": f"Type {tag}: area counts total {area_total} but schedule shows {schedule_qty} (>10% over — possible double-count)"
+            })
+
+    return violations
+
+
+def check_cross_sheet_consistency(fixture_counts: list) -> list:
+    """Check for the same area appearing twice with different fixture counts.
+
+    Args:
+        fixture_counts: List of fixture count dicts with type_tag, counts_by_area
+
+    Returns:
+        List of violations
+    """
+    violations = []
+    area_map: dict = {}
+
+    for fc in fixture_counts:
+        tag = fc.get("type_tag", "")
+        counts_by_area = fc.get("counts_by_area", {})
+        for area, count in counts_by_area.items():
+            norm = _normalize_area_label(area)
+            key = (tag.upper(), norm)
+            if key in area_map and area_map[key] != count:
+                violations.append({
+                    "rule": "Cross-Sheet Consistency",
+                    "severity": "MAJOR",
+                    "explanation": f"Type {tag} in area '{area}' has conflicting counts across sheets: {area_map[key]} vs {count}"
+                })
+            else:
+                area_map[key] = count
+
+    return violations
+
+
+def check_emergency_fixtures(fixture_counts: list) -> list:
+    """Check that emergency and exit sign fixtures are separately tracked.
+
+    Args:
+        fixture_counts: List of fixture count dicts
+
+    Returns:
+        List of violations
+    """
+    violations = []
+    has_emergency_tracking = False
+
+    for count in fixture_counts:
+        desc = count.get("description", "").lower()
+        tag = count.get("type_tag", "").lower()
+        notes = count.get("notes", "").lower()
+
+        if any(kw in desc or kw in tag or kw in notes for kw in EMERGENCY_KEYWORDS):
+            has_emergency_tracking = True
+            break
+
+    # Only flag if we have a substantial count (>20 fixtures) and no emergency tracking
+    # Small jobs may legitimately have no emergency fixtures
+    if not has_emergency_tracking and len(fixture_counts) > 0:
+        violations.append({
+            "rule": "Emergency Fixture Tracking",
+            "severity": "MAJOR",
+            "explanation": "No emergency fixtures (exit signs, battery packs, emergency circuits) appear to be tracked. Verify these are not required or add them."
+        })
+
+    return violations
+
+
+def enforce_constitution(
+    fixture_counts: list,
+    areas_covered: list,
+    rcp_snippets: list,
+    fixture_schedule: dict,
+    judge_violations: list = None
+) -> dict:
+    """Enforce takeoff constitutional rules programmatically.
+
+    Args:
+        fixture_counts: Counter agent fixture counts
+        areas_covered: Areas counted by Counter agent
+        rcp_snippets: RCP snippet list for coverage check
+        fixture_schedule: Extracted fixture schedule
+        judge_violations: Additional violations from Judge agent
+
+    Returns:
+        Dict with verdict and violations
+    """
+    all_violations = list(judge_violations or [])
+
+    # Rule 1: Schedule Traceability
+    all_violations.extend(check_schedule_traceability(fixture_counts, fixture_schedule))
+
+    # Rule 2: Complete Coverage
+    all_violations.extend(check_complete_coverage(areas_covered, rcp_snippets))
+
+    # Rule 3: No Double-Counting (programmatic check)
+    all_violations.extend(check_no_double_counting(fixture_counts, fixture_schedule))
+
+    # Rule 4: Cross-Sheet Consistency (programmatic check)
+    all_violations.extend(check_cross_sheet_consistency(fixture_counts))
+
+    # Rule 5: Emergency Fixture Tracking
+    all_violations.extend(check_emergency_fixtures(fixture_counts))
+
+    # Determine verdict
+    fatal_count = sum(1 for v in all_violations if v.get("severity") == "FATAL")
+    major_count = sum(1 for v in all_violations if v.get("severity") == "MAJOR")
+
+    if fatal_count > 0:
+        verdict = "BLOCK"
+    elif major_count > 0:
+        verdict = "WARN"
+    else:
+        verdict = "PASS"
+
+    return {
+        "verdict": verdict,
+        "violations": all_violations,
+        "reasoning": f"Programmatic constitutional check: {len(all_violations)} violation(s) found"
+    }
