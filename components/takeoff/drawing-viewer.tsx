@@ -1,716 +1,473 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
+import {
+  Scissors,
+  ZoomIn,
+  ZoomOut,
+  Upload,
+  X,
+  Maximize2,
+} from "lucide-react";
+import { SnippingTool, type SnipRect } from "./snipping-tool";
+import type { Snippet, PipelineStep } from "@/lib/types";
 
-export interface SnippetData {
-  id: string;
-  page_number: number;
-  label: string;
-  sub_label: string;
-  bbox: { x: number; y: number; width: number; height: number };
-  image_data: string; // base64 PNG
-}
+/* ── Props ────────────────────────────────────────────────────────── */
 
 interface DrawingViewerProps {
-  onSnippetCaptured: (snippet: SnippetData) => void;
-  highlightSnippet?: SnippetData | null;
+  pageCount: number;
+  currentPage: number;
+  onPageChange: (page: number) => void;
+  snippets: Snippet[];
+  snipMode: boolean;
+  onToggleSnip: () => void;
+  onSnipComplete: (bbox: { x: number; y: number; width: number; height: number }) => void;
+  onUpload: () => void;
+  pdfLoaded: boolean;
+  pipelineSteps: PipelineStep[] | null;
+  pipelineRunning: boolean;
+  snippetFlash: string | null;
 }
 
-type DrawingMode = "pan" | "snip";
+/* ── Component ────────────────────────────────────────────────────── */
 
-interface PageThumb {
-  pageNum: number;
-  label: string;
-  dataUrl: string;
-}
+export function DrawingViewer({
+  pageCount,
+  currentPage,
+  onPageChange,
+  snippets,
+  snipMode,
+  onToggleSnip,
+  onSnipComplete,
+  onUpload,
+  pdfLoaded,
+  pipelineSteps,
+  pipelineRunning,
+  snippetFlash,
+}: DrawingViewerProps) {
+  const [zoom, setZoom] = useState(100);
+  const [snipRect, setSnipRect] = useState<SnipRect | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const startRef = useRef<{ x: number; y: number } | null>(null);
 
-const SNIPPET_LABELS = [
-  { value: "fixture_schedule", label: "Fixture Schedule" },
-  { value: "rcp", label: "Reflected Ceiling Plan (RCP)" },
-  { value: "panel_schedule", label: "Panel Schedule" },
-  { value: "plan_notes", label: "Plan Notes / Specs" },
-  { value: "detail", label: "Detail Drawing" },
-  { value: "site_plan", label: "Site Plan (Exterior)" },
-];
+  const CANVAS_W = 1200;
+  const CANVAS_H = 900;
 
-export function DrawingViewer({ onSnippetCaptured, highlightSnippet }: DrawingViewerProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  /* Zoom controls */
+  const zoomIn = () => setZoom((z) => Math.min(z + 25, 300));
+  const zoomOut = () => setZoom((z) => Math.max(z - 25, 25));
+  const fitPage = () => setZoom(100);
+  const fitWidth = () => setZoom(120);
 
-  // PDF state
-  const pdfRef = useRef<any>(null);
-  const [pdfLoaded, setPdfLoaded] = useState(false);
-  const [totalPages, setTotalPages] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageThumbs, setPageThumbs] = useState<PageThumb[]>([]);
-  const [pageLabels, setPageLabels] = useState<Record<number, string>>({});
-
-  // Viewport state
-  const [scale, setScale] = useState(1.5);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const isPanning = useRef(false);
-  const panStart = useRef({ x: 0, y: 0 });
-  const offsetRef = useRef({ x: 0, y: 0 });
-
-  // Snip state
-  const [mode, setMode] = useState<DrawingMode>("pan");
-  const isDrawing = useRef(false);
-  const snipStart = useRef({ x: 0, y: 0 });
-  const snipRect = useRef({ x: 0, y: 0, width: 0, height: 0 });
-  const overlayRef = useRef<HTMLCanvasElement>(null);
-
-  // Snippet label modal
-  const [pendingSnip, setPendingSnip] = useState<{
-    imageData: string;
-    bbox: { x: number; y: number; width: number; height: number };
-  } | null>(null);
-  const [snippetLabel, setSnippetLabel] = useState("rcp");
-  const [snippetSubLabel, setSnippetSubLabel] = useState("");
-
-  // Keep offsetRef in sync
+  /* Keyboard shortcuts */
   useEffect(() => {
-    offsetRef.current = offset;
-  }, [offset]);
-
-  // Load PDF.js from CDN
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
-    script.type = "module";
-    document.head.appendChild(script);
-    return () => {
-      document.head.removeChild(script);
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && snipMode) {
+        onToggleSnip();
+        setSnipRect(null);
+      }
+      if (!snipMode) {
+        if (e.key === "ArrowRight" && currentPage < pageCount)
+          onPageChange(currentPage + 1);
+        if (e.key === "ArrowLeft" && currentPage > 1)
+          onPageChange(currentPage - 1);
+      }
     };
-  }, []);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [snipMode, onToggleSnip, currentPage, pageCount, onPageChange]);
 
-  const loadPdfJs = useCallback(async () => {
-    const pdfjsLib = (await import(
-      /* @ts-ignore */
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs"
-    )) as any;
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
-    return pdfjsLib;
-  }, []);
-
-  const renderPage = useCallback(
-    async (pageNum: number, sc: number, off: { x: number; y: number }) => {
-      if (!pdfRef.current || !canvasRef.current) return;
-      const page = await pdfRef.current.getPage(pageNum);
-      const viewport = page.getViewport({ scale: sc });
-      const canvas = canvasRef.current;
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext("2d")!;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvasContext: ctx, viewport }).promise;
-
-      // Draw highlight box if needed
-      if (highlightSnippet && highlightSnippet.page_number === pageNum) {
-        const b = highlightSnippet.bbox;
-        ctx.strokeStyle = "#dc2626";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(b.x * sc, b.y * sc, b.width * sc, b.height * sc);
-      }
-    },
-    [highlightSnippet]
-  );
-
-  // Re-render when highlight changes
-  useEffect(() => {
-    if (pdfLoaded) {
-      renderPage(currentPage, scale, offset);
-    }
-  }, [highlightSnippet, pdfLoaded, currentPage, scale, offset, renderPage]);
-
-  const buildThumbs = useCallback(
-    async (pdf: any, count: number) => {
-      const thumbs: PageThumb[] = [];
-      const labels: Record<number, string> = {};
-      for (let i = 1; i <= Math.min(count, 50); i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 0.15 });
-        const offscreenCanvas = document.createElement("canvas");
-        offscreenCanvas.width = viewport.width;
-        offscreenCanvas.height = viewport.height;
-        const ctx = offscreenCanvas.getContext("2d")!;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        // Try to detect sheet label from metadata — fall back to "Sheet N"
-        const label = `Sheet ${i}`;
-        labels[i] = label;
-        thumbs.push({ pageNum: i, label, dataUrl: offscreenCanvas.toDataURL("image/jpeg", 0.6) });
-      }
-      setPageLabels(labels);
-      setPageThumbs(thumbs);
+  /* Snip mouse handlers */
+  const getCanvasPos = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     },
     []
   );
 
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      const pdfjsLib = await loadPdfJs();
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      pdfRef.current = pdf;
-      setTotalPages(pdf.numPages);
-      setCurrentPage(1);
-      setPdfLoaded(true);
-      setScale(1.5);
-      setOffset({ x: 0, y: 0 });
-
-      // Render first page
-      const page = await pdf.getPage(1);
-      const viewport = page.getViewport({ scale: 1.5 });
-      if (canvasRef.current) {
-        canvasRef.current.width = viewport.width;
-        canvasRef.current.height = viewport.height;
-        const ctx = canvasRef.current.getContext("2d")!;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-      }
-
-      // Build thumbnails async
-      buildThumbs(pdf, pdf.numPages);
+  const onSnipMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const pos = getCanvasPos(e);
+      startRef.current = pos;
+      setIsDrawing(true);
+      setSnipRect({ x: pos.x, y: pos.y, width: 0, height: 0 });
     },
-    [loadPdfJs, buildThumbs]
+    [getCanvasPos]
   );
 
-  const goToPage = useCallback(
-    async (pageNum: number) => {
-      if (!pdfRef.current) return;
-      setCurrentPage(pageNum);
-      await renderPage(pageNum, scale, offset);
+  const onSnipMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isDrawing || !startRef.current) return;
+      const pos = getCanvasPos(e);
+      setSnipRect({
+        x: Math.min(startRef.current.x, pos.x),
+        y: Math.min(startRef.current.y, pos.y),
+        width: Math.abs(pos.x - startRef.current.x),
+        height: Math.abs(pos.y - startRef.current.y),
+      });
     },
-    [renderPage, scale, offset]
+    [isDrawing, getCanvasPos]
   );
 
-  const zoomIn = useCallback(() => {
-    const newScale = Math.min(scale * 1.25, 6);
-    setScale(newScale);
-    renderPage(currentPage, newScale, offset);
-  }, [scale, currentPage, offset, renderPage]);
-
-  const zoomOut = useCallback(() => {
-    const newScale = Math.max(scale * 0.8, 0.5);
-    setScale(newScale);
-    renderPage(currentPage, newScale, offset);
-  }, [scale, currentPage, offset, renderPage]);
-
-  const fitToWidth = useCallback(async () => {
-    if (!pdfRef.current || !containerRef.current) return;
-    const page = await pdfRef.current.getPage(currentPage);
-    const container = containerRef.current;
-    const naturalVp = page.getViewport({ scale: 1 });
-    const newScale = (container.clientWidth - 32) / naturalVp.width;
-    setScale(newScale);
-    setOffset({ x: 0, y: 0 });
-    renderPage(currentPage, newScale, { x: 0, y: 0 });
-  }, [currentPage, renderPage]);
-
-  // ─── Pan handlers ────────────────────────────────────────────────────
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (mode === "pan") {
-        isPanning.current = true;
-        panStart.current = { x: e.clientX - offsetRef.current.x, y: e.clientY - offsetRef.current.y };
-      } else if (mode === "snip") {
-        const rect = canvasRef.current!.getBoundingClientRect();
-        isDrawing.current = true;
-        snipStart.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-        snipRect.current = { x: snipStart.current.x, y: snipStart.current.y, width: 0, height: 0 };
-      }
-    },
-    [mode]
-  );
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (mode === "pan" && isPanning.current) {
-        const newOff = {
-          x: e.clientX - panStart.current.x,
-          y: e.clientY - panStart.current.y,
-        };
-        setOffset(newOff);
-      } else if (mode === "snip" && isDrawing.current) {
-        const rect = canvasRef.current!.getBoundingClientRect();
-        const curX = e.clientX - rect.left;
-        const curY = e.clientY - rect.top;
-        const r = {
-          x: Math.min(curX, snipStart.current.x),
-          y: Math.min(curY, snipStart.current.y),
-          width: Math.abs(curX - snipStart.current.x),
-          height: Math.abs(curY - snipStart.current.y),
-        };
-        snipRect.current = r;
-
-        // Draw overlay
-        if (overlayRef.current && canvasRef.current) {
-          overlayRef.current.width = canvasRef.current.width;
-          overlayRef.current.height = canvasRef.current.height;
-          const ctx = overlayRef.current.getContext("2d")!;
-          ctx.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height);
-          ctx.fillStyle = "rgba(220, 38, 38, 0.15)";
-          ctx.fillRect(r.x, r.y, r.width, r.height);
-          ctx.strokeStyle = "#dc2626";
-          ctx.lineWidth = 2;
-          ctx.setLineDash([6, 3]);
-          ctx.strokeRect(r.x, r.y, r.width, r.height);
-        }
-      }
-    },
-    [mode]
-  );
-
-  const handleMouseUp = useCallback(async () => {
-    if (mode === "pan") {
-      isPanning.current = false;
-    } else if (mode === "snip" && isDrawing.current) {
-      isDrawing.current = false;
-      const r = snipRect.current;
-      if (r.width < 10 || r.height < 10) {
-        // Too small, ignore
-        if (overlayRef.current) {
-          const ctx = overlayRef.current.getContext("2d")!;
-          ctx.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height);
-        }
-        return;
-      }
-
-      // Crop the canvas region
-      const canvas = canvasRef.current!;
-      const offscreen = document.createElement("canvas");
-      offscreen.width = r.width;
-      offscreen.height = r.height;
-      const ctx = offscreen.getContext("2d")!;
-      ctx.drawImage(canvas, r.x, r.y, r.width, r.height, 0, 0, r.width, r.height);
-      const imageData = offscreen.toDataURL("image/png");
-
-      // Bbox in PDF coords (unscaled)
-      const pdfBbox = {
-        x: r.x / scale,
-        y: r.y / scale,
-        width: r.width / scale,
-        height: r.height / scale,
-      };
-
-      setPendingSnip({ imageData, bbox: pdfBbox });
-      setSnippetLabel("rcp");
-      setSnippetSubLabel("");
-
-      // Clear overlay
-      if (overlayRef.current) {
-        const ctx = overlayRef.current.getContext("2d")!;
-        ctx.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height);
-      }
+  const onSnipMouseUp = useCallback(() => {
+    setIsDrawing(false);
+    if (snipRect && snipRect.width > 20 && snipRect.height > 20) {
+      onSnipComplete(snipRect);
     }
-  }, [mode, scale]);
+    setSnipRect(null);
+    startRef.current = null;
+  }, [snipRect, onSnipComplete]);
 
-  const handleWheelZoom = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newScale = Math.min(Math.max(scale * delta, 0.5), 6);
-      setScale(newScale);
-      renderPage(currentPage, newScale, offset);
-    },
-    [scale, currentPage, offset, renderPage]
-  );
+  /* Current page snippets */
+  const pageSnippets = snippets.filter((s) => s.page_number === currentPage);
 
-  const confirmSnip = useCallback(() => {
-    if (!pendingSnip) return;
-    const snippet: SnippetData = {
-      id: `snip-${Date.now()}`,
-      page_number: currentPage,
-      label: snippetLabel,
-      sub_label: snippetSubLabel.trim(),
-      bbox: pendingSnip.bbox,
-      image_data: pendingSnip.imageData,
-    };
-    onSnippetCaptured(snippet);
-    setPendingSnip(null);
-    setMode("pan");
-  }, [pendingSnip, currentPage, snippetLabel, snippetSubLabel, onSnippetCaptured]);
+  /* Snippet counts per page for sidebar badges */
+  const snippetsByPage = snippets.reduce<Record<number, number>>((acc, s) => {
+    acc[s.page_number] = (acc[s.page_number] || 0) + 1;
+    return acc;
+  }, {});
 
-  const cancelSnip = useCallback(() => {
-    setPendingSnip(null);
-    setMode("pan");
-  }, []);
-
-  const cursor =
-    mode === "snip" ? "crosshair" : isPanning.current ? "grabbing" : "grab";
-
-  return (
-    <div className="flex h-full flex-col" style={{ background: "#060606" }}>
-      {/* ── Toolbar ── */}
-      <div
-        className="flex items-center gap-3 border-b px-4 py-2"
-        style={{ borderColor: "#1a1a1a", background: "#0a0a0a" }}
-      >
-        {!pdfLoaded ? (
-          <>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="rounded px-3 py-1.5 text-xs font-medium transition-colors"
-              style={{
-                fontFamily: "var(--font-ibm-plex-mono)",
-                background: "#dc2626",
-                color: "#fff",
-                letterSpacing: "0.08em",
-              }}
-            >
-              UPLOAD DRAWING SET
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <span
-              className="text-xs"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#444" }}
-            >
-              Drop a PDF drawing set to begin
-            </span>
-          </>
-        ) : (
-          <>
-            {/* Mode toggles */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setMode("pan")}
-                title="Pan mode"
-                className="rounded px-2.5 py-1 text-xs transition-colors"
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  background: mode === "pan" ? "#1a1a1a" : "transparent",
-                  color: mode === "pan" ? "#d4d4d4" : "#525252",
-                  border: `1px solid ${mode === "pan" ? "#333" : "#1a1a1a"}`,
-                  letterSpacing: "0.08em",
-                }}
-              >
-                PAN
-              </button>
-              <button
-                onClick={() => setMode("snip")}
-                title="Snip mode — draw a rectangle"
-                className="rounded px-2.5 py-1 text-xs transition-colors"
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  background: mode === "snip" ? "rgba(220,38,38,0.15)" : "transparent",
-                  color: mode === "snip" ? "#dc2626" : "#525252",
-                  border: `1px solid ${mode === "snip" ? "rgba(220,38,38,0.4)" : "#1a1a1a"}`,
-                  letterSpacing: "0.08em",
-                }}
-              >
-                ✂ SNIP
-              </button>
+  /* ── Page sidebar ───────────────────────────────────────────── */
+  const renderSidebar = () => {
+    if (!pdfLoaded) return null;
+    return (
+      <div className="flex w-[140px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-surface p-3">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Pages
+        </span>
+        {Array.from({ length: pageCount }, (_, i) => i + 1).map((pg) => (
+          <button
+            key={pg}
+            onClick={() => onPageChange(pg)}
+            className={`relative rounded-lg border-2 p-1 transition-all ${
+              pg === currentPage
+                ? "border-accent bg-red-50"
+                : "border-border bg-background hover:border-muted"
+            }`}
+          >
+            <div className="flex h-[72px] w-full items-center justify-center rounded bg-canvas text-[10px] font-mono text-muted-foreground">
+              {pg}
             </div>
-
-            <div className="w-px self-stretch" style={{ background: "#1a1a1a" }} />
-
-            {/* Zoom controls */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={zoomOut}
-                className="rounded px-2 py-1 text-xs transition-colors hover:text-white"
-                style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#525252" }}
-              >
-                −
-              </button>
-              <span
-                className="w-12 text-center text-xs"
-                style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#666" }}
-              >
-                {Math.round(scale * 100)}%
-              </span>
-              <button
-                onClick={zoomIn}
-                className="rounded px-2 py-1 text-xs transition-colors hover:text-white"
-                style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#525252" }}
-              >
-                +
-              </button>
-              <button
-                onClick={fitToWidth}
-                className="rounded px-2 py-1 text-xs transition-colors hover:text-white"
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  color: "#525252",
-                  letterSpacing: "0.08em",
-                }}
-              >
-                FIT
-              </button>
-            </div>
-
-            <div className="w-px self-stretch" style={{ background: "#1a1a1a" }} />
-
-            {/* Page info */}
             <span
-              className="text-xs"
-              style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#525252" }}
+              className={`mt-1 block text-center text-[10px] ${
+                pg === currentPage
+                  ? "font-semibold text-accent"
+                  : "text-muted-foreground"
+              }`}
             >
-              {pageLabels[currentPage] || `Sheet ${currentPage}`} — Page {currentPage} / {totalPages}
+              Page {pg}
             </span>
-
-            {mode === "snip" && (
-              <span
-                className="ml-2 text-xs"
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  color: "#dc2626",
-                  letterSpacing: "0.08em",
-                }}
-              >
-                DRAW A RECTANGLE TO SNIP
+            {snippetsByPage[pg] && (
+              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-white">
+                {snippetsByPage[pg]}
               </span>
             )}
-          </>
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+  /* ── Toolbar ────────────────────────────────────────────────── */
+  const renderToolbar = () => (
+    <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-background px-3">
+      <button
+        onClick={onToggleSnip}
+        disabled={!pdfLoaded || pipelineRunning}
+        className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+          snipMode
+            ? "bg-accent text-white"
+            : "text-muted-foreground hover:bg-canvas hover:text-foreground disabled:opacity-40"
+        }`}
+      >
+        <Scissors className="h-3.5 w-3.5" />
+        Snip
+      </button>
+
+      <div className="mx-2 h-4 w-px bg-border" />
+
+      <button
+        onClick={fitPage}
+        disabled={!pdfLoaded}
+        className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-canvas hover:text-foreground disabled:opacity-40"
+      >
+        <Maximize2 className="inline h-3 w-3 mr-1" />
+        Fit
+      </button>
+      <button
+        onClick={fitWidth}
+        disabled={!pdfLoaded}
+        className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-canvas hover:text-foreground disabled:opacity-40"
+      >
+        Width
+      </button>
+      <div className="mx-1 h-4 w-px bg-border" />
+      <button
+        onClick={zoomOut}
+        disabled={!pdfLoaded}
+        className="rounded-md p-1.5 text-muted-foreground hover:bg-canvas hover:text-foreground disabled:opacity-40"
+      >
+        <ZoomOut className="h-3.5 w-3.5" />
+      </button>
+      <span className="w-12 text-center font-mono text-xs text-muted-foreground">
+        {zoom}%
+      </span>
+      <button
+        onClick={zoomIn}
+        disabled={!pdfLoaded}
+        className="rounded-md p-1.5 text-muted-foreground hover:bg-canvas hover:text-foreground disabled:opacity-40"
+      >
+        <ZoomIn className="h-3.5 w-3.5" />
+      </button>
+
+      <div className="ml-auto text-xs text-muted-foreground">
+        {pdfLoaded && (
+          <span>
+            Page {currentPage} of {pageCount}
+          </span>
         )}
       </div>
+    </div>
+  );
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* ── Page Thumbnail Sidebar ── */}
-        {pdfLoaded && pageThumbs.length > 0 && (
-          <div
-            className="flex w-24 flex-col gap-1 overflow-y-auto p-2"
-            style={{
-              background: "#0a0a0a",
-              borderRight: "1px solid #1a1a1a",
-              scrollbarWidth: "thin",
-              scrollbarColor: "#1a1a1a transparent",
-            }}
-          >
-            {pageThumbs.map((thumb) => (
-              <button
-                key={thumb.pageNum}
-                onClick={() => goToPage(thumb.pageNum)}
-                className="flex flex-col items-center gap-1 rounded p-1 transition-colors"
-                style={{
-                  background: currentPage === thumb.pageNum ? "rgba(220,38,38,0.12)" : "transparent",
-                  border: `1px solid ${currentPage === thumb.pageNum ? "rgba(220,38,38,0.35)" : "#1a1a1a"}`,
-                }}
+  /* ── Snip info banner ───────────────────────────────────────── */
+  const renderSnipBanner = () => {
+    if (!snipMode) return null;
+    return (
+      <div className="flex items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-700">
+        <Scissors className="h-3.5 w-3.5" />
+        <span>Click and drag to select a region. Press Escape to cancel.</span>
+        <button
+          onClick={onToggleSnip}
+          className="ml-auto rounded p-0.5 hover:bg-blue-100"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  };
+
+  /* ── Pipeline Status Overlay ────────────────────────────────── */
+  const renderPipelineOverlay = () => {
+    if (!pipelineSteps || !pipelineRunning) return null;
+    const currentStep = pipelineSteps.find((s) => s.status === "running");
+    const completedCount = pipelineSteps.filter(
+      (s) => s.status === "done"
+    ).length;
+    const progress = (completedCount / pipelineSteps.length) * 100;
+
+    return (
+      <div className="absolute inset-0 z-20 flex items-center justify-center bg-foreground/5 backdrop-blur-[1px]">
+        <div className="w-[400px] rounded-xl border border-border bg-background p-6 shadow-2xl">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+            <span className="text-sm font-semibold text-foreground">
+              Running Takeoff...
+            </span>
+          </div>
+          <div className="mb-5 h-1.5 overflow-hidden rounded-full bg-canvas">
+            <div
+              className="h-full rounded-full bg-accent transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {pipelineSteps.map((step) => (
+              <div
+                key={step.id}
+                className="flex items-center gap-2.5 text-xs animate-progress-step"
               >
-                <img
-                  src={thumb.dataUrl}
-                  alt={thumb.label}
-                  className="w-full rounded"
-                  style={{ border: "1px solid #1a1a1a" }}
-                />
+                {step.status === "done" && (
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success text-white">
+                    <svg
+                      className="h-2.5 w-2.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={3}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  </span>
+                )}
+                {step.status === "running" && (
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                    <span className="h-2.5 w-2.5 rounded-full bg-accent pipeline-pulse" />
+                  </span>
+                )}
+                {step.status === "pending" && (
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                    <span className="h-2.5 w-2.5 rounded-full border-2 border-border" />
+                  </span>
+                )}
+                {step.status === "error" && (
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-error text-white text-[8px] font-bold">
+                    !
+                  </span>
+                )}
                 <span
-                  className="w-full truncate text-center"
-                  style={{
-                    fontFamily: "var(--font-ibm-plex-mono)",
-                    fontSize: "9px",
-                    color: currentPage === thumb.pageNum ? "#dc2626" : "#444",
-                  }}
+                  className={
+                    step.status === "done"
+                      ? "text-muted-foreground line-through"
+                      : step.status === "running"
+                        ? "font-medium text-foreground"
+                        : "text-muted-foreground"
+                  }
                 >
-                  {thumb.pageNum}
+                  {step.label}
+                  {step.detail && (
+                    <span className="text-muted-foreground">
+                      {" -- "}
+                      {step.detail}
+                    </span>
+                  )}
                 </span>
-              </button>
+              </div>
             ))}
           </div>
-        )}
-
-        {/* ── Main Canvas Area ── */}
-        <div
-          ref={containerRef}
-          className="relative flex-1 overflow-hidden"
-          style={{ cursor, background: "#111" }}
-          onWheel={handleWheelZoom}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={() => {
-            isPanning.current = false;
-          }}
-        >
-          {!pdfLoaded && (
-            <div className="flex h-full items-center justify-center">
-              <div className="text-center">
-                <p
-                  className="mb-2"
-                  style={{
-                    fontFamily: "var(--font-cinzel)",
-                    color: "#1a1a1a",
-                    fontSize: "18px",
-                    letterSpacing: "0.2em",
-                  }}
-                >
-                  DRAWING WORKSPACE
-                </p>
-                <p
-                  style={{
-                    fontFamily: "var(--font-ibm-plex-mono)",
-                    color: "#333",
-                    fontSize: "11px",
-                  }}
-                >
-                  Upload a PDF drawing set to begin
-                </p>
-              </div>
-            </div>
+          {currentStep && (
+            <p className="mt-4 text-[11px] text-muted-foreground">
+              {currentStep.label}...
+            </p>
           )}
-
-          <div
-            style={{
-              transform: `translate(${offset.x}px, ${offset.y}px)`,
-              position: "relative",
-              display: "inline-block",
-            }}
-          >
-            <canvas ref={canvasRef} style={{ display: pdfLoaded ? "block" : "none" }} />
-            <canvas
-              ref={overlayRef}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                pointerEvents: "none",
-                display: pdfLoaded ? "block" : "none",
-              }}
-            />
-          </div>
         </div>
       </div>
+    );
+  };
 
-      {/* ── Snippet Label Modal ── */}
-      {pendingSnip && (
+  /* ── Canvas / Empty State ───────────────────────────────────── */
+  const renderCanvas = () => {
+    if (!pdfLoaded) {
+      return (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.8)" }}
+          className="flex flex-1 cursor-pointer items-center justify-center bg-canvas"
+          onClick={onUpload}
+          role="button"
+          tabIndex={0}
+          aria-label="Upload PDF"
+          onKeyDown={(e) => e.key === "Enter" && onUpload()}
         >
-          <div
-            className="w-[420px] rounded-lg p-6"
-            style={{
-              background: "#0a0a0a",
-              border: "1px solid #1a1a1a",
-              boxShadow: "0 0 40px rgba(220,38,38,0.08)",
-            }}
-          >
-            <h3
-              className="mb-4 tracking-[0.15em]"
-              style={{
-                fontFamily: "var(--font-cinzel)",
-                fontSize: "13px",
-                color: "#d4d4d4",
-              }}
-            >
-              LABEL SNIPPET
-            </h3>
-
-            {/* Preview */}
-            <div
-              className="mb-4 overflow-hidden rounded"
-              style={{ border: "1px solid #1a1a1a", maxHeight: "160px" }}
-            >
-              <img
-                src={pendingSnip.imageData}
-                alt="Snippet preview"
-                className="w-full object-contain"
-                style={{ maxHeight: "160px" }}
-              />
-            </div>
-
-            {/* Label select */}
-            <div className="mb-3">
-              <label
-                className="mb-1.5 block text-xs"
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  color: "#525252",
-                  letterSpacing: "0.1em",
-                }}
-              >
-                SNIPPET TYPE
-              </label>
-              <select
-                value={snippetLabel}
-                onChange={(e) => setSnippetLabel(e.target.value)}
-                className="w-full rounded px-3 py-2 text-sm"
-                style={{
-                  background: "#111",
-                  border: "1px solid #1a1a1a",
-                  color: "#d4d4d4",
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  fontSize: "12px",
-                }}
-              >
-                {SNIPPET_LABELS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Sub-label (area name for RCPs) */}
-            {(snippetLabel === "rcp" || snippetLabel === "detail" || snippetLabel === "site_plan") && (
-              <div className="mb-4">
-                <label
-                  className="mb-1.5 block text-xs"
-                  style={{
-                    fontFamily: "var(--font-ibm-plex-mono)",
-                    color: "#525252",
-                    letterSpacing: "0.1em",
-                  }}
-                >
-                  AREA NAME {snippetLabel === "rcp" ? "(e.g. Floor 2 North Wing)" : "(optional)"}
-                </label>
-                <input
-                  type="text"
-                  value={snippetSubLabel}
-                  onChange={(e) => setSnippetSubLabel(e.target.value)}
-                  placeholder={snippetLabel === "rcp" ? "Floor 2 North Wing" : "Optional label"}
-                  className="w-full rounded px-3 py-2 text-sm"
-                  style={{
-                    background: "#111",
-                    border: "1px solid #1a1a1a",
-                    color: "#d4d4d4",
-                    fontFamily: "var(--font-ibm-plex-mono)",
-                    fontSize: "12px",
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Buttons */}
-            <div className="flex gap-3">
-              <button
-                onClick={confirmSnip}
-                className="flex-1 rounded py-2 text-xs font-medium transition-colors"
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  background: "#dc2626",
-                  color: "#fff",
-                  letterSpacing: "0.1em",
-                }}
-              >
-                ADD SNIPPET
-              </button>
-              <button
-                onClick={cancelSnip}
-                className="rounded px-4 py-2 text-xs transition-colors"
-                style={{
-                  fontFamily: "var(--font-ibm-plex-mono)",
-                  background: "transparent",
-                  color: "#525252",
-                  border: "1px solid #1a1a1a",
-                  letterSpacing: "0.1em",
-                }}
-              >
-                CANCEL
-              </button>
+          <div className="flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed border-border p-16 transition-colors hover:border-muted">
+            <Upload className="h-12 w-12 text-muted-foreground" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground">
+                Drop PDF here or click to upload
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Supports multi-page construction drawing sets
+              </p>
             </div>
           </div>
         </div>
-      )}
+      );
+    }
+
+    return (
+      <div
+        className="relative flex-1 overflow-auto bg-canvas"
+        onWheel={(e) => {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            setZoom((z) =>
+              Math.max(25, Math.min(300, z + (e.deltaY < 0 ? 10 : -10)))
+            );
+          }
+        }}
+      >
+        {/* Paper sheet on grey canvas */}
+        <div
+          className="relative mx-auto my-8 bg-background shadow-lg"
+          style={{
+            width: `${(CANVAS_W * zoom) / 100}px`,
+            height: `${(CANVAS_H * zoom) / 100}px`,
+            transition: "width 0.2s, height 0.2s",
+          }}
+        >
+          {/* Grid lines */}
+          <svg className="absolute inset-0 h-full w-full opacity-[0.06]">
+            <defs>
+              <pattern
+                id="grid"
+                width="40"
+                height="40"
+                patternUnits="userSpaceOnUse"
+              >
+                <path
+                  d="M 40 0 L 0 0 0 40"
+                  fill="none"
+                  stroke="#111827"
+                  strokeWidth="1"
+                />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+          </svg>
+
+          {/* Drawing label */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+            <span className="relative text-sm font-medium text-muted-foreground">
+              Drawing Page {currentPage}
+            </span>
+            <span className="relative text-[10px] text-muted-foreground">
+              E-{String(currentPage).padStart(3, "0")} Lighting Plan
+            </span>
+          </div>
+
+          {/* Snippet overlays */}
+          {pageSnippets.map((s) => (
+            <div
+              key={s.id}
+              className={`absolute border-2 border-dashed border-accent/60 ${
+                snippetFlash === s.id
+                  ? "animate-snippet-flash bg-accent/20"
+                  : ""
+              }`}
+              style={{
+                left: `${(s.bbox.x * zoom) / 100}px`,
+                top: `${(s.bbox.y * zoom) / 100}px`,
+                width: `${(s.bbox.width * zoom) / 100}px`,
+                height: `${(s.bbox.height * zoom) / 100}px`,
+              }}
+            >
+              <span className="absolute -top-5 left-0 rounded bg-accent px-1.5 py-0.5 text-[9px] font-semibold text-white whitespace-nowrap">
+                {s.label === "rcp"
+                  ? `RCP: ${s.sub_label}`
+                  : s.label.replace(/_/g, " ")}
+              </span>
+            </div>
+          ))}
+
+          {/* Snipping tool overlay */}
+          <SnippingTool
+            active={snipMode}
+            rect={snipRect}
+            canvasWidth={(CANVAS_W * zoom) / 100}
+            canvasHeight={(CANVAS_H * zoom) / 100}
+            onMouseDown={onSnipMouseDown}
+            onMouseMove={onSnipMouseMove}
+            onMouseUp={onSnipMouseUp}
+          />
+        </div>
+
+        {renderPipelineOverlay()}
+      </div>
+    );
+  };
+
+  /* ── Render ─────────────────────────────────────────────────── */
+  return (
+    <div className="flex flex-1 overflow-hidden">
+      {renderSidebar()}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {renderToolbar()}
+        {renderSnipBanner()}
+        {renderCanvas()}
+      </div>
     </div>
   );
 }

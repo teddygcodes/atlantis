@@ -16,7 +16,7 @@ from typing import Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
-from core.models import ModelRouter
+from takeoff.models import ModelRouter
 from takeoff.schema import TakeoffDB
 from takeoff.constitution import get_constitution, enforce_constitution
 from takeoff.confidence import calculate_confidence, format_confidence_explanation
