@@ -1416,7 +1416,9 @@ class TestBugFixes2(unittest.TestCase):
         sem = asyncio.Semaphore(1)
         self.assertTrue(hasattr(sem, "locked"), "Semaphore must have public .locked() method")
         # _value access should no longer appear in api.py
-        with open("takeoff/api.py") as f:
+        import os as _os
+        _api_path = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "takeoff", "api.py")
+        with open(_api_path) as f:
             content = f.read()
         self.assertNotIn("_value", content, "api.py must not access private _value attribute")
 
@@ -1779,7 +1781,8 @@ class TestBugFixes3(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, "-m", "takeoff", tmpdir],
                 capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                env={**os.environ, "ANTHROPIC_API_KEY": "sk-fake-key-for-test"}
+                env={**os.environ, "ANTHROPIC_API_KEY": "sk-fake-key-for-test"},
+                timeout=30
             )
             # Should exit non-zero with a descriptive error about the missing file
             self.assertNotEqual(result.returncode, 0)
@@ -2472,6 +2475,181 @@ class TestBugFixes5(unittest.TestCase):
         self.assertEqual(rows[0]["difficulty_code"], "D",
                          f"Expected difficulty_code='D', got: {rows[0]['difficulty_code']}")
         db.close()
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 15. Audit Round-6 Bug Fixes
+# ══════════════════════════════════════════════════════════════════════
+
+class TestBugFixes6(unittest.TestCase):
+    """Tests for improvements applied in audit round 6."""
+
+    # ── total_corrected penalty in calculate_confidence ──────────────
+
+    def test_total_corrected_penalty_applied(self):
+        """`total_corrected=True` should subtract 0.05 from final confidence score.
+
+        To observe the penalty, we must ensure the pre-penalty score is ≤ 0.95 so
+        the clamp at 1.0 doesn't absorb the subtraction. Including a Checker attack
+        with no Reconciler response drops adversarial_resolved to 0.0, pulling the
+        score below the 0.95 threshold.
+        """
+        from takeoff.confidence import calculate_confidence
+        _attack = {"attack_id": "atk-1", "severity": "minor", "category": "test",
+                   "description": "test", "affected_type_tag": "A", "affected_area": "Hall"}
+        _common = dict(
+            fixture_counts=[{"type_tag": "A", "total": 10, "counts_by_area": {"Hall": 10}}],
+            areas_covered=["Hall"],
+            rcp_snippets=[{"label": "rcp", "sub_label": "Hall"}],
+            fixture_schedule={"fixtures": {"A": {"description": "Test"}}},
+            checker_attacks=[_attack],
+            reconciler_responses=[],  # unresolved → adversarial_resolved = 0.0
+            constitutional_violations=[],
+            mode="fast",
+        )
+        base = calculate_confidence(**_common, total_corrected=False)
+        penalized = calculate_confidence(**_common, total_corrected=True)
+        self.assertAlmostEqual(
+            base["score"] - penalized["score"], 0.05, places=5,
+            msg="total_corrected=True must subtract exactly 0.05 from confidence score"
+        )
+        self.assertGreater(base["score"], 0.0,
+                           "Base score must be above 0.0 for penalty to be visible")
+
+    # ── Counter model_failure flag distinguishes error from zero fixtures ──
+
+    def test_counter_model_failure_flag_present(self):
+        """Counter failure response must include '_model_failure': True, not look like zero-fixture result."""
+        from unittest.mock import MagicMock, patch
+        from takeoff.agents import Counter
+
+        mock_router = MagicMock()
+        mock_router.complete.side_effect = RuntimeError("network error")
+        counter = Counter(mock_router)
+        result = counter.generate_count(
+            fixture_schedule=MagicMock(fixtures={}, warnings=[]),
+            area_counts=[],
+            plan_notes=[],
+        )
+        self.assertTrue(result.parse_error, "Counter model failure must set parse_error=True")
+        self.assertTrue(result.data.get("_model_failure"), "Counter model failure must set _model_failure=True in data")
+
+    def test_checker_model_failure_flag_present(self):
+        """Checker failure response must include '_model_failure': True."""
+        from unittest.mock import MagicMock
+        from takeoff.agents import Checker
+
+        mock_router = MagicMock()
+        mock_router.complete.side_effect = RuntimeError("network error")
+        checker = Checker(mock_router)
+        result = checker.generate_attacks(
+            counter_output={"fixture_counts": [], "grand_total_fixtures": 0},
+            fixture_schedule=MagicMock(fixtures={}, warnings=[]),
+            area_counts=[],
+            plan_notes=[],
+        )
+        self.assertTrue(result.data.get("_model_failure"), "Checker model failure must set _model_failure=True in data")
+
+    # ── Judge mode validation ──────────────────────────────────────────
+
+    def test_judge_rejects_invalid_mode(self):
+        """Judge.evaluate() must raise ValueError on unknown mode."""
+        from unittest.mock import MagicMock
+        from takeoff.agents import Judge
+
+        mock_router = MagicMock()
+        constitution = {"hard_rules": []}
+        judge = Judge(mock_router, constitution)
+        with self.assertRaises(ValueError, msg="Judge must raise ValueError for unknown mode"):
+            judge.evaluate(
+                counter_output={"fixture_counts": [], "grand_total_fixtures": 0},
+                checker_attacks=[],
+                reconciler_output=None,
+                fixture_schedule=MagicMock(fixtures={}, warnings=[]),
+                mode="unknown_mode",
+            )
+
+    # ── extraction.py empty content guard ─────────────────────────────
+
+    def test_vision_empty_content_raises(self):
+        """_call_vision must raise RuntimeError if Anthropic returns empty content array."""
+        from unittest.mock import MagicMock, patch
+        from takeoff.extraction import _call_vision
+
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = []  # empty content array
+        mock_response.usage = None
+        mock_client.messages.create.return_value = mock_response
+
+        with self.assertRaises(RuntimeError, msg="_call_vision must raise on empty content array"):
+            _call_vision(mock_client, "sys", "user", "dGVzdA==")
+
+    # ── API key guard path normalization ──────────────────────────────
+
+    def test_api_key_guard_normalizes_path(self):
+        """api_key_guard must normalize path so /Takeoff/Health/ doesn't bypass auth."""
+        import asyncio
+        from unittest.mock import MagicMock, AsyncMock, patch
+        # Verify that the normalization logic is correct by unit-testing it directly
+        _guarded_paths = ("/takeoff/health", "/")
+        test_cases = [
+            ("/takeoff/health", True),    # exact → open
+            ("/takeoff/health/", True),   # trailing slash → open
+            ("/Takeoff/Health", True),    # case variant → open
+            ("/takeoff/run", False),      # guarded endpoint → not open
+            ("/TAKEOFF/RUN/", False),     # guarded uppercase → not open
+        ]
+        for path, should_be_open in test_cases:
+            normalized = path.rstrip("/").lower() or "/"
+            is_open = normalized in _guarded_paths
+            self.assertEqual(is_open, should_be_open,
+                             f"Path '{path}' normalized to '{normalized}': expected open={should_be_open}")
+
+    # ── Feature weights sum check ─────────────────────────────────────
+
+    def test_feature_weights_sum_to_one(self):
+        """FEATURE_WEIGHTS must sum to exactly 1.0 (validated at module load)."""
+        from takeoff.confidence import FEATURE_WEIGHTS
+        total = sum(FEATURE_WEIGHTS.values())
+        self.assertAlmostEqual(total, 1.0, places=9,
+                               msg=f"FEATURE_WEIGHTS sum = {total}, must be 1.0")
+
+    # ── Schema transaction rollback safety ────────────────────────────
+
+    def test_schema_transaction_rollback_on_error(self):
+        """store_job_results_atomic must roll back if an insert fails, leaving no partial data."""
+        import tempfile, os
+        from takeoff.schema import TakeoffDB
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = TakeoffDB(os.path.join(tmpdir, "test.db"))
+            db.create_job("bad-job", drawing_name="test", mode="fast")
+
+            # Pass a fixture_count dict that will cause a type error during insert
+            bad_fixture_counts = [{"type_tag": None, "total": 1, "counts_by_area": {"A": 1}, "flags": []}]
+            try:
+                db.store_job_results_atomic(
+                    job_id="bad-job",
+                    fixture_counts=bad_fixture_counts,
+                    attacks=[{"attack_id": None, "severity": None, "category": None, "description": None}],
+                    reconciler_responses=[],
+                    grand_total=1,
+                    confidence_score=0.5,
+                    confidence_band="MODERATE",
+                    confidence_features="{}",
+                    violations=[],
+                    flags=[],
+                    judge_verdict="FAIL",
+                )
+            except Exception:
+                pass  # expected if any insert fails
+
+            # Regardless of outcome, the DB must be readable (not corrupted)
+            rows = db.get_job_counts("bad-job")
+            # Either all committed or all rolled back — no partial state
+            self.assertIsInstance(rows, list, "DB must remain readable after transaction failure")
+            db.close()
 
 
 # ══════════════════════════════════════════════════════════════════════

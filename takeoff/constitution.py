@@ -148,6 +148,8 @@ def _normalize_area_label(label: str) -> str:
     Does NOT strip meaningful parentheticals like '(North)' or '(East Wing)'.
     """
     import re
+    import unicodedata
+    label = unicodedata.normalize("NFC", label)
     label = label.strip().lower().replace("-", " ").replace("_", " ")
     # Only strip known revision/copy suffixes, not meaningful location parentheticals.
     # Patterns: (copy), (rev A), (rev. 2), (revision 1), (v2), (1), (2) — pure numeric
@@ -158,7 +160,15 @@ def _normalize_area_label(label: str) -> str:
     return label
 
 
-_AREA_STOPWORDS = {"the", "a", "an", "of", "and", "or", "at", "in", "on", "for"}
+# Minimum number of distinct fixture types before we require emergency fixture tracking.
+# Jobs with ≤ this many types may legitimately have no emergency fixtures in scope.
+EMERGENCY_CHECK_MIN_TYPES = 5
+
+_AREA_STOPWORDS = {
+    "the", "a", "an", "of", "and", "or", "at", "in", "on", "for",
+    "level", "floor", "area", "section", "zone", "room", "suite", "unit",
+    "building", "wing", "corridor", "hall", "lobby",
+}
 
 
 def _area_fuzzy_match(expected: str, covered_set: set) -> bool:
@@ -330,9 +340,9 @@ def check_emergency_fixtures(fixture_counts: list) -> list:
             has_emergency_tracking = True
             break
 
-    # Only flag if there are more than 5 fixture types and no emergency tracking.
-    # Small jobs (≤5 types) may legitimately have no emergency fixtures in scope.
-    if not has_emergency_tracking and len(fixture_counts) > 5:
+    # Only flag if there are more than EMERGENCY_CHECK_MIN_TYPES fixture types and no emergency tracking.
+    # Small jobs (≤ that threshold) may legitimately have no emergency fixtures in scope.
+    if not has_emergency_tracking and len(fixture_counts) > EMERGENCY_CHECK_MIN_TYPES:
         violations.append({
             "rule": "Emergency Fixture Tracking",
             "severity": "MAJOR",

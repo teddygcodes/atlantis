@@ -200,13 +200,16 @@ def _call_vision(
     detected_media_type = "image/png"
     if image_base64.startswith("data:"):
         header, image_base64 = image_base64.split(",", 1)
-        # header looks like "data:image/jpeg;base64"
-        if "image/jpeg" in header or "image/jpg" in header:
+        # header looks like "data:image/jpeg;base64" — extract the exact MIME type
+        # between "data:" and ";" (or end of string) to avoid partial-match false positives
+        _mime = header.split(":")[1].split(";")[0].strip().lower() if ":" in header else ""
+        if _mime in ("image/jpeg", "image/jpg"):
             detected_media_type = "image/jpeg"
-        elif "image/webp" in header:
+        elif _mime == "image/webp":
             detected_media_type = "image/webp"
-        elif "image/gif" in header:
+        elif _mime == "image/gif":
             detected_media_type = "image/gif"
+        # else: falls through to default "image/png"
 
     response = client.messages.create(
         model=model,
@@ -239,6 +242,8 @@ def _call_vision(
             _vision_input_tokens += getattr(response.usage, "input_tokens", 0)
             _vision_output_tokens += getattr(response.usage, "output_tokens", 0)
 
+    if not response.content:
+        raise RuntimeError("[EXTRACTION] Vision API returned empty content array")
     return response.content[0].text
 
 

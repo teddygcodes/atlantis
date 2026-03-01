@@ -3,9 +3,12 @@
 Mirrors sydyn/api.py exactly: same lifespan, CORS, SSE streaming pattern.
 """
 
+import logging
 import os
 import json
 import asyncio
+
+logger = logging.getLogger(__name__)
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, List, Optional
 
@@ -128,8 +131,9 @@ _TAKEOFF_API_KEY = os.getenv("TAKEOFF_API_KEY")
 async def api_key_guard(request: Request, call_next):
     """Require X-API-Key header if TAKEOFF_API_KEY env var is set."""
     if _TAKEOFF_API_KEY:
-        # Health check and root are always open
-        if request.url.path not in ("/takeoff/health", "/"):
+        # Health check and root are always open; normalize for case and trailing slash
+        _normalized_path = request.url.path.rstrip("/").lower() or "/"
+        if _normalized_path not in ("/takeoff/health", "/"):
             provided = request.headers.get("X-API-Key", "")
             if provided != _TAKEOFF_API_KEY:
                 return JSONResponse(status_code=403, content={"detail": "Invalid or missing API key"})
@@ -193,6 +197,7 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
             if not cancel_event.is_set():
                 status_queue.put({"type": "result_ready", "data": result})
         except Exception as e:
+            logger.exception("[TAKEOFF API] Job thread raised unhandled exception")
             if not cancel_event.is_set():
                 status_queue.put({"type": "error", "message": str(e)})
         finally:

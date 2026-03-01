@@ -20,6 +20,11 @@ FEATURE_WEIGHTS = {
     "reconciler_coverage": 0.05         # Reconciler ran (strict/liability mode) = full credit; fast mode = 0
 }
 
+# Validate at module load time to catch weight editing mistakes immediately
+assert abs(sum(FEATURE_WEIGHTS.values()) - 1.0) < 1e-9, (
+    f"FEATURE_WEIGHTS must sum to 1.0, got {sum(FEATURE_WEIGHTS.values())}"
+)
+
 
 def calculate_confidence(
     fixture_counts: List[Dict],
@@ -89,8 +94,10 @@ def calculate_confidence(
                 matched_count += 1
         features["area_coverage"] = matched_count / len(rcp_snippet_areas)
     else:
-        # No named RCP areas to verify against — neutral, not perfect credit.
-        # Awarding 1.0 here would inflate confidence for jobs with no area labels at all.
+        # No named RCP areas to verify against — neutral score (0.5), not perfect credit.
+        # This is distinct from partial coverage: 0 labeled areas means the check is
+        # unverifiable, not that coverage is good. Awarding 1.0 would inflate confidence
+        # for jobs with no area labels at all.
         features["area_coverage"] = 0.5
 
     # Feature 3: Adversarial resolved
@@ -122,7 +129,7 @@ def calculate_confidence(
     # Panel schedule was provided and Checker didn't flag wattage discrepancy
     if has_panel_schedule:
         panel_attack_exists = any(
-            "cross_reference" in a.get("category", "") or "panel" in a.get("description", "").lower()
+            "cross_reference" in a.get("category", "").lower() or "panel" in a.get("description", "").lower()
             for a in checker_attacks
         )
         features["cross_reference_match"] = 0.4 if panel_attack_exists else 1.0

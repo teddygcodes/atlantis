@@ -8,10 +8,13 @@ Mirrors sydyn/engine.py exactly:
 """
 
 import json
+import logging
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, List, Dict
+
+logger = logging.getLogger(__name__)
 
 from core.models import ModelRouter
 from takeoff.schema import TakeoffDB
@@ -103,7 +106,10 @@ class TakeoffEngine:
 
         def emit(message: str):
             if status_callback:
-                status_callback(message)
+                try:
+                    status_callback(message)
+                except Exception as _cb_err:
+                    print(f"[TAKEOFF] WARNING: status_callback raised: {_cb_err}")
             print(f"[TAKEOFF] {message}")
 
         # Generate job ID
@@ -169,7 +175,7 @@ class TakeoffEngine:
         fixture_schedule = FixtureSchedule()
         fs_images = [(s, s.get("image_data", "")) for s in fixture_snippets if s.get("image_data", "")]
         if fs_images:
-            with ThreadPoolExecutor(max_workers=len(fs_images)) as _ex:
+            with ThreadPoolExecutor(max_workers=min(len(fs_images), 6)) as _ex:
                 fs_futures = {_ex.submit(extract_fixture_schedule, img): s for s, img in fs_images}
                 for fut in as_completed(fs_futures):
                     try:
@@ -529,6 +535,10 @@ class TakeoffEngine:
         if not reconciler_output and reconciler_response.raw_response:
             emit("WARNING: Reconciler agent returned empty output — using Counter counts as final")
             reconciler_output = {}
+        if reconciler_output and "revised_fixture_counts" not in reconciler_output:
+            logger.warning("[ENGINE] WARNING: Reconciler output missing 'revised_fixture_counts' — falling back to Counter counts")
+        if reconciler_output and "revised_grand_total" not in reconciler_output:
+            logger.warning("[ENGINE] WARNING: Reconciler output missing 'revised_grand_total' — falling back to Counter total")
         reconciler_responses_list = reconciler_output.get("responses", [])
         original_total = counter_output.get("grand_total_fixtures", 0)
         revised_total = reconciler_output.get("revised_grand_total", original_total)

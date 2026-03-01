@@ -351,8 +351,8 @@ class TakeoffDB:
         """
         with self._lock:
             cur = self.conn.cursor()
-            cur.execute("BEGIN")
             try:
+                cur.execute("BEGIN")
                 # Fixture counts
                 for fc in fixture_counts:
                     for area, count in fc.get("counts_by_area", {}).items():
@@ -417,7 +417,10 @@ class TakeoffDB:
 
                 cur.execute("COMMIT")
             except Exception:
-                cur.execute("ROLLBACK")
+                try:
+                    cur.execute("ROLLBACK")
+                except Exception:
+                    pass  # Already rolled back or BEGIN never succeeded
                 raise
 
     def get_full_result(self, job_id: str) -> Optional[Dict]:

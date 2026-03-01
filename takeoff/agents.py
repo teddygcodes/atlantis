@@ -143,7 +143,7 @@ Produce the complete fixture count. Aggregate all per-area counts, assign diffic
             )
         except Exception as e:
             print(f"[COUNTER] ERROR: Model router failed: {e}")
-            return TakeoffResponse(agent_role="counter", data={}, raw_response=f"[MODEL ERROR: {e}]", parse_error=True)
+            return TakeoffResponse(agent_role="counter", data={"_model_failure": True}, raw_response=f"[MODEL ERROR: {e}]", parse_error=True)
 
         try:
             data = extract_json_from_response(response.content, "COUNTER")
@@ -296,7 +296,7 @@ Check for: missed areas, double-counted overlapping views, wrong fixture type as
             )
         except Exception as e:
             print(f"[CHECKER] ERROR: Model router failed: {e}")
-            return TakeoffResponse(agent_role="checker", data={"attacks": []}, raw_response=f"[MODEL ERROR: {e}]")
+            return TakeoffResponse(agent_role="checker", data={"attacks": [], "_model_failure": True}, raw_response=f"[MODEL ERROR: {e}]")
 
         try:
             data = extract_json_from_response(response.content, "CHECKER")
@@ -504,6 +504,9 @@ class Judge:
         Returns:
             Dict with verdict, violations, flags, and ruling summary
         """
+        if mode not in ("fast", "strict", "liability"):
+            raise ValueError(f"[JUDGE] Unknown mode '{mode}'. Must be 'fast', 'strict', or 'liability'.")
+
         # Build hard rules text
         hard_rules_text = "\n".join([
             f"{i+1}. {rule['name']}: {rule['description']}"
