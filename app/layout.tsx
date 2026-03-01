@@ -1,14 +1,17 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
+const inter = Inter({ subsets: ["latin"] });
+
 export const metadata: Metadata = {
-  title: "ATLANTIS \u2014 Where Ideas Are Tested",
+  title: "Takeoff - Adversarial Lighting Takeoff",
   description:
-    "A living research platform where hypotheses are challenged through structured adversarial review. Only validated knowledge survives.",
+    "Professional estimating workspace for electrical contractors. Count lighting fixtures from construction drawings with adversarial verification.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#060606",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
@@ -17,41 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-    >
-      <body className="min-h-screen bg-background text-foreground antialiased">
-        {children}
-        <footer
-          className="footer-links"
-          style={{
-            textAlign: "center",
-            padding: "40px 0 32px",
-            fontFamily: "var(--font-ibm-plex-mono)",
-            fontSize: "11px",
-            letterSpacing: "0.2em",
-            color: "#525252",
-          }}
-        >
-          <span>ATLANTIS v3.0</span>
-          <span style={{ color: "#525252" }}>{" · "}</span>
-          <a
-            href="https://atlantiskb.com"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            atlantiskb.com
-          </a>
-          <span style={{ color: "#525252" }}>{" · "}</span>
-          <a
-            href="https://github.com/teddygcodes/atlantis"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            GitHub
-          </a>
-        </footer>
-      </body>
+    <html lang="en">
+      <body className={`${inter.className} antialiased`}>{children}</body>
     </html>
   );
 }

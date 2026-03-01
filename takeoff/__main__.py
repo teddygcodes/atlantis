@@ -108,7 +108,7 @@ Snippet JSON format (single file):
     # Verify API connectivity
     print("[TAKEOFF] Verifying Anthropic API key...")
     try:
-        from core.llm import LLMProvider
+        from takeoff.llm import LLMProvider
         test_provider = LLMProvider(api_key=anthropic_key, mode="api")
         test_response = test_provider.complete(
             system_prompt="You are a test assistant.",

@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from takeoff.engine import TakeoffEngine
-from core.llm import LLMProvider
+from takeoff.llm import LLMProvider
 
 # Load env vars
 load_dotenv(override=True)
@@ -111,14 +111,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+_cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://localhost:3001"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://atlantiskb.com",
-        "https://www.atlantiskb.com",
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
+    allow_origins=[o.strip() for o in _cors_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
