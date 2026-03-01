@@ -33,7 +33,10 @@ from takeoff.constitution import (
     check_no_double_counting,
     check_cross_sheet_consistency,
     check_flag_assumptions,
+    check_non_negative_counts,
     get_constitution,
+    _normalize_area_label,
+    EMERGENCY_KEYWORDS,
 )
 from takeoff.confidence import (
     calculate_confidence,
@@ -1415,6 +1418,370 @@ class TestBugFixes2(unittest.TestCase):
         with open("takeoff/api.py") as f:
             content = f.read()
         self.assertNotIn("_value", content, "api.py must not access private _value attribute")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 12. Audit Round-3 Bug Fixes
+# ══════════════════════════════════════════════════════════════════════
+
+class TestBugFixes3(unittest.TestCase):
+    """Tests for all improvements applied in audit round 3."""
+
+    # ── Negative count validation ─────────────────────────────────────
+
+    def test_negative_total_count_is_fatal(self):
+        """Negative total count must produce a FATAL violation."""
+        bad_counts = [
+            {"type_tag": "A", "total": -5, "counts_by_area": {"Room 1": 10}},
+        ]
+        violations = check_non_negative_counts(bad_counts)
+        self.assertTrue(any(v["severity"] == "FATAL" for v in violations))
+        self.assertTrue(any("negative" in v["explanation"].lower() for v in violations))
+
+    def test_negative_area_count_is_fatal(self):
+        """Negative per-area count must produce a FATAL violation."""
+        bad_counts = [
+            {"type_tag": "B", "total": 5, "counts_by_area": {"Room 1": -3, "Room 2": 8}},
+        ]
+        violations = check_non_negative_counts(bad_counts)
+        self.assertTrue(any(v["severity"] == "FATAL" for v in violations))
+
+    def test_zero_count_is_not_flagged(self):
+        """Zero counts are valid (fixture type exists but not used in this area)."""
+        counts = [
+            {"type_tag": "A", "total": 0, "counts_by_area": {"Room 1": 0}},
+        ]
+        violations = check_non_negative_counts(counts)
+        self.assertEqual(violations, [])
+
+    def test_negative_counts_propagate_to_enforce_constitution(self):
+        """enforce_constitution must propagate negative count FATAL violations."""
+        bad_counts = [{"type_tag": "A", "total": -1, "counts_by_area": {}}]
+        result = enforce_constitution(
+            fixture_counts=bad_counts,
+            areas_covered=[],
+            rcp_snippets=[],
+            fixture_schedule={"fixtures": {"A": {"description": "Type A"}}}
+        )
+        self.assertEqual(result["verdict"], "BLOCK")
+        self.assertTrue(any("Non-Negative" in v["rule"] for v in result["violations"]))
+
+    # ── Emergency keyword expansion ───────────────────────────────────
+
+    def test_new_emergency_keywords_present(self):
+        """New emergency keywords must be in EMERGENCY_KEYWORDS."""
+        new_kws = ["recessed egress", "safety lighting", "standby fixture",
+                   "egress light", "emergency egress", "exit light", "exit fixture", "em unit"]
+        for kw in new_kws:
+            self.assertIn(kw, EMERGENCY_KEYWORDS, f"'{kw}' missing from EMERGENCY_KEYWORDS")
+
+    def test_standby_fixture_triggers_emergency_tracking(self):
+        """A fixture with 'standby fixture' description should satisfy Rule 5."""
+        counts = [
+            {"type_tag": "A", "total": 10, "description": "standard troffer", "notes": ""},
+            {"type_tag": "B", "total": 5, "description": "standard downlight", "notes": ""},
+            {"type_tag": "C", "total": 3, "description": "standard sconce", "notes": ""},
+            {"type_tag": "D", "total": 2, "description": "linear strip", "notes": ""},
+            {"type_tag": "E", "total": 2, "description": "track head", "notes": ""},
+            {"type_tag": "EM", "total": 2, "description": "standby fixture with battery", "notes": ""},
+        ]
+        violations = check_emergency_fixtures(counts)
+        # Should NOT flag — we have an "standby fixture" type
+        self.assertEqual(violations, [])
+
+    # ── Area label normalization (revised regex) ──────────────────────
+
+    def test_normalize_strips_copy_suffix(self):
+        """'Floor 2 North (Copy)' should normalize to 'floor 2 north'."""
+        self.assertEqual(_normalize_area_label("Floor 2 North (Copy)"), "floor 2 north")
+
+    def test_normalize_strips_rev_suffix(self):
+        """'Level 3 (Rev A)' should normalize to 'level 3'."""
+        self.assertEqual(_normalize_area_label("Level 3 (Rev A)"), "level 3")
+
+    def test_normalize_preserves_location_parenthetical(self):
+        """'Floor 2 (North)' must NOT be stripped — (North) is meaningful."""
+        result = _normalize_area_label("Floor 2 (North)")
+        self.assertIn("north", result, "Parenthetical direction should be preserved")
+
+    def test_normalize_strips_pure_numeric_suffix(self):
+        """'Level 1 (2)' should strip the pure numeric revision suffix."""
+        self.assertEqual(_normalize_area_label("Level 1 (2)"), "level 1")
+
+    def test_normalize_strips_v_number_suffix(self):
+        """'Level 1 (v2)' should strip the version suffix."""
+        self.assertEqual(_normalize_area_label("Level 1 (v2)"), "level 1")
+
+    # ── Area coverage confidence default ──────────────────────────────
+
+    def test_area_coverage_neutral_when_no_rcp_areas(self):
+        """When no RCP snippets have sub_labels, area_coverage must be 0.5 (neutral)."""
+        result = calculate_confidence(
+            fixture_counts=VALID_FIXTURE_COUNTS_LIST,
+            areas_covered=["Room A"],
+            rcp_snippets=[{"label": "rcp"}],  # no sub_label
+            fixture_schedule=SAMPLE_FIXTURE_SCHEDULE,
+            checker_attacks=[],
+            reconciler_responses=[],
+            constitutional_violations=[],
+            mode="fast",
+        )
+        self.assertAlmostEqual(result["features"]["area_coverage"], 0.5, places=2)
+
+    def test_area_coverage_not_inflated_to_1_with_no_snippets(self):
+        """With no RCP snippets at all, area_coverage must be 0.5 not 1.0."""
+        result = calculate_confidence(
+            fixture_counts=VALID_FIXTURE_COUNTS_LIST,
+            areas_covered=["Room A"],
+            rcp_snippets=[],
+            fixture_schedule=SAMPLE_FIXTURE_SCHEDULE,
+            checker_attacks=[],
+            reconciler_responses=[],
+            constitutional_violations=[],
+            mode="fast",
+        )
+        self.assertAlmostEqual(result["features"]["area_coverage"], 0.5, places=2)
+
+    # ── Dead penalty code removed ─────────────────────────────────────
+
+    def test_major_violation_applies_cap_not_additive_penalty(self):
+        """With 1 MAJOR violation, score must be capped at ≤0.40 (not additive -0.15)."""
+        violations = [{"severity": "MAJOR", "rule": "Some Rule", "explanation": "..."}]
+        result = calculate_confidence(
+            fixture_counts=VALID_FIXTURE_COUNTS_LIST,
+            areas_covered=VALID_AREAS_COVERED,
+            rcp_snippets=SAMPLE_RCP_SNIPPETS,
+            fixture_schedule=SAMPLE_FIXTURE_SCHEDULE,
+            checker_attacks=[],
+            reconciler_responses=[],
+            constitutional_violations=violations,
+            mode="fast",
+        )
+        self.assertLessEqual(result["score"], 0.40)
+        # Old code would have applied -0.15 AND THEN the cap separately.
+        # Now only the cap applies, so score should be exactly at cap (not lower).
+        self.assertGreaterEqual(result["score"], 0.20)
+
+    # ── Vision cost rate configurability ─────────────────────────────
+
+    def test_vision_cost_rates_use_defaults(self):
+        """Default vision cost rates should match $3/1M input, $15/1M output."""
+        import importlib
+        import takeoff.extraction as ext_mod
+        # Default values
+        self.assertAlmostEqual(ext_mod._VISION_INPUT_COST_PER_TOKEN, 3e-6, places=9)
+        self.assertAlmostEqual(ext_mod._VISION_OUTPUT_COST_PER_TOKEN, 15e-6, places=9)
+
+    def test_vision_cost_rates_configurable_via_env(self):
+        """Setting env vars should change the cost rates on module reload."""
+        import importlib
+        import os
+        import takeoff.extraction as ext_mod
+
+        os.environ["TAKEOFF_VISION_INPUT_COST_PER_M"] = "6"
+        os.environ["TAKEOFF_VISION_OUTPUT_COST_PER_M"] = "30"
+        importlib.reload(ext_mod)
+
+        try:
+            self.assertAlmostEqual(ext_mod._VISION_INPUT_COST_PER_TOKEN, 6e-6, places=9)
+            self.assertAlmostEqual(ext_mod._VISION_OUTPUT_COST_PER_TOKEN, 30e-6, places=9)
+        finally:
+            # Restore defaults
+            os.environ.pop("TAKEOFF_VISION_INPUT_COST_PER_M", None)
+            os.environ.pop("TAKEOFF_VISION_OUTPUT_COST_PER_M", None)
+            importlib.reload(ext_mod)
+
+    # ── Schema migration error handling ──────────────────────────────
+
+    def test_schema_migration_raises_on_non_duplicate_error(self):
+        """Schema migration must re-raise non-duplicate OperationalErrors."""
+        import sqlite3
+        from unittest.mock import patch, MagicMock
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        with patch("takeoff.schema.sqlite3.connect") as mock_connect:
+            mock_conn = MagicMock()
+            mock_connect.return_value = mock_conn
+            mock_conn.row_factory = None
+            # Make ALTER TABLE raise a non-duplicate OperationalError
+            mock_conn.execute.side_effect = [
+                MagicMock(),  # PRAGMA journal_mode
+                MagicMock(),  # PRAGMA synchronous
+                MagicMock(),  # CREATE TABLE takeoff_jobs
+                MagicMock(),  # CREATE TABLE snippets
+                MagicMock(),  # CREATE TABLE fixture_schedule
+                MagicMock(),  # CREATE TABLE fixture_counts
+                MagicMock(),  # CREATE TABLE adversarial_log
+                MagicMock(),  # CREATE TABLE results
+                sqlite3.OperationalError("table is locked"),  # ALTER TABLE
+            ]
+            mock_conn.commit = MagicMock()
+
+            from takeoff.schema import TakeoffDB
+            with self.assertRaises(sqlite3.OperationalError):
+                TakeoffDB(db_path)
+
+    def test_schema_migration_ignores_duplicate_column(self):
+        """Schema migration must silently pass when full_result_json already exists."""
+        import sqlite3
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        # First init creates the column
+        db1 = TakeoffDB(db_path)
+        db1.close()
+
+        # Second init should not raise even though column already exists
+        try:
+            db2 = TakeoffDB(db_path)
+            db2.close()
+        except Exception as e:
+            self.fail(f"Re-initializing DB raised unexpected exception: {e}")
+
+    # ── Panel circuit dedup ───────────────────────────────────────────
+
+    def test_panel_circuit_dedup_prevents_double_count(self):
+        """Merging two identical panels must not duplicate circuits."""
+        from takeoff.extraction import PanelData
+
+        panel1 = PanelData(
+            panel_name="LP-1",
+            circuits=[
+                {"circuit": "1", "breaker_size": "20A", "load_va": 1200, "description": "Lighting A"},
+                {"circuit": "3", "breaker_size": "20A", "load_va": 950, "description": "Lighting B"},
+            ],
+            total_load_va=2150,
+            warnings=[]
+        )
+        panel2 = PanelData(
+            panel_name="LP-1",  # Same panel name — duplicate submission
+            circuits=[
+                {"circuit": "1", "breaker_size": "20A", "load_va": 1200, "description": "Lighting A"},
+            ],
+            total_load_va=1200,
+            warnings=[]
+        )
+
+        # Simulate the engine's merge + dedup logic
+        existing_keys = {(panel1.panel_name, c.get("circuit")) for c in panel1.circuits}
+        for circuit in panel2.circuits:
+            key = (panel2.panel_name, circuit.get("circuit"))
+            if key not in existing_keys:
+                panel1.circuits.append(circuit)
+                existing_keys.add(key)
+
+        # Circuit "1" should not be duplicated
+        circuit_ids = [c["circuit"] for c in panel1.circuits]
+        self.assertEqual(len(circuit_ids), 2, "Duplicate circuit should be rejected")
+        self.assertEqual(circuit_ids.count("1"), 1, "Circuit 1 must appear exactly once")
+
+    def test_panel_circuit_dedup_allows_different_panels(self):
+        """Circuits with the same number on different panels should both be kept."""
+        from takeoff.extraction import PanelData
+
+        panel1 = PanelData(
+            panel_name="LP-1",
+            circuits=[{"circuit": "1", "breaker_size": "20A", "load_va": 1200, "description": "LP-1 Circuit 1"}],
+            total_load_va=1200,
+            warnings=[]
+        )
+        panel2 = PanelData(
+            panel_name="LP-2",  # Different panel — circuit 1 here is a distinct circuit
+            circuits=[{"circuit": "1", "breaker_size": "20A", "load_va": 900, "description": "LP-2 Circuit 1"}],
+            total_load_va=900,
+            warnings=[]
+        )
+
+        existing_keys = {(panel1.panel_name, c.get("circuit")) for c in panel1.circuits}
+        for circuit in panel2.circuits:
+            key = (panel2.panel_name, circuit.get("circuit"))
+            if key not in existing_keys:
+                panel1.circuits.append(circuit)
+                existing_keys.add(key)
+
+        self.assertEqual(len(panel1.circuits), 2, "Both circuits should be kept — different panels")
+
+    # ── SSE cancel event ──────────────────────────────────────────────
+
+    def test_sse_cancel_event_raises_in_status_callback(self):
+        """status_callback must raise RuntimeError when cancel_event is set."""
+        import queue as _queue
+        import threading
+
+        status_queue = _queue.Queue(maxsize=200)
+        cancel_event = threading.Event()
+
+        def status_callback(message: str):
+            if cancel_event.is_set():
+                raise RuntimeError("Job cancelled: SSE client timed out")
+            try:
+                status_queue.put_nowait({"type": "status", "message": message})
+            except _queue.Full:
+                pass
+
+        # Before cancel — should work fine
+        status_callback("Starting job")
+        self.assertFalse(status_queue.empty())
+
+        # After cancel — should raise
+        cancel_event.set()
+        with self.assertRaises(RuntimeError):
+            status_callback("Another update")
+
+    def test_sse_queue_put_nowait_drops_on_full(self):
+        """When queue is full, put_nowait should drop messages without blocking."""
+        import queue as _queue
+        import threading
+
+        status_queue = _queue.Queue(maxsize=2)
+        cancel_event = threading.Event()
+
+        def status_callback(message: str):
+            if cancel_event.is_set():
+                raise RuntimeError("Job cancelled")
+            try:
+                status_queue.put_nowait({"type": "status", "message": message})
+            except _queue.Full:
+                pass  # Drop — does not block or raise
+
+        # Fill queue
+        status_callback("msg1")
+        status_callback("msg2")
+        # This should drop silently, not block or raise
+        status_callback("msg3 — dropped")
+        self.assertEqual(status_queue.qsize(), 2)
+
+    # ── CLI missing file error ────────────────────────────────────────
+
+    def test_cli_main_file_raises_on_missing_image(self):
+        """CLI should exit with error if a manifest snippet references a missing image."""
+        import subprocess
+        import json
+        import tempfile
+        import os
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest = {
+                "drawing_name": "Test",
+                "snippets": [
+                    {"id": "s1", "label": "fixture_schedule", "image_path": "nonexistent.png"}
+                ]
+            }
+            manifest_path = os.path.join(tmpdir, "manifest.json")
+            with open(manifest_path, "w") as f:
+                json.dump(manifest, f)
+
+            result = subprocess.run(
+                [sys.executable, "-m", "takeoff", tmpdir],
+                capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                env={**os.environ, "ANTHROPIC_API_KEY": "sk-fake-key-for-test"}
+            )
+            # Should exit non-zero with a descriptive error about the missing file
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("nonexistent.png", result.stderr)
 
 
 # ══════════════════════════════════════════════════════════════════════

@@ -126,12 +126,14 @@ class TakeoffDB:
                 FOREIGN KEY (job_id) REFERENCES takeoff_jobs(job_id)
             )
         """)
-        # Migrate: add full_result_json if upgrading an existing database
+        # Migrate: add full_result_json if upgrading an existing database.
+        # Only swallow "duplicate column name" — re-raise anything else (permissions, corruption).
         try:
             self.conn.execute("ALTER TABLE results ADD COLUMN full_result_json TEXT")
             self.conn.commit()
-        except Exception:
-            pass  # Column already exists
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                raise
 
         # Create indexes
         self.conn.execute("""

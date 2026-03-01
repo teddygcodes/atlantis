@@ -137,13 +137,15 @@ Snippet JSON format (single file):
         with open(manifest_path) as f:
             job_data = json.load(f)
         # Load image data from files referenced in manifest
+        import base64
         for snippet in job_data.get("snippets", []):
             if "image_path" in snippet and not snippet.get("image_data"):
                 img_path = input_path / snippet["image_path"]
-                if img_path.exists():
-                    import base64
-                    with open(img_path, "rb") as img_file:
-                        snippet["image_data"] = base64.b64encode(img_file.read()).decode()
+                if not img_path.exists():
+                    print(f"[ERROR] Snippet '{snippet.get('id', '?')}' references missing image file: {img_path}", file=sys.stderr)
+                    sys.exit(1)
+                with open(img_path, "rb") as img_file:
+                    snippet["image_data"] = base64.b64encode(img_file.read()).decode()
     elif input_path.is_file():
         with open(input_path) as f:
             job_data = json.load(f)

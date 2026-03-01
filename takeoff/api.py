@@ -154,10 +154,19 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
     # Bounded queue carries status messages AND the final result — no separate
     # result_container list needed, which eliminates the unsynchronized list-read race.
     status_queue = queue.Queue(maxsize=200)
-    done_event = threading.Event()  # set in finally so always fires on thread exit
+    done_event = threading.Event()   # set in finally so always fires on thread exit
+    cancel_event = threading.Event() # set by SSE generator on timeout to stop the job thread
 
     def status_callback(message: str):
-        status_queue.put({"type": "status", "message": message})
+        # Raise on cancel so the engine thread exits cleanly on SSE timeout.
+        # This fires at the next status checkpoint — blocking API calls won't
+        # be interrupted mid-flight, but the thread will stop soon after.
+        if cancel_event.is_set():
+            raise RuntimeError("Job cancelled: SSE client timed out")
+        try:
+            status_queue.put_nowait({"type": "status", "message": message})
+        except queue.Full:
+            print(f"[TAKEOFF API] WARNING: Status queue full, dropping message: {message[:80]}")
 
     def run_job():
         try:
@@ -171,9 +180,11 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
             )
             # Put result into the queue before setting done_event so the
             # SSE generator always sees it when it drains after done.
-            status_queue.put({"type": "result_ready", "data": result})
+            if not cancel_event.is_set():
+                status_queue.put({"type": "result_ready", "data": result})
         except Exception as e:
-            status_queue.put({"type": "error", "message": str(e)})
+            if not cancel_event.is_set():
+                status_queue.put({"type": "error", "message": str(e)})
         finally:
             done_event.set()  # always signals completion even on exception
 
@@ -222,8 +233,9 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
                         break
                 break
 
-            # Hard timeout guard
+            # Hard timeout guard — signal the job thread to stop, then return error
             if _time.time() - start_time > MAX_WAIT_SECONDS:
+                cancel_event.set()
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Takeoff pipeline timed out after 5 minutes'})}\n\n"
                 return
             await asyncio.sleep(0.05)

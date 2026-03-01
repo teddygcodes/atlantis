@@ -82,7 +82,9 @@ DIFFICULTY_CODES = {
 # Emergency fixture keywords (for auto-detection)
 EMERGENCY_KEYWORDS = [
     "exit", "emergency", "em", "e.m.", "bug eye", "bug-eye", "battery backup",
-    "battery pack", "em battery", "emergency circuit", "egress", "evac"
+    "battery pack", "em battery", "emergency circuit", "egress", "evac",
+    "recessed egress", "safety lighting", "standby fixture", "egress light",
+    "emergency egress", "exit light", "exit fixture", "em unit"
 ]
 
 # Common fixture type patterns (for type tag validation)
@@ -141,13 +143,18 @@ def check_schedule_traceability(fixture_counts: list, fixture_schedule: dict) ->
 def _normalize_area_label(label: str) -> str:
     """Normalize area label for comparison (lowercase, strip, collapse separators).
 
-    Also strips trailing parenthetical suffixes like '(Copy)', '(Rev A)', '(1)', etc.
-    so that sub_labels like 'Floor 2 North (Copy)' match 'Floor 2 North'.
+    Strips trailing revision-only suffixes like '(Copy)', '(Rev A)', '(v2)', '(1)'
+    so that 'Floor 2 North (Copy)' matches 'Floor 2 North'.
+    Does NOT strip meaningful parentheticals like '(North)' or '(East Wing)'.
     """
     import re
     label = label.strip().lower().replace("-", " ").replace("_", " ")
-    # Remove trailing parenthetical, e.g. "(copy)", "(rev a)", "(1)"
-    label = re.sub(r"\s*\([^)]*\)\s*$", "", label).strip()
+    # Only strip known revision/copy suffixes, not meaningful location parentheticals.
+    # Patterns: (copy), (rev A), (rev. 2), (revision 1), (v2), (1), (2) — pure numeric
+    label = re.sub(
+        r"\s*\((copy|rev\.?\s*\w*|revision\s*\w*|v\d+|\d+)\)\s*$",
+        "", label, flags=re.IGNORECASE
+    ).strip()
     return label
 
 
@@ -380,6 +387,38 @@ def check_flag_assumptions(fixture_counts: list) -> list:
     return violations
 
 
+def check_non_negative_counts(fixture_counts: list) -> list:
+    """Check that all fixture counts are non-negative.
+
+    A negative total or area count is a data corruption indicator —
+    the LLM produced invalid output that must be caught before scoring.
+
+    Args:
+        fixture_counts: List of fixture count dicts
+
+    Returns:
+        List of violations
+    """
+    violations = []
+    for fc in fixture_counts:
+        tag = fc.get("type_tag", "?")
+        total = fc.get("total", 0)
+        if isinstance(total, (int, float)) and total < 0:
+            violations.append({
+                "rule": "Non-Negative Counts",
+                "severity": "FATAL",
+                "explanation": f"Type '{tag}' has a negative total count ({total}). Counts must be ≥ 0."
+            })
+        for area, count in fc.get("counts_by_area", {}).items():
+            if isinstance(count, (int, float)) and count < 0:
+                violations.append({
+                    "rule": "Non-Negative Counts",
+                    "severity": "FATAL",
+                    "explanation": f"Type '{tag}' area '{area}' has a negative count ({count}). Counts must be ≥ 0."
+                })
+    return violations
+
+
 def enforce_constitution(
     fixture_counts: list,
     areas_covered: list,
@@ -400,6 +439,9 @@ def enforce_constitution(
         Dict with verdict and violations
     """
     all_violations = list(judge_violations or [])
+
+    # Pre-check: Non-negative counts (data integrity gate)
+    all_violations.extend(check_non_negative_counts(fixture_counts))
 
     # Rule 1: Schedule Traceability
     all_violations.extend(check_schedule_traceability(fixture_counts, fixture_schedule))

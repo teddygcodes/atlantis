@@ -10,6 +10,7 @@ Mirrors sydyn/engine.py exactly:
 import json
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, List, Dict
 
 from core.models import ModelRouter
@@ -192,23 +193,24 @@ class TakeoffEngine:
         snippets_meta = [{k: v for k, v in s.items() if k != "image_data"} for s in snippets]
         self.db.store_snippets(job_id, snippets_meta)
 
-        # ─── Step 2: Extract fixture schedule ────────────────────────────────
+        # ─── Step 2: Extract fixture schedule (parallel if multiple snippets) ────
         emit("Extracting fixture schedule...")
 
         fixture_schedule = FixtureSchedule()
-        for fs_snippet in fixture_snippets:
-            image_data = fs_snippet.get("image_data", "")
-            if image_data:
-                extracted = extract_fixture_schedule(image_data)
-                # Merge if multiple schedule snippets — keep first definition on collision
-                for tag, info in extracted.fixtures.items():
-                    if tag in fixture_schedule.fixtures:
-                        emit(f"WARNING: Fixture type '{tag}' defined in multiple schedule snippets — keeping first definition")
-                    else:
-                        fixture_schedule.fixtures[tag] = info
-                fixture_schedule.warnings.extend(extracted.warnings)
-                if not fixture_schedule.raw_notes:
-                    fixture_schedule.raw_notes = extracted.raw_notes
+        fs_images = [(s, s.get("image_data", "")) for s in fixture_snippets if s.get("image_data", "")]
+        if fs_images:
+            with ThreadPoolExecutor(max_workers=len(fs_images)) as _ex:
+                fs_futures = {_ex.submit(extract_fixture_schedule, img): s for s, img in fs_images}
+                for fut in as_completed(fs_futures):
+                    extracted = fut.result()
+                    for tag, info in extracted.fixtures.items():
+                        if tag in fixture_schedule.fixtures:
+                            emit(f"WARNING: Fixture type '{tag}' defined in multiple schedule snippets — keeping first definition")
+                        else:
+                            fixture_schedule.fixtures[tag] = info
+                    fixture_schedule.warnings.extend(extracted.warnings)
+                    if not fixture_schedule.raw_notes:
+                        fixture_schedule.raw_notes = extracted.raw_notes
 
         emit(f"Fixture schedule: {len(fixture_schedule.fixtures)} type tags extracted")
 
@@ -234,38 +236,85 @@ class TakeoffEngine:
 
         self.db.store_fixture_schedule(job_id, {"fixtures": fixture_schedule.fixtures})
 
-        # ─── Step 3: Extract RCP counts ───────────────────────────────────────
-        area_counts: List[AreaCount] = []
-        for rcp_snippet in rcp_snippets:
-            area_label = rcp_snippet.get("sub_label") or f"Area {len(area_counts) + 1}"
-            image_data = rcp_snippet.get("image_data", "")
-            emit(f"Counting fixtures in '{area_label}'...")
-            if image_data:
-                area_count = extract_rcp_counts(image_data, fixture_schedule, area_label)
-                area_counts.append(area_count)
+        # ─── Steps 3-5: Extract RCP, notes, and panel in parallel ─────────────
+        # RCP needs the fixture schedule for context, so these run after Step 2.
+        # Within this group they are independent and can run concurrently.
 
-        # ─── Step 4: Extract plan notes ───────────────────────────────────────
-        plan_notes: List[PlanNote] = []
+        # Pre-compute area labels (avoids index-ordering issues with threads)
+        rcp_jobs = [
+            (rcp_snippet.get("sub_label") or f"Area {i + 1}", rcp_snippet)
+            for i, rcp_snippet in enumerate(rcp_snippets)
+            if rcp_snippet.get("image_data", "")
+        ]
+
+        emit(f"Extracting {len(rcp_jobs)} RCP area(s), {len(notes_snippets)} note(s), {len(panel_snippets)} panel(s) in parallel...")
+
+        # Build work units
+        _parallel_work = []
+        _rcp_indices: List[int] = []
+        _notes_indices: List[int] = []
+        _panel_indices: List[int] = []
+
+        for area_label, rcp_snippet in rcp_jobs:
+            _rcp_indices.append(len(_parallel_work))
+            _parallel_work.append(("rcp", area_label, rcp_snippet.get("image_data", "")))
+
         for notes_snippet in notes_snippets:
-            image_data = notes_snippet.get("image_data", "")
-            if image_data:
-                emit("Extracting plan notes...")
-                notes = extract_plan_notes(image_data)
-                plan_notes.extend(notes)
+            if notes_snippet.get("image_data", ""):
+                _notes_indices.append(len(_parallel_work))
+                _parallel_work.append(("notes", None, notes_snippet.get("image_data", "")))
 
-        # ─── Step 5: Extract panel schedule ───────────────────────────────────
+        for panel_snippet in panel_snippets:
+            if panel_snippet.get("image_data", ""):
+                _panel_indices.append(len(_parallel_work))
+                _parallel_work.append(("panel", None, panel_snippet.get("image_data", "")))
+
+        _results: List = [None] * len(_parallel_work)
+
+        if _parallel_work:
+            max_workers = min(len(_parallel_work), 8)
+            with ThreadPoolExecutor(max_workers=max_workers) as _ex:
+                idx_futures = {}
+                for i, (kind, label, img) in enumerate(_parallel_work):
+                    if kind == "rcp":
+                        idx_futures[_ex.submit(extract_rcp_counts, img, fixture_schedule, label)] = i
+                    elif kind == "notes":
+                        idx_futures[_ex.submit(extract_plan_notes, img)] = i
+                    else:
+                        idx_futures[_ex.submit(extract_panel_schedule, img)] = i
+                for fut in as_completed(idx_futures):
+                    _results[idx_futures[fut]] = fut.result()
+
+        # Collect ordered results
+        area_counts: List[AreaCount] = [_results[i] for i in _rcp_indices if _results[i] is not None]
+        for ac in area_counts:
+            emit(f"Counted fixtures in '{ac.area_label}'")
+
+        plan_notes: List[PlanNote] = []
+        for i in _notes_indices:
+            if _results[i]:
+                plan_notes.extend(_results[i])
+
         panel_data: Optional[PanelData] = None
-        for i, panel_snippet in enumerate(panel_snippets):
-            image_data = panel_snippet.get("image_data", "")
-            if not image_data:
+        for i in _panel_indices:
+            extracted = _results[i]
+            if extracted is None:
                 continue
-            emit(f"Extracting panel schedule {i + 1}/{len(panel_snippets)} for cross-reference...")
-            extracted = extract_panel_schedule(image_data)
             if panel_data is None:
                 panel_data = extracted
             else:
-                # Merge circuits from additional panels into the first
-                panel_data.circuits.extend(extracted.circuits)
+                # Merge circuits from additional panels.
+                # Deduplicate by (panel_name, circuit) to prevent double-counting
+                # when the same panel snippet is submitted twice.
+                existing_keys = {
+                    (panel_data.panel_name, c.get("circuit"))
+                    for c in panel_data.circuits
+                }
+                for circuit in extracted.circuits:
+                    key = (extracted.panel_name, circuit.get("circuit"))
+                    if key not in existing_keys:
+                        panel_data.circuits.append(circuit)
+                        existing_keys.add(key)
                 if extracted.total_load_va and panel_data.total_load_va:
                     panel_data.total_load_va = panel_data.total_load_va + extracted.total_load_va
                 panel_data.warnings.extend(extracted.warnings)

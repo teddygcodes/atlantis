@@ -36,9 +36,11 @@ _vision_cost_lock = threading.Lock()
 _vision_input_tokens: int = 0
 _vision_output_tokens: int = 0
 
-# Approximate cost per token for claude-sonnet-4-6 vision (input/output)
-_VISION_INPUT_COST_PER_TOKEN = 3e-6    # $3 / 1M tokens
-_VISION_OUTPUT_COST_PER_TOKEN = 15e-6  # $15 / 1M tokens
+# Approximate cost per token for vision model (configurable via env vars).
+# Defaults match claude-sonnet-4-6 pricing: $3/1M input, $15/1M output.
+# Override with: TAKEOFF_VISION_INPUT_COST_PER_M, TAKEOFF_VISION_OUTPUT_COST_PER_M
+_VISION_INPUT_COST_PER_TOKEN = float(os.getenv("TAKEOFF_VISION_INPUT_COST_PER_M", "3")) / 1_000_000
+_VISION_OUTPUT_COST_PER_TOKEN = float(os.getenv("TAKEOFF_VISION_OUTPUT_COST_PER_M", "15")) / 1_000_000
 
 
 def reset_vision_cost() -> None:

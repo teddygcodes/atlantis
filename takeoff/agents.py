@@ -5,9 +5,12 @@ same response dataclasses. Domain logic replaced with lighting takeoff specifics
 """
 
 import json
+import logging
 import re
 from typing import List, Dict, Optional
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 from takeoff.extraction import FixtureSchedule, AreaCount, PlanNote, PanelData, extract_json_from_response
 
@@ -143,6 +146,8 @@ Produce the complete fixture count. Aggregate all per-area counts, assign diffic
 
         try:
             data = extract_json_from_response(response.content, "COUNTER")
+            if "fixture_counts" not in data:
+                logger.warning("[COUNTER] WARNING: Response missing 'fixture_counts' key — got keys: %s", list(data.keys()))
             print(f"[COUNTER] {len(data.get('fixture_counts', []))} fixture types, {data.get('grand_total_fixtures', 0)} total fixtures")
             return TakeoffResponse(
                 agent_role="counter",
@@ -294,6 +299,8 @@ Check for: missed areas, double-counted overlapping views, wrong fixture type as
 
         try:
             data = extract_json_from_response(response.content, "CHECKER")
+            if "attacks" not in data:
+                logger.warning("[CHECKER] WARNING: Response missing 'attacks' key — got keys: %s", list(data.keys()))
             attacks = data.get("attacks", [])
 
             # Deduplicate attacks by (category, affected_type_tag, affected_area).
@@ -444,6 +451,8 @@ Address each attack and provide revised counts. For each plan note constraint, e
 
         try:
             data = extract_json_from_response(response.content, "RECONCILER")
+            if "responses" not in data:
+                logger.warning("[RECONCILER] WARNING: Response missing 'responses' key — got keys: %s", list(data.keys()))
             concessions = sum(1 for r in data.get("responses", []) if r.get("verdict") == "concede")
             print(f"[RECONCILER] {len(data.get('responses', []))} responses ({concessions} concessions), revised total: {data.get('revised_grand_total', 'unknown')}")
             return TakeoffResponse(
@@ -573,6 +582,7 @@ Evaluate against all 6 constitutional hard rules and issue your ruling."""
         except Exception as e:
             # Model/network error — return WARN not BLOCK so users can distinguish
             # "pipeline blocked my count" from "API was temporarily unavailable"
+            logger.warning("[JUDGE] Model call failed: %s — returning WARN verdict", e)
             return {
                 "verdict": "WARN",
                 "violations": [],
@@ -584,6 +594,8 @@ Evaluate against all 6 constitutional hard rules and issue your ruling."""
 
         try:
             data = extract_json_from_response(response.content, "JUDGE")
+            if "verdict" not in data:
+                logger.warning("[JUDGE] WARNING: Response missing 'verdict' key — got keys: %s", list(data.keys()))
             verdict = data.get("verdict", "WARN")
             return {
                 "verdict": verdict,
@@ -596,6 +608,7 @@ Evaluate against all 6 constitutional hard rules and issue your ruling."""
         except (json.JSONDecodeError, ValueError) as e:
             # Parse error — also WARN not BLOCK; the takeoff data is intact even if
             # the Judge response was malformed
+            logger.warning("[JUDGE] Response parse failed: %s — returning WARN verdict", e)
             return {
                 "verdict": "WARN",
                 "violations": [],

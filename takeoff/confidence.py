@@ -89,7 +89,9 @@ def calculate_confidence(
                 matched_count += 1
         features["area_coverage"] = matched_count / len(rcp_snippet_areas)
     else:
-        features["area_coverage"] = 1.0  # No named RCP areas to check
+        # No named RCP areas to verify against — neutral, not perfect credit.
+        # Awarding 1.0 here would inflate confidence for jobs with no area labels at all.
+        features["area_coverage"] = 0.5
 
     # Feature 3: Adversarial resolved
     # What % of Checker attacks were explicitly addressed by Reconciler
@@ -161,25 +163,12 @@ def calculate_confidence(
         confidence_score -= 0.05
         logger.debug("[TAKEOFF CONFIDENCE] auto-correct penalty -0.05 → %.3f", confidence_score)
 
-    # Apply HARD penalties for constitutional violations
-    violation_penalty = 0.0
-    for v in constitutional_violations:
-        severity = v.get("severity", "MINOR")
-        if severity == "FATAL":
-            violation_penalty += 0.25
-        elif severity == "MAJOR":
-            violation_penalty += 0.15
-        elif severity == "MINOR":
-            violation_penalty += 0.05
-
-    if violation_penalty > 0:
-        confidence_score -= violation_penalty
-        logger.debug("[TAKEOFF CONFIDENCE] violation penalties -%.3f → %.3f", violation_penalty, confidence_score)
-
     # Clamp to [0.0, 1.0]
     confidence_score = max(0.0, min(1.0, confidence_score))
 
-    # HARD OVERRIDE based on violation severity
+    # HARD OVERRIDE based on violation severity — caps the score regardless of features.
+    # Individual per-violation additive penalties were removed: they were always overwritten
+    # by the caps below, making them dead code. The caps alone are the correct mechanism.
     fatal_count = sum(1 for v in constitutional_violations if v.get("severity") == "FATAL")
     major_count = sum(1 for v in constitutional_violations if v.get("severity") == "MAJOR")
     minor_count = sum(1 for v in constitutional_violations if v.get("severity") == "MINOR")
