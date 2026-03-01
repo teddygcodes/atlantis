@@ -1,11 +1,14 @@
 """Takeoff database schema and persistence layer."""
 
+import logging
 import sqlite3
 import json
 import threading
 import time
 from pathlib import Path
 from typing import Optional, List, Dict
+
+logger = logging.getLogger(__name__)
 
 
 class TakeoffDB:
@@ -191,7 +194,7 @@ class TakeoffDB:
             for s in snippets:
                 snippet_id = s.get("id", "")
                 if not snippet_id:
-                    print(f"[DB] WARNING: Snippet missing 'id' field for job {job_id} — skipping")
+                    logger.warning("[DB] Snippet missing 'id' field for job %s — skipping", job_id)
                     continue
                 self.conn.execute("""
                     INSERT OR REPLACE INTO snippets
@@ -247,7 +250,7 @@ class TakeoffDB:
                         area,
                         count,
                         fc.get("confidence"),
-                        fc.get("difficulty", "S"),
+                        fc.get("difficulty_code") or fc.get("difficulty", "S"),
                         json.dumps(fc.get("flags", []))
                     ))
             self.conn.commit()
@@ -279,11 +282,17 @@ class TakeoffDB:
                 attack_id = resp.get("attack_id")
                 verdict = resp.get("verdict")
                 explanation = resp.get("explanation")
-                self.conn.execute("""
+                cur = self.conn.execute("""
                     UPDATE adversarial_log
                     SET resolution = ?, final_verdict = ?
                     WHERE job_id = ? AND attack_id = ?
                 """, (explanation, verdict, job_id, attack_id))
+                if cur.rowcount == 0:
+                    logger.warning(
+                        "[DB] Reconciler response for attack_id '%s' found no matching row "
+                        "in adversarial_log for job '%s' — response data not persisted",
+                        attack_id, job_id
+                    )
 
             self.conn.commit()
 
@@ -357,7 +366,7 @@ class TakeoffDB:
                             area,
                             count,
                             fc.get("confidence"),
-                            fc.get("difficulty", "S"),
+                            fc.get("difficulty_code") or fc.get("difficulty", "S"),
                             json.dumps(fc.get("flags", []))
                         ))
 
@@ -380,6 +389,12 @@ class TakeoffDB:
                         SET resolution = ?, final_verdict = ?
                         WHERE job_id = ? AND attack_id = ?
                     """, (resp.get("explanation"), resp.get("verdict"), job_id, resp.get("attack_id")))
+                    if cur.rowcount == 0:
+                        logger.warning(
+                            "[DB] Reconciler response for attack_id '%s' found no matching row "
+                            "in adversarial_log for job '%s' — response data not persisted",
+                            resp.get("attack_id"), job_id
+                        )
 
                 # Result
                 cur.execute("""

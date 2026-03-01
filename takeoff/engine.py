@@ -128,6 +128,8 @@ class TakeoffEngine:
             lbl = s.get("label", "")
             if lbl and lbl not in valid_labels:
                 emit(f"WARNING: Snippet '{s.get('id', '?')}' has unrecognized label '{lbl}' — expected one of: {', '.join(sorted(valid_labels))}")
+            if not s.get("image_data", "").strip():
+                emit(f"WARNING: Snippet '{s.get('id', '?')}' (label: '{lbl}') has empty or missing 'image_data' — will be skipped during extraction")
 
         fixture_snippets = [s for s in snippets if s.get("label") == "fixture_schedule"]
         rcp_snippets = [s for s in snippets if s.get("label") == "rcp"]
@@ -319,6 +321,45 @@ class TakeoffEngine:
 
         return result
 
+    def _run_counter_phase(
+        self,
+        fixture_schedule: FixtureSchedule,
+        area_counts: List[AreaCount],
+        plan_notes: List[PlanNote],
+        panel_data: Optional[PanelData],
+        emit
+    ):
+        """Run Counter agent + grand total validation. Returns (counter_output, total_corrected, counter_response)."""
+        emit("Counter analyzing drawings and building fixture count...")
+        counter_response = self.counter.generate_count(fixture_schedule, area_counts, plan_notes, panel_data)
+        _gtr = validate_grand_total(counter_response.data, "COUNTER")
+        counter_output, total_corrected = _gtr.counts, _gtr.was_corrected
+        emit(f"Counter produced count: {counter_output.get('grand_total_fixtures', 0)} total fixtures")
+        if total_corrected:
+            emit("WARNING: Counter's grand_total_fixtures was auto-corrected to match per-type sum")
+        return counter_output, total_corrected, counter_response
+
+    def _warn_unknown_types(self, area_counts: List[AreaCount], fixture_schedule: FixtureSchedule, emit):
+        """Warn about fixture types referenced in RCP areas that aren't in the fixture schedule."""
+        known_tags = {t.upper() for t in fixture_schedule.fixtures.keys()}
+        unknown_types = {
+            tag for ac in area_counts
+            for tag in ac.counts_by_type.keys()
+            if tag.upper() not in known_tags and tag.upper() != "UNKNOWN"
+        }
+        if unknown_types:
+            emit(f"WARNING: RCP areas reference types not in schedule: {', '.join(sorted(unknown_types))} — may be extraction errors")
+
+    def _apply_rule6_flags(self, counter_output: dict, emit):
+        """Rule 6 enforcement: auto-flag any UNKNOWN/TBD type tags Counter didn't self-flag."""
+        _assumption_keywords = {"UNKNOWN", "TBD", "UNSCHEDULED", "?"}
+        for fc in counter_output.get("fixture_counts", []):
+            if fc.get("type_tag", "").upper() in _assumption_keywords:
+                existing_flags = fc.get("flags", [])
+                if not any("ASSUMPTION" in f for f in existing_flags):
+                    fc.setdefault("flags", []).append("ASSUMPTION: fixture type not identified in schedule")
+                    emit(f"WARNING: Auto-flagged assumption on type_tag '{fc.get('type_tag')}' per Rule 6")
+
     def _run_fast_mode(
         self,
         job_id: str,
@@ -334,13 +375,9 @@ class TakeoffEngine:
         emit("Running FAST mode pipeline (Counter + Checker + Judge)")
 
         # Counter
-        emit("Counter analyzing drawings and building fixture count...")
-        counter_response = self.counter.generate_count(fixture_schedule, area_counts, plan_notes, panel_data)
-        _gtr = validate_grand_total(counter_response.data, "COUNTER")
-        counter_output, total_corrected = _gtr.counts, _gtr.was_corrected
-        emit(f"Counter produced count: {counter_output.get('grand_total_fixtures', 0)} total fixtures")
-        if total_corrected:
-            emit("WARNING: Counter's grand_total_fixtures was auto-corrected to match per-type sum")
+        counter_output, total_corrected, counter_response = self._run_counter_phase(
+            fixture_schedule, area_counts, plan_notes, panel_data, emit
+        )
 
         # Short-circuit: zero fixtures — either blank drawing or Counter JSON parse failure
         if counter_output.get("grand_total_fixtures", 0) == 0:
@@ -362,24 +399,9 @@ class TakeoffEngine:
                 "mode": "fast", "error": _error_code, "message": _error_msg
             }
 
-        # I7: Warn about fixture types in area counts that don't exist in the schedule
-        known_tags = {t.upper() for t in fixture_schedule.fixtures.keys()}
-        unknown_types = {
-            tag for ac in area_counts
-            for tag in ac.counts_by_type.keys()
-            if tag.upper() not in known_tags and tag.upper() != "UNKNOWN"
-        }
-        if unknown_types:
-            emit(f"WARNING: RCP areas reference types not in schedule: {', '.join(sorted(unknown_types))} — may be extraction errors")
-
-        # Rule 6 enforcement: auto-flag any UNKNOWN/TBD type tags Counter didn't self-flag
-        _assumption_keywords = {"UNKNOWN", "TBD", "UNSCHEDULED", "?"}
-        for fc in counter_output.get("fixture_counts", []):
-            if fc.get("type_tag", "").upper() in _assumption_keywords:
-                existing_flags = fc.get("flags", [])
-                if not any("ASSUMPTION" in f for f in existing_flags):
-                    fc.setdefault("flags", []).append("ASSUMPTION: fixture type not identified in schedule")
-                    emit(f"WARNING: Auto-flagged assumption on type_tag '{fc.get('type_tag')}' per Rule 6")
+        # I7: Warn about unknown types; Rule 6: auto-flag assumptions
+        self._warn_unknown_types(area_counts, fixture_schedule, emit)
+        self._apply_rule6_flags(counter_output, emit)
 
         # Checker
         emit("Checker reviewing count for errors and omissions...")
@@ -460,13 +482,9 @@ class TakeoffEngine:
         emit(f"Running {mode.upper()} mode pipeline (Counter + Checker + Reconciler + Judge)")
 
         # Counter
-        emit("Counter analyzing drawings and building fixture count...")
-        counter_response = self.counter.generate_count(fixture_schedule, area_counts, plan_notes, panel_data)
-        _gtr = validate_grand_total(counter_response.data, "COUNTER")
-        counter_output, total_corrected = _gtr.counts, _gtr.was_corrected
-        emit(f"Counter: {counter_output.get('grand_total_fixtures', 0)} total fixtures")
-        if total_corrected:
-            emit("WARNING: Counter's grand_total_fixtures was auto-corrected to match per-type sum")
+        counter_output, total_corrected, counter_response = self._run_counter_phase(
+            fixture_schedule, area_counts, plan_notes, panel_data, emit
+        )
 
         # Short-circuit: zero fixtures — either blank drawing or Counter JSON parse failure
         if counter_output.get("grand_total_fixtures", 0) == 0:
@@ -488,24 +506,9 @@ class TakeoffEngine:
                 "mode": mode, "error": _error_code, "message": _error_msg
             }
 
-        # I7: Warn about fixture types in area counts that don't exist in the schedule
-        known_tags = {t.upper() for t in fixture_schedule.fixtures.keys()}
-        unknown_types = {
-            tag for ac in area_counts
-            for tag in ac.counts_by_type.keys()
-            if tag.upper() not in known_tags and tag.upper() != "UNKNOWN"
-        }
-        if unknown_types:
-            emit(f"WARNING: RCP areas reference types not in schedule: {', '.join(sorted(unknown_types))} — may be extraction errors")
-
-        # Rule 6 enforcement: auto-flag any UNKNOWN/TBD type tags Counter didn't self-flag
-        _assumption_keywords = {"UNKNOWN", "TBD", "UNSCHEDULED", "?"}
-        for fc in counter_output.get("fixture_counts", []):
-            if fc.get("type_tag", "").upper() in _assumption_keywords:
-                existing_flags = fc.get("flags", [])
-                if not any("ASSUMPTION" in f for f in existing_flags):
-                    fc.setdefault("flags", []).append("ASSUMPTION: fixture type not identified in schedule")
-                    emit(f"WARNING: Auto-flagged assumption on type_tag '{fc.get('type_tag')}' per Rule 6")
+        # I7: Warn about unknown types; Rule 6: auto-flag assumptions
+        self._warn_unknown_types(area_counts, fixture_schedule, emit)
+        self._apply_rule6_flags(counter_output, emit)
 
         # Checker
         emit("Checker independently reviewing count...")
@@ -699,7 +702,7 @@ class TakeoffEngine:
             "confidence_explanation": format_confidence_explanation(confidence_result),
             "verdict": judge_result.get("verdict"),
             "violations": judge_result.get("violations", []),
-            "flags": judge_result.get("flags", []),
+            "flags": judge_result.get("flags", []) + (reconciler_output.get("flags", []) if reconciler_output else []),
             "ruling_summary": judge_result.get("ruling_summary", ""),
             "adversarial_log": adv_log,
             "agent_counts": {

@@ -11,7 +11,7 @@ from typing import AsyncGenerator, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -132,7 +132,6 @@ async def api_key_guard(request: Request, call_next):
         if request.url.path not in ("/takeoff/health", "/"):
             provided = request.headers.get("X-API-Key", "")
             if provided != _TAKEOFF_API_KEY:
-                from fastapi.responses import JSONResponse
                 return JSONResponse(status_code=403, content={"detail": "Invalid or missing API key"})
     return await call_next(request)
 
@@ -150,6 +149,17 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
     import queue
     import threading
     import time as _time
+
+    # Non-blocking capacity check: try to acquire the semaphore with timeout=0.
+    # This eliminates the TOCTOU race of checking _job_semaphore.locked() then
+    # acquiring later — the acquire is now atomic with the check.
+    _semaphore_acquired = False
+    try:
+        await asyncio.wait_for(_job_semaphore.acquire(), timeout=0.0)
+        _semaphore_acquired = True
+    except asyncio.TimeoutError:
+        yield f"data: {json.dumps({'type': 'error', 'message': f'Server at capacity ({_MAX_CONCURRENT_JOBS} concurrent jobs max). Retry shortly.'})}\n\n"
+        return
 
     # Bounded queue carries status messages AND the final result — no separate
     # result_container list needed, which eliminates the unsynchronized list-read race.
@@ -188,8 +198,7 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
         finally:
             done_event.set()  # always signals completion even on exception
 
-    # Run job in background thread under concurrency semaphore
-    await _job_semaphore.acquire()
+    # Run job in background thread (semaphore already acquired above)
     job_thread = threading.Thread(target=run_job, daemon=True)
     job_thread.start()
 
@@ -260,7 +269,8 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
         print(f"[TAKEOFF API] Error: {error_msg}")
         yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
     finally:
-        _job_semaphore.release()
+        if _semaphore_acquired:
+            _job_semaphore.release()
 
 
 def _format_for_frontend(result: dict) -> dict:
@@ -341,8 +351,11 @@ async def run_takeoff(request: TakeoffRequest):
     if not rcp_snippets:
         raise HTTPException(status_code=400, detail="At least 1 rcp snippet is required")
 
-    if _job_semaphore.locked():
-        raise HTTPException(status_code=429, detail=f"Server at capacity ({_MAX_CONCURRENT_JOBS} concurrent jobs max). Retry shortly.")
+    if request.mode and request.mode not in ("fast", "strict", "liability"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid mode '{request.mode}'. Must be 'fast', 'strict', or 'liability'."
+        )
 
     return StreamingResponse(
         generate_takeoff_stream(request),

@@ -932,16 +932,17 @@ class TestEdgeCases(unittest.TestCase):
         result = validate_grand_total(agent_output)
         self.assertFalse(result.was_corrected)
 
-    def test_validate_grand_total_zero_computed_sum_no_correction(self):
-        """Computed sum = 0 (all totals are 0) → not corrected (avoid division by zero)."""
+    def test_validate_grand_total_zero_computed_sum_corrects_nonzero_grand_total(self):
+        """Computed sum = 0 (all totals are 0) but grand_total > 0 → must correct to 0."""
         from takeoff.agents import validate_grand_total
         agent_output = {
             "fixture_counts": [{"total": 0}, {"total": 0}],
             "grand_total_fixtures": 50
         }
         result = validate_grand_total(agent_output)
-        # Should not raise, and should not correct (computed_total=0 → guard returns early)
-        self.assertFalse(result.was_corrected)
+        # All per-type totals are 0 but grand_total claims 50 — should be corrected.
+        self.assertTrue(result.was_corrected, "Mismatch between per-type sum (0) and grand_total (50) should be corrected")
+        self.assertEqual(result.counts["grand_total_fixtures"], 0)
 
     # --- DB snippet uniqueness warning ---
 
@@ -1504,9 +1505,10 @@ class TestBugFixes3(unittest.TestCase):
         result = _normalize_area_label("Floor 2 (North)")
         self.assertIn("north", result, "Parenthetical direction should be preserved")
 
-    def test_normalize_strips_pure_numeric_suffix(self):
-        """'Level 1 (2)' should strip the pure numeric revision suffix."""
-        self.assertEqual(_normalize_area_label("Level 1 (2)"), "level 1")
+    def test_normalize_preserves_pure_numeric_parenthetical(self):
+        """'Level 1 (2)' must NOT strip (2) — it's a location identifier, not a copy marker.
+        Bug fix: the old regex stripped bare digits, mangling real area names like 'Floor (2)'."""
+        self.assertEqual(_normalize_area_label("Level 1 (2)"), "level 1 (2)")
 
     def test_normalize_strips_v_number_suffix(self):
         """'Level 1 (v2)' should strip the version suffix."""
@@ -2135,6 +2137,341 @@ class TestBugFixes4(unittest.TestCase):
 
         self.assertEqual(result.get("error"), "blank_drawing",
                          f"Expected blank_drawing but got: {result.get('error')}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Audit Round 5 Bug Fixes
+# ══════════════════════════════════════════════════════════════════════
+
+class TestBugFixes5(unittest.TestCase):
+    """Tests for audit round-5 bug fixes."""
+
+    # ── Fix 1: Reconciler deviation flag surfaces in final output ─────
+
+    def test_reconciler_deviation_flag_in_final_output(self):
+        """Reconciler >20% deviation flag must appear in result['flags'], not only reconciler_output."""
+        import json
+        import tempfile
+        from unittest.mock import MagicMock, patch
+        from takeoff.engine import TakeoffEngine
+        from takeoff.extraction import FixtureSchedule, AreaCount
+
+        router = MagicMock()
+        router.get_stats.return_value = {"model_router_cost_usd": 0.0}
+
+        counter_json = json.dumps({
+            "fixture_counts": [{"type_tag": "A", "total": 100, "counts_by_area": {"Hall": 100}, "flags": []}],
+            "areas_covered": ["Hall"],
+            "grand_total_fixtures": 100,
+            "reasoning": "ok"
+        })
+        checker_json = json.dumps({"attacks": [], "total_attacks": 0, "critical_count": 0, "summary": "ok"})
+        # Reconciler drastically revises total: 100 → 200 (+100%, > 20% threshold)
+        reconciler_json = json.dumps({
+            "responses": [],
+            "revised_fixture_counts": {"A": {"total": 200, "delta": "+100", "reason": "added missing area"}},
+            "revised_grand_total": 200,
+            "notes_compliance": [],
+            "reasoning": "found big discrepancy"
+        })
+        judge_json = json.dumps({
+            "verdict": "WARN", "violations": [], "approved_counts": {}, "flags": [], "ruling_summary": "ok"
+        })
+        router.complete.side_effect = [
+            MagicMock(content=counter_json),
+            MagicMock(content=checker_json),
+            MagicMock(content=reconciler_json),
+            MagicMock(content=judge_json),
+        ]
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        engine = TakeoffEngine(db_path=db_path, model_router=router)
+
+        import base64
+        dummy_image = base64.b64encode(b"fake").decode()
+        mock_fs = FixtureSchedule()
+        mock_fs.fixtures = {"A": {"description": "Troffer"}}
+        mock_ac = AreaCount(area_label="Hall", counts_by_type={"A": 100})
+
+        with patch("takeoff.engine.extract_fixture_schedule", return_value=mock_fs), \
+             patch("takeoff.engine.extract_rcp_counts", return_value=mock_ac), \
+             patch("takeoff.engine.extract_plan_notes", return_value=[]):
+            snippets = [
+                {"id": "s1", "label": "fixture_schedule", "image_data": dummy_image},
+                {"id": "s2", "label": "rcp", "sub_label": "Hall", "image_data": dummy_image},
+            ]
+            result = engine.run_takeoff(snippets=snippets, mode="strict")
+
+        flags = result.get("flags", [])
+        deviation_flags = [f for f in flags if "deviat" in f.lower() or "reconciler" in f.lower()]
+        self.assertTrue(
+            len(deviation_flags) > 0,
+            f"Expected a reconciler deviation flag in result flags, got: {flags}"
+        )
+
+    # ── Fix 2: Missing image_data emits warning but doesn't crash ─────
+
+    def test_missing_image_data_emits_warning(self):
+        """Snippet with empty image_data should emit a warning message via status_callback."""
+        import json
+        import tempfile
+        from unittest.mock import MagicMock, patch
+        from takeoff.engine import TakeoffEngine
+        from takeoff.extraction import FixtureSchedule, AreaCount
+
+        router = MagicMock()
+        router.get_stats.return_value = {"model_router_cost_usd": 0.0}
+        counter_json = json.dumps({
+            "fixture_counts": [{"type_tag": "A", "total": 5, "counts_by_area": {"Hall": 5}, "flags": []}],
+            "areas_covered": ["Hall"], "grand_total_fixtures": 5, "reasoning": "ok"
+        })
+        checker_json = json.dumps({"attacks": [], "total_attacks": 0, "critical_count": 0, "summary": "ok"})
+        judge_json = json.dumps({"verdict": "PASS", "violations": [], "approved_counts": {}, "flags": [], "ruling_summary": "ok"})
+        router.complete.side_effect = [
+            MagicMock(content=counter_json),
+            MagicMock(content=checker_json),
+            MagicMock(content=judge_json),
+        ]
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        engine = TakeoffEngine(db_path=db_path, model_router=router)
+
+        import base64
+        dummy_image = base64.b64encode(b"fake").decode()
+        mock_fs = FixtureSchedule()
+        mock_fs.fixtures = {"A": {"description": "Troffer"}}
+        mock_ac = AreaCount(area_label="Hall", counts_by_type={"A": 5})
+
+        emitted = []
+
+        with patch("takeoff.engine.extract_fixture_schedule", return_value=mock_fs), \
+             patch("takeoff.engine.extract_rcp_counts", return_value=mock_ac), \
+             patch("takeoff.engine.extract_plan_notes", return_value=[]):
+            snippets = [
+                {"id": "s1", "label": "fixture_schedule", "image_data": dummy_image},
+                {"id": "s2", "label": "rcp", "sub_label": "Hall", "image_data": dummy_image},
+                {"id": "s3", "label": "plan_notes", "image_data": ""},  # empty!
+            ]
+            result = engine.run_takeoff(snippets=snippets, mode="fast", status_callback=emitted.append)
+
+        warning_msgs = [m for m in emitted if "empty" in m.lower() or "missing" in m.lower()]
+        self.assertTrue(len(warning_msgs) > 0,
+                        f"Expected a warning about empty image_data, got: {emitted}")
+
+    # ── Fix 3: Model router exception → agent_parse_error, not blank_drawing ──
+
+    def test_model_router_exception_classified_as_parse_error(self):
+        """When model_router.complete() raises (network/rate-limit error), result must be agent_parse_error."""
+        import tempfile
+        from unittest.mock import MagicMock, patch
+        from takeoff.engine import TakeoffEngine
+        from takeoff.extraction import FixtureSchedule, AreaCount
+
+        router = MagicMock()
+        router.get_stats.return_value = {"model_router_cost_usd": 0.0}
+        # model_router.complete() raises a network error
+        router.complete.side_effect = ConnectionError("API unreachable")
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        engine = TakeoffEngine(db_path=db_path, model_router=router)
+
+        import base64
+        dummy_image = base64.b64encode(b"fake").decode()
+        mock_fs = FixtureSchedule()
+        mock_fs.fixtures = {"A": {"description": "Troffer"}}
+        mock_ac = AreaCount(area_label="Hall", counts_by_type={"A": 5})
+
+        with patch("takeoff.engine.extract_fixture_schedule", return_value=mock_fs), \
+             patch("takeoff.engine.extract_rcp_counts", return_value=mock_ac), \
+             patch("takeoff.engine.extract_plan_notes", return_value=[]):
+            snippets = [
+                {"id": "s1", "label": "fixture_schedule", "image_data": dummy_image},
+                {"id": "s2", "label": "rcp", "sub_label": "Hall", "image_data": dummy_image},
+            ]
+            result = engine.run_takeoff(snippets=snippets, mode="fast")
+
+        self.assertEqual(result.get("error"), "agent_parse_error",
+                         f"Model router exception should produce 'agent_parse_error', got: {result.get('error')}")
+
+    # ── Fix 4: _normalize_area_label does NOT strip meaningful numbers ──
+
+    def test_normalize_area_label_preserves_numeric_location(self):
+        """'Floor (2)' must normalize to 'floor (2)', not 'floor' — (2) is a location, not a copy marker."""
+        self.assertEqual(_normalize_area_label("Floor (2)"), "floor (2)")
+        self.assertEqual(_normalize_area_label("Level (3)"), "level (3)")
+
+    def test_normalize_area_label_still_strips_copy_suffixes(self):
+        """Copy/revision suffixes (Copy), (Rev A), (v2) must still be stripped."""
+        self.assertEqual(_normalize_area_label("Floor 2 North (Copy)"), "floor 2 north")
+        self.assertEqual(_normalize_area_label("Level 1 (Rev A)"), "level 1")
+        self.assertEqual(_normalize_area_label("Wing B (v2)"), "wing b")
+
+    # ── Fix 5: Adversarial log rowcount warning (DB layer) ───────────
+
+    def test_adversarial_log_update_orphan_warning_is_logged(self):
+        """If reconciler response references unknown attack_id, a warning must be logged."""
+        import logging
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        db = TakeoffDB(db_path=db_path)
+        db.create_job("test-job", mode="strict")
+        # Store an attack with ID 'ATK-001'
+        db.store_adversarial_log(
+            job_id="test-job",
+            attacks=[{"attack_id": "ATK-001", "severity": "major", "category": "missed_area",
+                       "description": "missed hall"}],
+            reconciler_responses=[
+                # Valid response
+                {"attack_id": "ATK-001", "verdict": "concede", "explanation": "correct"},
+                # Orphaned response — attack_id doesn't exist
+                {"attack_id": "ATK-999", "verdict": "concede", "explanation": "orphan"},
+            ]
+        )
+        # Verify ATK-001 was updated correctly
+        log = db.get_job_adversarial_log("test-job")
+        atk001 = next((r for r in log if r["attack_id"] == "ATK-001"), None)
+        self.assertIsNotNone(atk001)
+        self.assertEqual(atk001["final_verdict"], "concede")
+        db.close()
+
+    # ── Fix 6: Checker dedup normalizes category case ─────────────────
+
+    def test_checker_dedup_normalizes_category_case(self):
+        """Checker dedup must treat 'missed_area' and 'MISSED_AREA' as the same category."""
+        from takeoff.agents import Checker
+        from unittest.mock import MagicMock
+        import json as _json
+
+        attacks_with_case_variants = _json.dumps({
+            "attacks": [
+                {"attack_id": "ATK-001", "severity": "critical", "category": "missed_area",
+                 "affected_type_tag": "A", "affected_area": "hall", "description": "d1",
+                 "suggested_correction": "fix", "evidence": "ev"},
+                {"attack_id": "ATK-002", "severity": "minor", "category": "MISSED_AREA",
+                 "affected_type_tag": "A", "affected_area": "hall", "description": "d2",
+                 "suggested_correction": "fix", "evidence": "ev"},
+            ],
+            "total_attacks": 2, "critical_count": 1, "summary": "test"
+        })
+        router = MagicMock()
+        router.complete.return_value = MagicMock(content=attacks_with_case_variants)
+
+        from takeoff.extraction import FixtureSchedule
+        checker = Checker(router)
+        fs = FixtureSchedule()
+        fs.fixtures = {"A": {"description": "Troffer"}}
+        response = checker.generate_attacks(
+            counter_output={"fixture_counts": [], "areas_covered": [], "grand_total_fixtures": 0},
+            fixture_schedule=fs, area_counts=[], plan_notes=[]
+        )
+        attacks = response.data.get("attacks", [])
+        self.assertEqual(len(attacks), 1, "Case-insensitive dedup should collapse to 1 attack")
+        self.assertEqual(attacks[0].get("severity"), "critical", "Must keep highest-severity (critical)")
+
+    # ── Fix 7: validate_grand_total corrects all-zero totals with non-zero grand_total ──
+
+    def test_validate_grand_total_corrects_all_zero_with_nonzero_grand_total(self):
+        """If all per-type totals are 0 but grand_total_fixtures is non-zero, correct it."""
+        from takeoff.agents import validate_grand_total
+        agent_output = {
+            "fixture_counts": [
+                {"type_tag": "A", "total": 0},
+                {"type_tag": "B", "total": 0},
+            ],
+            "grand_total_fixtures": 42,  # non-zero grand total with all-zero types
+        }
+        result = validate_grand_total(agent_output, "TEST")
+        self.assertTrue(result.was_corrected, "Should detect mismatch and correct")
+        self.assertEqual(result.counts["grand_total_fixtures"], 0,
+                         "grand_total should be corrected to match per-type sum (0)")
+
+    def test_validate_grand_total_genuine_zero_not_corrected(self):
+        """All-zero per-type totals with zero grand_total should NOT be corrected."""
+        from takeoff.agents import validate_grand_total
+        agent_output = {
+            "fixture_counts": [{"type_tag": "A", "total": 0}],
+            "grand_total_fixtures": 0,
+        }
+        result = validate_grand_total(agent_output, "TEST")
+        self.assertFalse(result.was_corrected)
+
+    # ── Fix 8: Engine validates mode before processing ─────────────────
+
+    def test_engine_rejects_invalid_mode(self):
+        """Engine must raise ValueError for invalid mode values."""
+        import tempfile
+        from takeoff.engine import TakeoffEngine
+        from unittest.mock import MagicMock
+        import base64
+
+        router = MagicMock()
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        engine = TakeoffEngine(db_path=db_path, model_router=router)
+
+        dummy_image = base64.b64encode(b"fake").decode()
+        with self.assertRaises(ValueError, msg="Invalid mode should raise ValueError"):
+            engine.run_takeoff(
+                snippets=[
+                    {"id": "s1", "label": "fixture_schedule", "image_data": dummy_image},
+                    {"id": "s2", "label": "rcp", "image_data": dummy_image},
+                ],
+                mode="ultra-fast"
+            )
+
+    # ── Fix 9: Engine helper methods extracted (Counter + Rule6) ──────
+
+    def test_engine_has_counter_phase_helper(self):
+        """TakeoffEngine must expose _run_counter_phase helper used by both fast and strict modes."""
+        import tempfile
+        from takeoff.engine import TakeoffEngine
+        from unittest.mock import MagicMock
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        engine = TakeoffEngine(db_path=db_path, model_router=MagicMock())
+        self.assertTrue(hasattr(engine, "_run_counter_phase"), "Engine must have _run_counter_phase method")
+        self.assertTrue(hasattr(engine, "_warn_unknown_types"), "Engine must have _warn_unknown_types method")
+        self.assertTrue(hasattr(engine, "_apply_rule6_flags"), "Engine must have _apply_rule6_flags method")
+
+    # ── Fix 10: Schema uses difficulty_code key correctly ─────────────
+
+    def test_schema_stores_difficulty_code_from_fixture_count(self):
+        """store_job_results_atomic must store difficulty_code field, not 'difficulty' alias."""
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        db = TakeoffDB(db_path=db_path)
+        db.create_job("test-dc-job", mode="fast")
+        fixture_counts = [
+            {
+                "type_tag": "A",
+                "difficulty_code": "D",  # use the correct key
+                "counts_by_area": {"Hall": 5},
+                "flags": [],
+            }
+        ]
+        db.store_job_results_atomic(
+            job_id="test-dc-job",
+            fixture_counts=fixture_counts,
+            attacks=[],
+            reconciler_responses=[],
+            grand_total=5,
+            confidence_score=0.75,
+            confidence_band="MODERATE",
+            confidence_features="{}",
+            violations=[],
+            flags=[],
+            judge_verdict="PASS",
+        )
+        rows = db.get_job_counts("test-dc-job")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["difficulty_code"], "D",
+                         f"Expected difficulty_code='D', got: {rows[0]['difficulty_code']}")
+        db.close()
 
 
 # ══════════════════════════════════════════════════════════════════════

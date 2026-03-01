@@ -152,7 +152,7 @@ def _normalize_area_label(label: str) -> str:
     # Only strip known revision/copy suffixes, not meaningful location parentheticals.
     # Patterns: (copy), (rev A), (rev. 2), (revision 1), (v2), (1), (2) — pure numeric
     label = re.sub(
-        r"\s*\((copy|rev\.?\s*\w*|revision\s*\w*|v\d+|\d+)\)\s*$",
+        r"\s*\((copy|rev\.?\s*\w*|revision\s*\w*|v\d+)\)\s*$",
         "", label, flags=re.IGNORECASE
     ).strip()
     return label

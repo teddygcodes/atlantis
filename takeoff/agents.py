@@ -143,7 +143,7 @@ Produce the complete fixture count. Aggregate all per-area counts, assign diffic
             )
         except Exception as e:
             print(f"[COUNTER] ERROR: Model router failed: {e}")
-            return TakeoffResponse(agent_role="counter", data={}, raw_response=f"[MODEL ERROR: {e}]")
+            return TakeoffResponse(agent_role="counter", data={}, raw_response=f"[MODEL ERROR: {e}]", parse_error=True)
 
         try:
             data = extract_json_from_response(response.content, "COUNTER")
@@ -311,7 +311,7 @@ Check for: missed areas, double-counted overlapping views, wrong fixture type as
             seen_attacks: dict = {}
             for attack in attacks:
                 key = (
-                    attack.get("category", ""),
+                    (attack.get("category") or "").lower(),
                     (attack.get("affected_type_tag") or "").upper(),
                     (attack.get("affected_area") or "").lower().strip()
                 )
@@ -651,6 +651,15 @@ def validate_grand_total(agent_output: dict, agent_name: str = "Agent") -> Grand
 
     computed_total = sum(fc.get("total", 0) for fc in fixture_counts)
     if computed_total == 0:
+        if reported_total > 0:
+            # All per-type totals are zero but grand_total claims non-zero — correct it.
+            print(
+                f"[{agent_name}] WARNING: grand_total_fixtures={reported_total} "
+                f"but all per-type totals are 0. Correcting grand_total to 0."
+            )
+            corrected = dict(agent_output)
+            corrected["grand_total_fixtures"] = 0
+            return GrandTotalResult(counts=corrected, was_corrected=True)
         return GrandTotalResult(counts=agent_output, was_corrected=False)
 
     discrepancy = abs(reported_total - computed_total) / computed_total
