@@ -177,31 +177,37 @@ def check_complete_coverage(areas_covered: list, rcp_snippets: list) -> list:
 
 
 def check_no_double_counting(fixture_counts: list, fixture_schedule: dict) -> list:
-    """Check that area-level counts don't exceed schedule quantities by >10%.
+    """Check that area subtotals don't exceed the reported total by >10%.
+
+    A discrepancy where sum(counts_by_area) > total * 1.10 suggests double-counting
+    from overlapping detail views or repeated sections.
 
     Args:
-        fixture_counts: List of fixture count dicts with type_tag and total fields
-        fixture_schedule: Dict with 'fixtures' mapping type_tag -> info
+        fixture_counts: List of fixture count dicts with type_tag, total, counts_by_area
+        fixture_schedule: Not used; kept for API consistency with other check functions
 
     Returns:
         List of violations
     """
     violations = []
-    fixtures = fixture_schedule.get("fixtures", {})
 
-    for tag, info in fixtures.items():
-        schedule_qty = info.get("quantity", 0) if isinstance(info, dict) else 0
-        if not schedule_qty:
+    for fc in fixture_counts:
+        tag = fc.get("type_tag", "")
+        total = fc.get("total", 0)
+        counts_by_area = fc.get("counts_by_area", {})
+
+        if not counts_by_area or not total:
             continue
-        area_total = sum(
-            fc.get("total", 0) for fc in fixture_counts
-            if fc.get("type_tag", "").upper() == tag.upper()
-        )
-        if area_total > schedule_qty * 1.10:
+
+        area_sum = sum(counts_by_area.values())
+        if area_sum > total * 1.10:
             violations.append({
                 "rule": "No Double-Counting",
                 "severity": "MAJOR",
-                "explanation": f"Type {tag}: area counts total {area_total} but schedule shows {schedule_qty} (>10% over — possible double-count)"
+                "explanation": (
+                    f"Type {tag}: area subtotals sum to {area_sum} but reported total is {total} "
+                    f"(>10% over — possible double-count from overlapping views)"
+                )
             })
 
     return violations

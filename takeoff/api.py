@@ -75,8 +75,9 @@ async def lifespan(app: FastAPI):
             model="claude-haiku-4-5-20251001",
             task_type="takeoff_test"
         )
-        if "[LLM ERROR" in test_response.content:
-            raise RuntimeError(f"Anthropic API test failed: {test_response.content}")
+        content = test_response.content or ""
+        if not content or content.startswith("[LLM ERROR"):
+            raise RuntimeError(f"Anthropic API test returned error: {content}")
         print("[TAKEOFF API] ✓ Anthropic API key verified")
     except Exception as e:
         raise RuntimeError(f"Anthropic API verification failed: {e}")
@@ -93,6 +94,9 @@ async def lifespan(app: FastAPI):
     yield
 
     print("[TAKEOFF API] Shutting down...")
+    if engine and engine.db:
+        engine.db.close()
+        print("[TAKEOFF API] ✓ Database connection closed")
 
 
 # ─── FastAPI App ──────────────────────────────────────────────────────────────
@@ -124,9 +128,11 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
     """Generate SSE stream for a takeoff job."""
     import queue
     import threading
+    import time as _time
 
     status_queue = queue.Queue()
     result_container = []
+    done_event = threading.Event()  # set in finally so always fires on thread exit
 
     def status_callback(message: str):
         status_queue.put({"type": "status", "message": message})
@@ -145,12 +151,17 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
             status_queue.put({"type": "done"})
         except Exception as e:
             status_queue.put({"type": "error", "message": str(e)})
+        finally:
+            done_event.set()  # always signals completion even on exception
 
     # Run job in background thread
     job_thread = threading.Thread(target=run_job, daemon=True)
     job_thread.start()
 
-    # Stream status updates
+    # Stream status updates with 10-minute hard timeout
+    MAX_WAIT_SECONDS = 600
+    start_time = _time.time()
+
     try:
         while True:
             try:
@@ -164,6 +175,13 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
                 elif msg["type"] == "done":
                     break
             except queue.Empty:
+                # Thread finished but sent nothing — exit loop
+                if done_event.is_set():
+                    break
+                # Hard timeout guard
+                if _time.time() - start_time > MAX_WAIT_SECONDS:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'Takeoff pipeline timed out after 10 minutes'})}\n\n"
+                    return
                 await asyncio.sleep(0.05)
 
         if not result_container:
@@ -197,7 +215,7 @@ def _format_for_frontend(result: dict) -> dict:
         "grand_total": result.get("grand_total", 0),
         "fixture_table": result.get("fixture_table", []),
         "areas_covered": result.get("areas_covered", []),
-        "confidence": result.get("confidence_band", "UNKNOWN"),
+        "confidence_band": result.get("confidence_band", "UNKNOWN"),
         "confidence_score": result.get("confidence", 0.0),
         "confidence_explanation": result.get("confidence_explanation", ""),
         "verdict": result.get("verdict", "UNKNOWN"),

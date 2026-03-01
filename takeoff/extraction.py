@@ -18,6 +18,12 @@ try:
     HAS_ANTHROPIC = True
 except ImportError:
     HAS_ANTHROPIC = False
+    import sys
+    print(
+        "[TAKEOFF WARNING] 'anthropic' package not installed. "
+        "Vision extraction will fail at runtime. Run: pip install anthropic",
+        file=sys.stderr
+    )
 
 
 # ─── Data Classes ───────────────────────────────────────────────────────────
@@ -126,7 +132,7 @@ def _get_vision_client() -> 'anthropic.Anthropic':
             "[TAKEOFF] FATAL: ANTHROPIC_API_KEY not set. "
             "Cannot run vision extraction. Set the key and retry."
         )
-    return anthropic.Anthropic(api_key=api_key)
+    return anthropic.Anthropic(api_key=api_key, timeout=30.0)
 
 
 def _call_vision(
@@ -136,7 +142,7 @@ def _call_vision(
     image_base64: str,
     max_tokens: int = 3000,
     temperature: float = 0.0,
-    model: str = "claude-sonnet-4-5-20250929"
+    model: Optional[str] = None
 ) -> str:
     """Send a vision request to Claude Sonnet.
 
@@ -152,6 +158,9 @@ def _call_vision(
     Returns:
         Response text content
     """
+    if model is None:
+        model = os.getenv("TAKEOFF_VISION_MODEL", "claude-sonnet-4-5-20250929")
+
     # Strip data URI prefix if present
     if image_base64.startswith("data:"):
         image_base64 = image_base64.split(",", 1)[1]
@@ -189,7 +198,7 @@ def _call_vision_with_retry(
     image_base64: str,
     max_tokens: int = 3000,
     temperature: float = 0.0,
-    model: str = "claude-sonnet-4-5-20250929",
+    model: Optional[str] = None,
     max_retries: int = 2
 ) -> str:
     """Call vision API with retry on transient failures (2 retries, 2s delay)."""

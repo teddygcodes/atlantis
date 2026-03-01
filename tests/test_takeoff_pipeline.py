@@ -30,6 +30,8 @@ from takeoff.constitution import (
     check_schedule_traceability,
     check_complete_coverage,
     check_emergency_fixtures,
+    check_no_double_counting,
+    check_cross_sheet_consistency,
     get_constitution,
 )
 from takeoff.confidence import (
@@ -540,6 +542,156 @@ class TestEnginePipelineValidation(unittest.TestCase):
                 self.assertLessEqual(result["confidence_score"], 1.0)
         finally:
             os.unlink(db_path)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 6. Programmatic Constitutional Rules (M7)
+# ══════════════════════════════════════════════════════════════════════
+
+class TestProgrammaticConstitutionalRules(unittest.TestCase):
+    """Tests for check_no_double_counting and check_cross_sheet_consistency."""
+
+    def test_no_double_counting_clean(self):
+        """Area subtotals equal reported total → no violation."""
+        violations = check_no_double_counting(VALID_FIXTURE_COUNTS_LIST, SAMPLE_FIXTURE_SCHEDULE)
+        self.assertEqual(violations, [], f"Expected no violations, got: {violations}")
+
+    def test_no_double_counting_detected(self):
+        """Sum of counts_by_area > total * 1.10 → MAJOR violation."""
+        inflated = [
+            {
+                "type_tag": "A",
+                "total": 10,
+                "counts_by_area": {"Zone 1": 10, "Zone 2": 5},  # sum=15, >10% over total=10
+            }
+        ]
+        violations = check_no_double_counting(inflated, {})
+        self.assertTrue(len(violations) > 0, "Expected double-count violation")
+        self.assertTrue(any("A" in str(v) for v in violations))
+        self.assertEqual(violations[0]["severity"], "MAJOR")
+
+    def test_no_double_counting_within_tolerance(self):
+        """Sum of counts_by_area ≤ total * 1.10 → no violation."""
+        ok_counts = [
+            {
+                "type_tag": "B",
+                "total": 10,
+                "counts_by_area": {"Zone 1": 10},  # sum==total, no problem
+            }
+        ]
+        violations = check_no_double_counting(ok_counts, {})
+        self.assertEqual(violations, [])
+
+    def test_no_double_counting_empty_counts(self):
+        """Empty fixture_counts → no violations."""
+        violations = check_no_double_counting([], {})
+        self.assertEqual(violations, [])
+
+    def test_cross_sheet_consistency_clean(self):
+        """Same type+area appears only once → no violations."""
+        violations = check_cross_sheet_consistency(VALID_FIXTURE_COUNTS_LIST)
+        self.assertEqual(violations, [], f"Expected no violations, got: {violations}")
+
+    def test_cross_sheet_conflict_detected(self):
+        """Same type+area with different counts → MAJOR violation."""
+        conflicting = [
+            {"type_tag": "A", "counts_by_area": {"Open Office North": 18}},
+            {"type_tag": "A", "counts_by_area": {"Open Office North": 20}},  # conflict!
+        ]
+        violations = check_cross_sheet_consistency(conflicting)
+        self.assertTrue(len(violations) > 0, "Expected cross-sheet conflict violation")
+        self.assertEqual(violations[0]["severity"], "MAJOR")
+
+    def test_cross_sheet_no_conflict_different_areas(self):
+        """Same type in different areas → no violation."""
+        ok = [
+            {"type_tag": "A", "counts_by_area": {"Zone 1": 10}},
+            {"type_tag": "A", "counts_by_area": {"Zone 2": 5}},  # different area, no conflict
+        ]
+        violations = check_cross_sheet_consistency(ok)
+        self.assertEqual(violations, [])
+
+    def test_cross_sheet_empty_counts(self):
+        """Empty fixture_counts → no violations."""
+        violations = check_cross_sheet_consistency([])
+        self.assertEqual(violations, [])
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 7. Reconciler Concede/Defend/Partial Logic (L6)
+# ══════════════════════════════════════════════════════════════════════
+
+class TestReconcilerLogic(unittest.TestCase):
+    """Tests for Reconciler agent concede/defend/partial response parsing."""
+
+    def test_concede_defend_partial_counts(self):
+        """Count verdicts from a list of reconciler responses."""
+        responses = [
+            {"attack_id": "ATK-001", "verdict": "concede", "explanation": "Valid — area was missed"},
+            {"attack_id": "ATK-002", "verdict": "defend", "explanation": "Counter was correct"},
+            {"attack_id": "ATK-003", "verdict": "partial", "explanation": "Partly valid"},
+        ]
+        concessions = sum(1 for r in responses if r.get("verdict") == "concede")
+        defenses = sum(1 for r in responses if r.get("verdict") == "defend")
+        partials = sum(1 for r in responses if r.get("verdict") == "partial")
+        self.assertEqual(concessions, 1)
+        self.assertEqual(defenses, 1)
+        self.assertEqual(partials, 1)
+
+    def test_unresolved_attack_count(self):
+        """Attacks not matched in reconciler responses are unresolved."""
+        attacks = [{"attack_id": f"ATK-{i:03d}"} for i in range(5)]
+        responses = [{"attack_id": "ATK-000"}, {"attack_id": "ATK-001"}]
+        resolved_ids = {r.get("attack_id") for r in responses}
+        attack_ids = {a.get("attack_id") for a in attacks}
+        unresolved = attack_ids - resolved_ids
+        self.assertEqual(len(unresolved), 3)
+
+    def test_empty_attacks_no_unresolved(self):
+        """No attacks → no unresolved."""
+        attacks = []
+        responses = []
+        resolved_ids = {r.get("attack_id") for r in responses}
+        attack_ids = {a.get("attack_id") for a in attacks}
+        unresolved = attack_ids - resolved_ids
+        self.assertEqual(len(unresolved), 0)
+
+    def test_confidence_adversarial_resolved_feature(self):
+        """Reconciler responses covering all attacks → adversarial_resolved = 1.0."""
+        attacks = [{"attack_id": "ATK-001"}, {"attack_id": "ATK-002"}]
+        responses = [{"attack_id": "ATK-001"}, {"attack_id": "ATK-002"}]
+        result = calculate_confidence(
+            fixture_counts=VALID_FIXTURE_COUNTS_LIST,
+            areas_covered=VALID_AREAS_COVERED,
+            rcp_snippets=SAMPLE_RCP_SNIPPETS,
+            fixture_schedule=SAMPLE_FIXTURE_SCHEDULE,
+            checker_attacks=attacks,
+            reconciler_responses=responses,
+            constitutional_violations=[],
+            mode="strict",
+            has_panel_schedule=False,
+            has_plan_notes=False,
+            notes_addressed=False,
+        )
+        self.assertEqual(result["features"]["adversarial_resolved"], 1.0)
+
+    def test_confidence_unresolved_attacks_penalized(self):
+        """Attacks with no reconciler responses → adversarial_resolved = 0.0."""
+        attacks = [{"attack_id": "ATK-001"}, {"attack_id": "ATK-002"}]
+        result = calculate_confidence(
+            fixture_counts=VALID_FIXTURE_COUNTS_LIST,
+            areas_covered=VALID_AREAS_COVERED,
+            rcp_snippets=SAMPLE_RCP_SNIPPETS,
+            fixture_schedule=SAMPLE_FIXTURE_SCHEDULE,
+            checker_attacks=attacks,
+            reconciler_responses=[],  # fast mode — no Reconciler
+            constitutional_violations=[],
+            mode="fast",
+            has_panel_schedule=False,
+            has_plan_notes=False,
+            notes_addressed=False,
+        )
+        self.assertEqual(result["features"]["adversarial_resolved"], 0.0)
 
 
 # ══════════════════════════════════════════════════════════════════════

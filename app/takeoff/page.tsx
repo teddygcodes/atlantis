@@ -52,6 +52,9 @@ export default function TakeoffPage() {
       setPipelineStatus("Initializing pipeline...");
       setPanelMode("results");
 
+      // H3: 5-minute hard timeout on the SSE stream
+      let sseTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
       try {
         const res = await fetch("/api/takeoff", {
           method: "POST",
@@ -75,6 +78,14 @@ export default function TakeoffPage() {
 
         const reader = res.body?.getReader();
         if (!reader) throw new Error("No response stream");
+
+        // Set 5-minute timeout — aborts fetch if pipeline hangs
+        sseTimeoutId = setTimeout(() => {
+          setError("Takeoff pipeline timed out after 5 minutes");
+          setIsRunning(false);
+          setPipelineStatus("");
+          controller.abort();
+        }, 5 * 60 * 1000);
 
         const decoder = new TextDecoder();
         let buffer = "";
@@ -122,6 +133,8 @@ export default function TakeoffPage() {
           setIsRunning(false);
           setPipelineStatus("");
         }
+      } finally {
+        if (sseTimeoutId !== null) clearTimeout(sseTimeoutId);
       }
     },
     [isRunning, snippets]

@@ -130,6 +130,17 @@ class TakeoffEngine:
                     fixture_schedule.raw_notes = extracted.raw_notes
 
         emit(f"Fixture schedule: {len(fixture_schedule.fixtures)} type tags extracted")
+
+        # H2: Fail loudly if extraction produced no fixtures (API error, blank image, etc.)
+        if not fixture_schedule.fixtures:
+            warning_text = "; ".join(fixture_schedule.warnings) if fixture_schedule.warnings else "unknown reason"
+            emit(f"ERROR: Fixture schedule extraction yielded 0 fixtures — {warning_text}")
+            return {
+                "job_id": job_id,
+                "error": "extraction_failed",
+                "message": f"Fixture schedule extraction failed — no fixture types found. {warning_text}"
+            }
+
         self.db.store_fixture_schedule(job_id, {"fixtures": fixture_schedule.fixtures})
 
         # ─── Step 3: Extract RCP counts ───────────────────────────────────────
@@ -172,10 +183,7 @@ class TakeoffEngine:
                 rcp_snippets, emit, start_time, mode
             )
         else:
-            result = self._run_fast_mode(
-                job_id, fixture_schedule, area_counts, plan_notes, panel_data,
-                rcp_snippets, emit, start_time
-            )
+            raise ValueError(f"Unknown mode '{mode}'. Must be 'fast', 'strict', or 'liability'.")
 
         # Update job status
         elapsed_ms = int((time.time() - start_time) * 1000)
@@ -251,7 +259,12 @@ class TakeoffEngine:
             notes_addressed=(
                 len(plan_notes) == 0 or
                 any(
-                    note.text.lower()[:40] in counter_response.reasoning.lower()
+                    note.text.lower()[:50] in (counter_response.reasoning or "").lower()
+                    or any(
+                        kw in (counter_response.reasoning or "").lower()
+                        for kw in note.text.lower().split()
+                        if len(kw) > 5
+                    )
                     for note in plan_notes
                     if note.text
                 )
@@ -351,7 +364,12 @@ class TakeoffEngine:
             notes_addressed=(
                 len(plan_notes) == 0 or
                 any(
-                    note.text.lower()[:40] in counter_response.reasoning.lower()
+                    note.text.lower()[:50] in (counter_response.reasoning or "").lower()
+                    or any(
+                        kw in (counter_response.reasoning or "").lower()
+                        for kw in note.text.lower().split()
+                        if len(kw) > 5
+                    )
                     for note in plan_notes
                     if note.text
                 )

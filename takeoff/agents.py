@@ -130,12 +130,16 @@ PANEL LOAD DATA:
 
 Produce the complete fixture count. Aggregate all per-area counts, assign difficulty codes, list accessories, and flag any issues."""
 
-        response = self.model_router.complete(
-            task_type="takeoff_counter",
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            max_tokens=4000
-        )
+        try:
+            response = self.model_router.complete(
+                task_type="takeoff_counter",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=4000
+            )
+        except Exception as e:
+            print(f"[COUNTER] ERROR: Model router failed: {e}")
+            return TakeoffResponse(agent_role="counter", data={}, raw_response=f"[MODEL ERROR: {e}]")
 
         try:
             data = extract_json_from_response(response.content, "COUNTER")
@@ -203,8 +207,8 @@ class Checker:
         # Panel cross-reference
         panel_text = "No panel data."
         if panel_data and panel_data.total_load_va:
-            # Heuristic: round numbers < 10000 that are multiples of 100 look like watts, not VA
-            if panel_data.total_load_va % 100 == 0 and panel_data.total_load_va < 10000:
+            # Heuristic: small round thousands likely entered as watts instead of VA
+            if panel_data.total_load_va % 1000 == 0 and panel_data.total_load_va < 5000:
                 print(f"[CHECKER] WARNING: Panel load {panel_data.total_load_va} may be in watts, not VA. Verify units.")
             # Estimate counter wattage
             estimated_va = 0
@@ -275,12 +279,16 @@ Panel cross-reference:
 
 Check for: missed areas, double-counted overlapping views, wrong fixture type assignments, missing fixture types that likely exist, math errors, missing accessories, emergency fixture gaps, and plan note violations."""
 
-        response = self.model_router.complete(
-            task_type="takeoff_checker",
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            max_tokens=3000
-        )
+        try:
+            response = self.model_router.complete(
+                task_type="takeoff_checker",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=3000
+            )
+        except Exception as e:
+            print(f"[CHECKER] ERROR: Model router failed: {e}")
+            return TakeoffResponse(agent_role="checker", data={"attacks": []}, raw_response=f"[MODEL ERROR: {e}]")
 
         try:
             data = extract_json_from_response(response.content, "CHECKER")
@@ -404,12 +412,16 @@ Checker's attacks:
 
 Address each attack and provide revised counts."""
 
-        response = self.model_router.complete(
-            task_type="takeoff_reconciler",
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            max_tokens=3000
-        )
+        try:
+            response = self.model_router.complete(
+                task_type="takeoff_reconciler",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=3000
+            )
+        except Exception as e:
+            print(f"[RECONCILER] ERROR: Model router failed: {e}")
+            return TakeoffResponse(agent_role="reconciler", data={}, raw_response=f"[MODEL ERROR: {e}]")
 
         try:
             data = extract_json_from_response(response.content, "RECONCILER")
@@ -532,12 +544,23 @@ Unresolved attacks: {len(unresolved)}
 
 Evaluate against all 6 constitutional hard rules and issue your ruling."""
 
-        response = self.model_router.complete(
-            task_type="takeoff_judge",
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            max_tokens=2000
-        )
+        try:
+            response = self.model_router.complete(
+                task_type="takeoff_judge",
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=2000
+            )
+        except Exception as e:
+            print(f"[JUDGE] ERROR: Model router failed: {e}")
+            return {
+                "verdict": "BLOCK",
+                "violations": [{"rule": "Model Error", "severity": "FATAL", "explanation": f"Judge model call failed: {e}"}],
+                "approved_counts": {},
+                "flags": ["Judge model error — takeoff blocked by default"],
+                "ruling_summary": f"Model error: {e}",
+                "raw_response": f"[MODEL ERROR: {e}]"
+            }
 
         try:
             data = extract_json_from_response(response.content, "JUDGE")

@@ -43,12 +43,14 @@ export interface TakeoffResultData {
   job_id?: string;
   drawing_name?: string;
   mode?: string;
+  error?: string;
   fixture_counts: FixtureCount[];
   grand_total: number;
   areas_covered: string[];
   confidence_score: number;
   confidence_band: string;
   confidence_breakdown?: ConfidenceBreakdown;
+  confidence_explanation?: string;
   constitutional_violations: ConstitutionalViolation[];
   adversarial_log: AdversarialEntry[];
   judge_verdict: string;
@@ -129,6 +131,34 @@ export function ResultsPanel({ data, pipelineStatus, isLoading }: ResultsPanelPr
   const verdictColor = VERDICT_COLORS[data.judge_verdict] || "#666";
 
   const handleExport = useCallback(() => exportToCSV(data), [data]);
+
+  // H4: Show error banner if result data contains an error field
+  if (data.error) {
+    return (
+      <div
+        className="flex h-full flex-col items-center justify-center p-8"
+        style={{ background: "#060606" }}
+      >
+        <p
+          className="mb-2 text-xs uppercase"
+          style={{
+            fontFamily: "var(--font-ibm-plex-mono)",
+            color: "#dc2626",
+            letterSpacing: "0.15em",
+            fontSize: "10px",
+          }}
+        >
+          Pipeline Error
+        </p>
+        <p
+          className="text-sm"
+          style={{ fontFamily: "var(--font-ibm-plex-mono)", color: "#525252", maxWidth: "400px", textAlign: "center" }}
+        >
+          {data.error}
+        </p>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -726,6 +756,26 @@ export function ResultsPanel({ data, pipelineStatus, isLoading }: ResultsPanelPr
         {/* CONFIDENCE TAB */}
         {activeTab === "confidence" && (
           <div className="p-4">
+            {/* M3: Confidence explanation from backend */}
+            {data.confidence_explanation && (
+              <div
+                className="mb-4 rounded p-3"
+                style={{ background: "#0a0a0a", border: "1px solid #1a1a1a" }}
+              >
+                <pre
+                  className="whitespace-pre-wrap"
+                  style={{
+                    fontFamily: "var(--font-ibm-plex-mono)",
+                    fontSize: "10px",
+                    color: "#525252",
+                    lineHeight: "1.6",
+                  }}
+                >
+                  {data.confidence_explanation}
+                </pre>
+              </div>
+            )}
+
             {/* Overall score */}
             <div
               className="mb-4 rounded p-4"
