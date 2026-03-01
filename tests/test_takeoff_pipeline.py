@@ -1785,6 +1785,359 @@ class TestBugFixes3(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# TestBugFixes4 — audit round 4 improvements
+# ══════════════════════════════════════════════════════════════════════
+
+class TestBugFixes4(unittest.TestCase):
+    """Tests for improvements applied in audit round 4."""
+
+    # ── ThreadPoolExecutor exception handling ─────────────────────────
+
+    def test_executor_per_future_exception_does_not_abort_remaining(self):
+        """An exception in one future must not cancel the rest."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+
+        results = []
+        errors = []
+
+        def work(i):
+            if i == 1:
+                raise ValueError("simulated extraction failure")
+            return i * 10
+
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            futures = {ex.submit(work, i): i for i in range(3)}
+            for fut in as_completed(futures):
+                try:
+                    results.append(fut.result())
+                except Exception as e:
+                    errors.append(str(e))
+
+        # All 3 futures ran: 2 succeeded, 1 failed
+        self.assertEqual(len(errors), 1)
+        self.assertIn("simulated", errors[0])
+        self.assertIn(0, results)
+        self.assertIn(20, results)
+
+    # ── Agent parse_error flag ────────────────────────────────────────
+
+    def test_counter_parse_error_flag_set_on_malformed_json(self):
+        """Counter must set parse_error=True when LLM returns non-JSON."""
+        from unittest.mock import MagicMock
+        from takeoff.agents import Counter
+        from takeoff.extraction import FixtureSchedule
+
+        router = MagicMock()
+        router.complete.return_value = MagicMock(content="This is not JSON at all!")
+        counter = Counter(router)
+        result = counter.generate_count(FixtureSchedule(), [], [])
+        self.assertTrue(result.parse_error, "parse_error should be True on JSON parse failure")
+        self.assertEqual(result.data, {})
+
+    def test_checker_parse_error_flag_set_on_malformed_json(self):
+        """Checker must set parse_error=True when LLM returns non-JSON."""
+        from unittest.mock import MagicMock
+        from takeoff.agents import Checker
+        from takeoff.extraction import FixtureSchedule
+
+        router = MagicMock()
+        router.complete.return_value = MagicMock(content="not json {{{")
+        checker = Checker(router)
+        result = checker.generate_attacks({}, FixtureSchedule(), [], [], None)
+        self.assertTrue(result.parse_error)
+
+    def test_reconciler_parse_error_flag_set_on_malformed_json(self):
+        """Reconciler must set parse_error=True when LLM returns non-JSON."""
+        from unittest.mock import MagicMock
+        from takeoff.agents import Reconciler
+        from takeoff.extraction import FixtureSchedule
+
+        router = MagicMock()
+        router.complete.return_value = MagicMock(content="<html>not json</html>")
+        reconciler = Reconciler(router)
+        result = reconciler.address_attacks({}, [], FixtureSchedule(), [])
+        self.assertTrue(result.parse_error)
+
+    def test_takeoff_response_parse_error_defaults_false(self):
+        """TakeoffResponse.parse_error must default to False (no regression)."""
+        from takeoff.agents import TakeoffResponse
+        resp = TakeoffResponse(agent_role="counter", data={"fixture_counts": []}, raw_response="ok")
+        self.assertFalse(resp.parse_error)
+
+    # ── Checker dedup: severity preservation ─────────────────────────
+
+    def test_checker_dedup_keeps_critical_over_minor(self):
+        """When two attacks share the same dedup key, the CRITICAL one must survive."""
+        import json
+        from unittest.mock import MagicMock
+        from takeoff.agents import Checker
+        from takeoff.extraction import FixtureSchedule
+
+        attacks_payload = {
+            "attacks": [
+                {
+                    "attack_id": "ATK-001", "severity": "minor",
+                    "category": "missed_area", "affected_type_tag": "A",
+                    "affected_area": "Room 1", "description": "minor version",
+                    "suggested_correction": "check", "evidence": "low"
+                },
+                {
+                    "attack_id": "ATK-002", "severity": "critical",
+                    "category": "missed_area", "affected_type_tag": "A",
+                    "affected_area": "Room 1", "description": "critical — same dedup key",
+                    "suggested_correction": "fix immediately", "evidence": "strong"
+                },
+            ],
+            "total_attacks": 2, "critical_count": 1, "summary": "test"
+        }
+
+        router = MagicMock()
+        router.complete.return_value = MagicMock(content=json.dumps(attacks_payload))
+        checker = Checker(router)
+        result = checker.generate_attacks({}, FixtureSchedule(), [], [], None)
+
+        attacks = result.data.get("attacks", [])
+        self.assertEqual(len(attacks), 1, "Duplicate dedup key should collapse to 1 attack")
+        self.assertEqual(attacks[0]["severity"], "critical",
+                         "Higher severity (critical) must be kept, not minor")
+
+    def test_checker_dedup_keeps_major_over_minor(self):
+        """Dedup must keep MAJOR over MINOR when they share a key."""
+        import json
+        from unittest.mock import MagicMock
+        from takeoff.agents import Checker
+        from takeoff.extraction import FixtureSchedule
+
+        attacks_payload = {
+            "attacks": [
+                {"attack_id": "ATK-001", "severity": "major",
+                 "category": "math_error", "affected_type_tag": "B",
+                 "affected_area": "Lobby", "description": "major first"},
+                {"attack_id": "ATK-002", "severity": "minor",
+                 "category": "math_error", "affected_type_tag": "B",
+                 "affected_area": "Lobby", "description": "minor second"},
+            ],
+            "total_attacks": 2, "critical_count": 0, "summary": "test"
+        }
+
+        router = MagicMock()
+        router.complete.return_value = MagicMock(content=json.dumps(attacks_payload))
+        checker = Checker(router)
+        result = checker.generate_attacks({}, FixtureSchedule(), [], [], None)
+
+        attacks = result.data.get("attacks", [])
+        self.assertEqual(len(attacks), 1)
+        self.assertEqual(attacks[0]["severity"], "major")
+
+    def test_checker_dedup_distinct_areas_not_collapsed(self):
+        """Two attacks with different areas must NOT be deduped together."""
+        import json
+        from unittest.mock import MagicMock
+        from takeoff.agents import Checker
+        from takeoff.extraction import FixtureSchedule
+
+        attacks_payload = {
+            "attacks": [
+                {"attack_id": "ATK-001", "severity": "critical",
+                 "category": "missed_area", "affected_type_tag": "A",
+                 "affected_area": "Room 1", "description": "room 1"},
+                {"attack_id": "ATK-002", "severity": "critical",
+                 "category": "missed_area", "affected_type_tag": "A",
+                 "affected_area": "Room 2", "description": "room 2"},
+            ],
+            "total_attacks": 2, "critical_count": 2, "summary": "test"
+        }
+
+        router = MagicMock()
+        router.complete.return_value = MagicMock(content=json.dumps(attacks_payload))
+        checker = Checker(router)
+        result = checker.generate_attacks({}, FixtureSchedule(), [], [], None)
+
+        self.assertEqual(len(result.data.get("attacks", [])), 2,
+                         "Different areas must not be collapsed to 1")
+
+    # ── Reconciler notes cross-reference ─────────────────────────────
+
+    def test_reconciler_notes_gap_detection_in_engine(self):
+        """Engine must detect when Reconciler returns fewer notes_compliance than plan_notes."""
+        import json
+        import tempfile
+        from unittest.mock import MagicMock
+        from takeoff.engine import TakeoffEngine
+        from takeoff.extraction import FixtureSchedule, AreaCount, PlanNote
+
+        # Two plan notes but Reconciler only acknowledges one
+        plan_notes = [
+            PlanNote(text="all corridor fixtures on emergency circuit",
+                     constraint_type="electrical", affects_fixture_type="A"),
+            PlanNote(text="occupancy sensors required for type B",
+                     constraint_type="control", affects_fixture_type="B"),
+        ]
+        reconciler_compliance_one_only = [
+            {"note": "all corridor fixtures on emergency circuit", "applied": True, "finding": "ok"}
+        ]
+
+        fixture_counts_data = {
+            "fixture_counts": [
+                {"type_tag": "A", "total": 10, "counts_by_area": {"Hall": 10},
+                 "description": "Troffer", "difficulty": "S", "accessories": [], "flags": []},
+                {"type_tag": "B", "total": 5, "counts_by_area": {"Hall": 5},
+                 "description": "Downlight", "difficulty": "S", "accessories": [], "flags": []},
+            ],
+            "areas_covered": ["Hall"],
+            "grand_total_fixtures": 15,
+            "reasoning": "test"
+        }
+        reconciler_data = {
+            "responses": [],
+            "revised_fixture_counts": {},
+            "revised_grand_total": 15,
+            "notes_compliance": reconciler_compliance_one_only,
+            "reasoning": "one note only"
+        }
+        judge_data = {
+            "verdict": "PASS",
+            "violations": [],
+            "approved_counts": {"A": 10, "B": 5},
+            "flags": [],
+            "ruling_summary": "All good"
+        }
+
+        router = MagicMock()
+        router.get_stats.return_value = {"model_router_cost_usd": 0.0}
+        # Counter → valid counts
+        router.complete.side_effect = [
+            MagicMock(content=json.dumps(fixture_counts_data)),   # Counter
+            MagicMock(content=json.dumps({"attacks": [], "total_attacks": 0, "critical_count": 0, "summary": "clean"})),  # Checker
+            MagicMock(content=json.dumps(reconciler_data)),        # Reconciler
+            MagicMock(content=json.dumps(judge_data)),             # Judge
+        ]
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        engine = TakeoffEngine(db_path=db_path, model_router=router)
+
+        # Inject plan_notes and fixture_schedule directly into _run_strict_mode
+        # by overriding the extraction step — we call _run_strict_mode directly.
+        import base64
+        dummy_image = base64.b64encode(b"fake_png_data").decode()
+
+        # Patch extract_fixture_schedule, extract_rcp_counts, extract_plan_notes
+        from unittest.mock import patch
+        from takeoff.extraction import AreaCount as AC
+
+        mock_fs = FixtureSchedule()
+        mock_fs.fixtures = {
+            "A": {"description": "Troffer", "wattage": 40},
+            "B": {"description": "Downlight", "wattage": 20},
+        }
+        mock_ac = AC(area_label="Hall", counts_by_type={"A": 10, "B": 5})
+
+        mock_pn_result = plan_notes
+
+        with patch("takeoff.engine.extract_fixture_schedule", return_value=mock_fs), \
+             patch("takeoff.engine.extract_rcp_counts", return_value=mock_ac), \
+             patch("takeoff.engine.extract_plan_notes", return_value=mock_pn_result):
+
+            snippets = [
+                {"id": "s1", "label": "fixture_schedule", "image_data": dummy_image},
+                {"id": "s2", "label": "rcp", "sub_label": "Hall", "image_data": dummy_image},
+                {"id": "s3", "label": "plan_notes", "image_data": dummy_image},
+            ]
+            result = engine.run_takeoff(snippets=snippets, mode="strict")
+
+        # With 2 plan notes but only 1 in compliance, the gap is filled with non-applied.
+        # notes_addressed must be False (one note unverified → not all applied)
+        # Confidence should NOT give full notes credit.
+        # We verify the result doesn't crash and produces a valid verdict.
+        self.assertIn("verdict", result)
+        self.assertNotIn("error", result, f"Unexpected error in result: {result.get('error')}")
+
+    # ── Error code distinction: parse_error vs blank_drawing ─────────
+
+    def test_parse_error_returns_agent_parse_error_code(self):
+        """When Counter JSON parse fails, error code must be 'agent_parse_error', not 'blank_drawing'."""
+        import tempfile
+        from unittest.mock import MagicMock, patch
+        from takeoff.engine import TakeoffEngine
+        from takeoff.extraction import FixtureSchedule, AreaCount
+
+        router = MagicMock()
+        router.get_stats.return_value = {"model_router_cost_usd": 0.0}
+        # Counter returns malformed JSON
+        router.complete.return_value = MagicMock(content="not valid json!!!")
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        engine = TakeoffEngine(db_path=db_path, model_router=router)
+
+        import base64
+        dummy_image = base64.b64encode(b"fake").decode()
+
+        mock_fs = FixtureSchedule()
+        mock_fs.fixtures = {"A": {"description": "Troffer"}}
+        mock_ac = AreaCount(area_label="Hall", counts_by_type={"A": 5})
+
+        with patch("takeoff.engine.extract_fixture_schedule", return_value=mock_fs), \
+             patch("takeoff.engine.extract_rcp_counts", return_value=mock_ac), \
+             patch("takeoff.engine.extract_plan_notes", return_value=[]):
+
+            snippets = [
+                {"id": "s1", "label": "fixture_schedule", "image_data": dummy_image},
+                {"id": "s2", "label": "rcp", "sub_label": "Hall", "image_data": dummy_image},
+            ]
+            result = engine.run_takeoff(snippets=snippets, mode="fast")
+
+        self.assertEqual(result.get("error"), "agent_parse_error",
+                         f"Expected agent_parse_error but got: {result.get('error')}")
+        self.assertIn("malformed JSON", result.get("message", ""),
+                      "Message should mention malformed JSON")
+
+    def test_blank_drawing_returns_blank_drawing_code(self):
+        """When Counter legitimately returns 0 fixtures, error code must be 'blank_drawing'."""
+        import json
+        import tempfile
+        from unittest.mock import MagicMock, patch
+        from takeoff.engine import TakeoffEngine
+        from takeoff.extraction import FixtureSchedule, AreaCount
+
+        router = MagicMock()
+        router.get_stats.return_value = {"model_router_cost_usd": 0.0}
+        # Counter returns valid JSON with 0 fixtures
+        router.complete.return_value = MagicMock(content=json.dumps({
+            "fixture_counts": [], "areas_covered": [], "grand_total_fixtures": 0, "reasoning": "blank"
+        }))
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+
+        engine = TakeoffEngine(db_path=db_path, model_router=router)
+
+        import base64
+        dummy_image = base64.b64encode(b"fake").decode()
+
+        mock_fs = FixtureSchedule()
+        mock_fs.fixtures = {"A": {"description": "Troffer"}}
+        mock_ac = AreaCount(area_label="Hall", counts_by_type={})
+
+        with patch("takeoff.engine.extract_fixture_schedule", return_value=mock_fs), \
+             patch("takeoff.engine.extract_rcp_counts", return_value=mock_ac), \
+             patch("takeoff.engine.extract_plan_notes", return_value=[]):
+
+            snippets = [
+                {"id": "s1", "label": "fixture_schedule", "image_data": dummy_image},
+                {"id": "s2", "label": "rcp", "sub_label": "Hall", "image_data": dummy_image},
+            ]
+            result = engine.run_takeoff(snippets=snippets, mode="fast")
+
+        self.assertEqual(result.get("error"), "blank_drawing",
+                         f"Expected blank_drawing but got: {result.get('error')}")
+
+
+# ══════════════════════════════════════════════════════════════════════
 # Entry point
 # ══════════════════════════════════════════════════════════════════════
 

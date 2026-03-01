@@ -22,6 +22,7 @@ class TakeoffResponse:
     data: dict
     raw_response: str
     reasoning: Optional[str] = None
+    parse_error: bool = False  # True when JSON parsing of the LLM response failed
 
 
 # ─── Counter Agent ────────────────────────────────────────────────────────────
@@ -157,7 +158,7 @@ Produce the complete fixture count. Aggregate all per-area counts, assign diffic
             )
         except (json.JSONDecodeError, ValueError) as e:
             print(f"[COUNTER] ERROR: Failed to parse JSON response: {e}")
-            return TakeoffResponse(agent_role="counter", data={}, raw_response=response.content)
+            return TakeoffResponse(agent_role="counter", data={}, raw_response=response.content, parse_error=True)
 
 
 # ─── Checker Agent ────────────────────────────────────────────────────────────
@@ -304,19 +305,24 @@ Check for: missed areas, double-counted overlapping views, wrong fixture type as
             attacks = data.get("attacks", [])
 
             # Deduplicate attacks by (category, affected_type_tag, affected_area).
-            # Full description is excluded from the key — the same underlying issue on the
-            # same type/area should not appear twice even if worded differently.
-            seen: set = set()
-            deduped = []
+            # When duplicates share a key, keep the highest-severity one so we never
+            # silently downgrade a CRITICAL attack to MINOR via dedup.
+            _SEVERITY_ORDER = {"critical": 3, "major": 2, "minor": 1}
+            seen_attacks: dict = {}
             for attack in attacks:
                 key = (
                     attack.get("category", ""),
                     (attack.get("affected_type_tag") or "").upper(),
                     (attack.get("affected_area") or "").lower().strip()
                 )
-                if key not in seen:
-                    seen.add(key)
-                    deduped.append(attack)
+                if key not in seen_attacks:
+                    seen_attacks[key] = attack
+                else:
+                    existing_sev = _SEVERITY_ORDER.get(seen_attacks[key].get("severity", "minor"), 1)
+                    new_sev = _SEVERITY_ORDER.get(attack.get("severity", "minor"), 1)
+                    if new_sev > existing_sev:
+                        seen_attacks[key] = attack  # keep higher-severity entry
+            deduped = list(seen_attacks.values())
             if len(deduped) < len(attacks):
                 print(f"[CHECKER] Deduplicated {len(attacks) - len(deduped)} duplicate attacks")
             data["attacks"] = deduped
@@ -332,7 +338,7 @@ Check for: missed areas, double-counted overlapping views, wrong fixture type as
             )
         except (json.JSONDecodeError, ValueError) as e:
             print(f"[CHECKER] ERROR: Failed to parse JSON response: {e}")
-            return TakeoffResponse(agent_role="checker", data={"attacks": []}, raw_response=response.content)
+            return TakeoffResponse(agent_role="checker", data={"attacks": []}, raw_response=response.content, parse_error=True)
 
 
 # ─── Reconciler Agent ─────────────────────────────────────────────────────────
@@ -463,7 +469,7 @@ Address each attack and provide revised counts. For each plan note constraint, e
             )
         except (json.JSONDecodeError, ValueError) as e:
             print(f"[RECONCILER] ERROR: Failed to parse JSON response: {e}")
-            return TakeoffResponse(agent_role="reconciler", data={}, raw_response=response.content)
+            return TakeoffResponse(agent_role="reconciler", data={}, raw_response=response.content, parse_error=True)
 
 
 # ─── Judge Agent ──────────────────────────────────────────────────────────────

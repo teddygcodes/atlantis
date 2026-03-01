@@ -52,38 +52,6 @@ def _scale_area_counts(original_areas: dict, target_total: int) -> dict:
     return {area: max(0, cnt) for area, cnt in floored.items()}
 
 
-def _check_notes_addressed(plan_notes: List, counter_output: dict) -> bool:
-    """Check whether plan notes were addressed in the Counter's output.
-
-    Uses a structural check: looks for the affected fixture type from each note
-    in the Counter's fixture flags/notes fields. Falls back to True if there are
-    no notes (nothing to address).
-    """
-    if not plan_notes:
-        return True
-
-    fixture_counts = counter_output.get("fixture_counts", [])
-    # Build lookup: type_tag -> flags + notes text for that type
-    type_text: Dict[str, str] = {}
-    for fc in fixture_counts:
-        tag = (fc.get("type_tag") or "").upper()
-        flags_str = " ".join(fc.get("flags", []))
-        notes_str = fc.get("notes", "") or ""
-        type_text[tag] = f"{flags_str} {notes_str}".lower()
-
-    addressed_count = 0
-    for note in plan_notes:
-        affected_type = (note.affects_fixture_type or "").upper()
-        constraint = note.constraint_type or "general"
-        if not affected_type:
-            # No specific type — can't verify structurally; assume addressed
-            addressed_count += 1
-        elif affected_type in type_text:
-            # Fixture type exists in counter output — consider addressed
-            addressed_count += 1
-
-    return addressed_count >= len(plan_notes) * 0.5  # ≥50% of notes have corresponding fixture entries
-
 
 class TakeoffEngine:
     """Main orchestrator for adversarial lighting takeoff jobs."""
@@ -202,7 +170,11 @@ class TakeoffEngine:
             with ThreadPoolExecutor(max_workers=len(fs_images)) as _ex:
                 fs_futures = {_ex.submit(extract_fixture_schedule, img): s for s, img in fs_images}
                 for fut in as_completed(fs_futures):
-                    extracted = fut.result()
+                    try:
+                        extracted = fut.result()
+                    except Exception as _e:
+                        emit(f"WARNING: Fixture schedule extraction failed for one snippet: {_e}")
+                        continue
                     for tag, info in extracted.fixtures.items():
                         if tag in fixture_schedule.fixtures:
                             emit(f"WARNING: Fixture type '{tag}' defined in multiple schedule snippets — keeping first definition")
@@ -283,7 +255,12 @@ class TakeoffEngine:
                     else:
                         idx_futures[_ex.submit(extract_panel_schedule, img)] = i
                 for fut in as_completed(idx_futures):
-                    _results[idx_futures[fut]] = fut.result()
+                    idx = idx_futures[fut]
+                    try:
+                        _results[idx] = fut.result()
+                    except Exception as _e:
+                        emit(f"WARNING: Parallel extraction failed for one snippet: {_e}")
+                        # _results[idx] stays None — downstream code handles None gracefully
 
         # Collect ordered results
         area_counts: List[AreaCount] = [_results[i] for i in _rcp_indices if _results[i] is not None]
@@ -365,16 +342,24 @@ class TakeoffEngine:
         if total_corrected:
             emit("WARNING: Counter's grand_total_fixtures was auto-corrected to match per-type sum")
 
-        # Short-circuit: zero fixtures means blank/unreadable drawing
+        # Short-circuit: zero fixtures — either blank drawing or Counter JSON parse failure
         if counter_output.get("grand_total_fixtures", 0) == 0:
-            emit("WARNING: Counter found 0 fixtures — blank or unreadable drawing")
+            if counter_response.parse_error:
+                emit("ERROR: Counter agent failed to parse its JSON response — LLM output was malformed")
+                _error_code = "agent_parse_error"
+                _error_msg = ("Counter agent returned malformed JSON. The drawing data may be valid — "
+                              "please try resubmitting. If the issue persists, check the raw agent output.")
+            else:
+                emit("WARNING: Counter found 0 fixtures — blank or unreadable drawing")
+                _error_code = "blank_drawing"
+                _error_msg = "No fixtures detected in provided snippets."
             return {
                 "job_id": job_id, "verdict": "BLOCK", "confidence_score": 0.25,
                 "confidence_band": "VERY_LOW", "grand_total": 0,
                 "fixture_table": [], "fixture_counts": [],
                 "checker_attacks": [], "reconciler_responses": [], "violations": [],
                 "flags": ["No fixtures detected. Check that snippets contain a fixture schedule and RCP data."],
-                "mode": "fast", "error": "No fixtures detected in provided snippets."
+                "mode": "fast", "error": _error_code, "message": _error_msg
             }
 
         # I7: Warn about fixture types in area counts that don't exist in the schedule
@@ -483,16 +468,24 @@ class TakeoffEngine:
         if total_corrected:
             emit("WARNING: Counter's grand_total_fixtures was auto-corrected to match per-type sum")
 
-        # Short-circuit: zero fixtures means blank/unreadable drawing
+        # Short-circuit: zero fixtures — either blank drawing or Counter JSON parse failure
         if counter_output.get("grand_total_fixtures", 0) == 0:
-            emit("WARNING: Counter found 0 fixtures — blank or unreadable drawing")
+            if counter_response.parse_error:
+                emit("ERROR: Counter agent failed to parse its JSON response — LLM output was malformed")
+                _error_code = "agent_parse_error"
+                _error_msg = ("Counter agent returned malformed JSON. The drawing data may be valid — "
+                              "please try resubmitting. If the issue persists, check the raw agent output.")
+            else:
+                emit("WARNING: Counter found 0 fixtures — blank or unreadable drawing")
+                _error_code = "blank_drawing"
+                _error_msg = "No fixtures detected in provided snippets."
             return {
                 "job_id": job_id, "verdict": "BLOCK", "confidence_score": 0.25,
                 "confidence_band": "VERY_LOW", "grand_total": 0,
                 "fixture_table": [], "fixture_counts": [],
                 "checker_attacks": [], "reconciler_responses": [], "violations": [],
                 "flags": ["No fixtures detected. Check that snippets contain a fixture schedule and RCP data."],
-                "mode": mode, "error": "No fixtures detected in provided snippets."
+                "mode": mode, "error": _error_code, "message": _error_msg
             }
 
         # I7: Warn about fixture types in area counts that don't exist in the schedule
@@ -560,12 +553,28 @@ class TakeoffEngine:
         fixture_counts_list = counter_output.get("fixture_counts", [])
         areas_covered = counter_output.get("areas_covered", [])
 
-        # Determine notes compliance: prefer Reconciler's semantic check over structural fallback
-        reconciler_notes = reconciler_output.get("notes_compliance", []) if reconciler_output else []
+        # Determine notes compliance from Reconciler's semantic check.
+        # If Reconciler produced no notes_compliance, treat as unverified (conservative).
+        # The old structural _check_notes_addressed() was semantically meaningless and removed.
+        reconciler_notes = list(reconciler_output.get("notes_compliance", [])) if reconciler_output else []
+
+        # Cross-reference: if Reconciler returned fewer entries than plan_notes, it silently
+        # omitted some notes. Inject synthetic non-applied entries for the gap.
+        if plan_notes and reconciler_notes and len(reconciler_notes) < len(plan_notes):
+            _gap = len(plan_notes) - len(reconciler_notes)
+            emit(f"WARNING: Reconciler notes_compliance has {len(reconciler_notes)} entries but "
+                 f"{len(plan_notes)} plan notes exist — {_gap} note(s) unverified, treating as not applied")
+            for _ in range(_gap):
+                reconciler_notes.append({
+                    "note": "(unverified plan note)",
+                    "applied": False,
+                    "finding": "Note absent from Reconciler compliance list — treated as not applied"
+                })
+
         if reconciler_notes:
             notes_addressed = all(n.get("applied", False) for n in reconciler_notes)
         else:
-            notes_addressed = _check_notes_addressed(plan_notes, counter_output)
+            notes_addressed = False  # unverified — no credit
 
         confidence_result = calculate_confidence(
             fixture_counts=fixture_counts_list,
