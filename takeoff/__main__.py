@@ -175,10 +175,19 @@ Snippet JSON format (single file):
 
     # Run takeoff
     try:
+        def _cli_status(msg: str):
+            if args.verbose:
+                print(f"  → {msg}")
+            else:
+                # Non-verbose: print key milestones only
+                if any(kw in msg for kw in ("Extracting", "Running", "Counter", "Checker", "Judge", "Reconciler", "complete")):
+                    print(f"  {msg}")
+
         result = engine.run_takeoff(
             snippets=snippets,
             mode=args.mode,
-            drawing_name=drawing_name
+            drawing_name=drawing_name,
+            status_callback=_cli_status
         )
     except Exception as e:
         print(f"[ERROR] Takeoff failed: {e}", file=sys.stderr)

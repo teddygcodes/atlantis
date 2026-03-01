@@ -194,11 +194,11 @@ All models use Sonnet (vision capability required):
 
 ## Cost Targets
 
-- **Fast mode:** <$0.09 per takeoff
-- **Strict mode:** <$0.18 per takeoff
-- **Liability mode:** <$0.22 per takeoff
+- **Fast mode:** ~$0.12-0.15 per takeoff (was <$0.09)
+- **Strict mode:** ~$0.20-0.30 per takeoff (was <$0.18)
+- **Liability mode:** ~$0.25-0.35 per takeoff (was <$0.22)
 
-*Costs scale with number of snippets. Each RCP snippet triggers ~2-3 vision calls.*
+*Costs scale with number of snippets. Each RCP snippet triggers ~2-3 vision calls during extraction plus 1 additional vision call during the Checker's independent verification pass.*
 
 ## Examples
 

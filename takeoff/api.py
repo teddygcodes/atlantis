@@ -259,7 +259,7 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
             return
 
         if result.get("error"):
-            yield f"data: {json.dumps({'type': 'error', 'message': result.get('message', result['error'])})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': result.get('message', result.get('error', 'Takeoff pipeline error'))})}\n\n"
             return
 
         # Format result for frontend
@@ -346,6 +346,15 @@ async def run_takeoff(request: TakeoffRequest):
             status_code=400,
             detail=f"Total snippet payload {total_size // (1024 * 1024)} MB exceeds 50 MB limit"
         )
+
+    _VALID_LABELS = {"fixture_schedule", "rcp", "panel_schedule", "plan_notes", "detail", "site_plan"}
+    for snip in request.snippets:
+        if snip.label not in _VALID_LABELS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Snippet '{snip.id}' has unknown label '{snip.label}'. "
+                       f"Valid labels: {sorted(_VALID_LABELS)}"
+            )
 
     fixture_snippets = [s for s in request.snippets if s.label == "fixture_schedule"]
     rcp_snippets = [s for s in request.snippets if s.label == "rcp"]

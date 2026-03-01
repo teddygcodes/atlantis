@@ -12,7 +12,10 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-from takeoff.extraction import FixtureSchedule, AreaCount, PlanNote, PanelData, extract_json_from_response
+from takeoff.extraction import (
+    FixtureSchedule, AreaCount, PlanNote, PanelData, extract_json_from_response,
+    _call_vision_with_retry, _get_vision_client,
+)
 
 
 @dataclass
@@ -178,7 +181,8 @@ class Checker:
         fixture_schedule: FixtureSchedule,
         area_counts: List[AreaCount],
         plan_notes: List[PlanNote],
-        panel_data: Optional[PanelData] = None
+        panel_data: Optional[PanelData] = None,
+        rcp_images: Optional[List[Dict]] = None,
     ) -> TakeoffResponse:
         """Find errors, omissions, and inconsistencies in the Counter's count.
 
@@ -188,6 +192,9 @@ class Checker:
             area_counts: Original per-area extraction data
             plan_notes: Plan notes constraints
             panel_data: Panel schedule (optional)
+            rcp_images: Optional list of {"area_label": str, "image_data": str} dicts,
+                one per RCP snippet. When provided, Checker independently counts each
+                area via vision and flags discrepancies with Counter's claimed counts.
 
         Returns:
             TakeoffResponse with adversarial attacks
@@ -287,6 +294,128 @@ Panel cross-reference:
 
 Check for: missed areas, double-counted overlapping views, wrong fixture type assignments, missing fixture types that likely exist, math errors, missing accessories, emergency fixture gaps, and plan note violations."""
 
+        # ── Vision phase: independent per-area count verification ──────────────
+        # For each RCP snippet, call Claude vision to independently count fixtures
+        # and compare with Counter's claimed counts. Discrepancies become attacks.
+        # Runs BEFORE the text-based LLM call so all attacks dedup together.
+        vision_attacks = []
+        if rcp_images:
+            try:
+                vision_client = _get_vision_client()
+            except RuntimeError as e:
+                logger.warning("[CHECKER] Vision client unavailable — skipping vision phase: %s", e)
+                vision_client = None
+
+            if vision_client:
+                _vision_attack_counter = 1
+                # Build fixture schedule context once, reuse for all areas
+                schedule_lines = []
+                for tag, info in fixture_schedule.fixtures.items():
+                    desc = info.get("description", "unknown") if isinstance(info, dict) else str(info)
+                    schedule_lines.append(f"  Type {tag}: {desc}")
+                schedule_context = "\n".join(schedule_lines) or "  (No schedule available)"
+
+                for rcp in rcp_images:
+                    area_label = rcp.get("area_label", "Unknown area")
+                    image_data = rcp.get("image_data", "")
+                    if not image_data:
+                        logger.warning("[CHECKER] No image_data for area '%s' — skipping vision check", area_label)
+                        continue
+
+                    # Counter's claimed counts for this specific area
+                    claimed_lines = []
+                    for fc in counter_output.get("fixture_counts", []):
+                        area_count = fc.get("counts_by_area", {}).get(area_label, 0)
+                        if area_count > 0:
+                            claimed_lines.append(f"  Type {fc.get('type_tag', '?')}: {area_count}")
+                    claimed_text = "\n".join(claimed_lines) or "  (Counter claimed 0 fixtures in this area)"
+
+                    vision_system = f"""You are an independent verification agent for electrical fixture counting.
+
+Known fixture types from the schedule:
+{schedule_context}
+
+This is the RCP drawing for area: "{area_label}"
+
+The Counter agent claimed these counts for this area:
+{claimed_text}
+
+Your task:
+1. Count EVERY lighting fixture symbol visible in this RCP drawing independently
+2. Match each symbol to its type tag using the fixture schedule above
+3. Count any unidentified fixtures as "UNKNOWN"
+4. Compare your count with the Counter's claimed count above
+5. Report any discrepancies — if your count differs from the Counter's, flag it
+
+CRITICAL rules:
+- Count ONLY lighting fixtures — not HVAC diffusers, sprinkler heads, or smoke detectors
+- Count every visible symbol, including partially visible ones at edges
+- Trust what you SEE in the drawing, not the Counter's claims
+- "over_count": Counter claimed MORE than you see (Counter overcounted)
+- "under_count": Counter claimed FEWER than you see (Counter missed fixtures)
+
+Severity guide:
+- critical: discrepancy ≥3 fixtures or >20% difference
+- major: discrepancy of 2 fixtures or 10-20% difference
+- minor: discrepancy of 1 fixture or <10% difference
+
+Return JSON ONLY — no explanatory text:
+{{
+  "area_label": "{area_label}",
+  "independent_counts": {{"TYPE_TAG": <int>}},
+  "counter_agreed": <bool>,
+  "discrepancies": [
+    {{
+      "type_tag": "<tag>",
+      "counter_claimed": <int>,
+      "checker_found": <int>,
+      "direction": "over_count | under_count",
+      "severity": "critical | major | minor",
+      "confidence": "high | medium | low",
+      "notes": "<brief explanation of what you see>"
+    }}
+  ],
+  "additional_findings": "<other notable issues: obscured symbols, illegible areas, or empty string>"
+}}"""
+
+                    try:
+                        vision_resp = _call_vision_with_retry(
+                            vision_client,
+                            system_prompt=vision_system,
+                            user_text=f"Verify fixture counts for area '{area_label}'. Return JSON only.",
+                            image_base64=image_data,
+                            max_tokens=1500,
+                            temperature=0.3,
+                        )
+                        vision_data = extract_json_from_response(vision_resp, "CHECKER_VISION")
+                        for disc in vision_data.get("discrepancies", []):
+                            tag = disc.get("type_tag", "UNKNOWN")
+                            found = disc.get("checker_found", 0)
+                            claimed = disc.get("counter_claimed", 0)
+                            direction = disc.get("direction", "unknown")
+                            severity = disc.get("severity", "minor")
+                            confidence = disc.get("confidence", "medium")
+                            notes = disc.get("notes", "")
+                            direction_label = "over-count" if direction == "over_count" else "under-count"
+                            vision_attacks.append({
+                                "attack_id": f"VIS{_vision_attack_counter:03d}",
+                                "severity": severity,
+                                "category": "missed_fixtures",
+                                "affected_type_tag": tag,
+                                "affected_area": area_label,
+                                "description": (
+                                    f"[VISION CHECK] Independent visual count for area '{area_label}' "
+                                    f"found {found} × Type {tag}, but Counter claimed {claimed} "
+                                    f"({direction_label}). {notes}"
+                                ),
+                                "suggested_correction": found,
+                                "evidence": f"Direct image analysis of RCP for '{area_label}' (confidence: {confidence})",
+                            })
+                            _vision_attack_counter += 1
+                    except Exception as e:
+                        logger.warning("[CHECKER] Vision check failed for area '%s': %s — skipping", area_label, e)
+
+        # ── Text-based LLM attack phase ────────────────────────────────────────
         try:
             response = self.model_router.complete(
                 task_type="takeoff_checker",
@@ -296,13 +425,23 @@ Check for: missed areas, double-counted overlapping views, wrong fixture type as
             )
         except Exception as e:
             print(f"[CHECKER] ERROR: Model router failed: {e}")
+            # Still return any vision attacks even if text LLM fails
+            if vision_attacks:
+                return TakeoffResponse(
+                    agent_role="checker",
+                    data={"attacks": vision_attacks, "total_attacks": len(vision_attacks),
+                          "critical_count": sum(1 for a in vision_attacks if a.get("severity") == "critical"),
+                          "_model_failure": True},
+                    raw_response=f"[MODEL ERROR: {e}]"
+                )
             return TakeoffResponse(agent_role="checker", data={"attacks": [], "_model_failure": True}, raw_response=f"[MODEL ERROR: {e}]")
 
         try:
             data = extract_json_from_response(response.content, "CHECKER")
             if "attacks" not in data:
                 logger.warning("[CHECKER] WARNING: Response missing 'attacks' key — got keys: %s", list(data.keys()))
-            attacks = data.get("attacks", [])
+            # Combine text-based and vision-based attacks before deduplication
+            attacks = data.get("attacks", []) + vision_attacks
 
             # Deduplicate attacks by (category, affected_type_tag, affected_area).
             # When duplicates share a key, keep the highest-severity one so we never
@@ -377,7 +516,7 @@ class Reconciler:
         attack_lines = []
         for a in checker_attacks:
             attack_lines.append(
-                f"  [{a.get('attack_id')}] {a.get('severity').upper()} — {a.get('category')}: {a.get('description')}"
+                f"  [{a.get('attack_id')}] {(a.get('severity') or 'minor').upper()} — {a.get('category')}: {a.get('description')}"
             )
             if a.get("suggested_correction"):
                 attack_lines.append(f"    Suggested: {a.get('suggested_correction')}")

@@ -409,10 +409,18 @@ class TakeoffEngine:
         self._warn_unknown_types(area_counts, fixture_schedule, emit)
         self._apply_rule6_flags(counter_output, emit)
 
-        # Checker
-        emit("Checker reviewing count for errors and omissions...")
+        # Checker — text-based structural review + independent vision count per RCP area
+        _rcp_images = [
+            {"area_label": s.get("sub_label") or f"RCP-{i+1}", "image_data": s.get("image_data", "")}
+            for i, s in enumerate(rcp_snippets)
+            if s.get("image_data")
+        ]
+        emit(f"Checker reviewing count for errors and omissions ({len(_rcp_images)} RCP area(s) via vision)...")
+        for _rcp in _rcp_images:
+            emit(f"Checker independently reviewing {_rcp['area_label']}...")
         checker_response = self.checker.generate_attacks(
-            counter_output, fixture_schedule, area_counts, plan_notes, panel_data
+            counter_output, fixture_schedule, area_counts, plan_notes, panel_data,
+            rcp_images=_rcp_images,
         )
         checker_attacks = checker_response.data.get("attacks", [])
         if not checker_response.data and checker_response.raw_response:
@@ -516,10 +524,18 @@ class TakeoffEngine:
         self._warn_unknown_types(area_counts, fixture_schedule, emit)
         self._apply_rule6_flags(counter_output, emit)
 
-        # Checker
-        emit("Checker independently reviewing count...")
+        # Checker — text-based structural review + independent vision count per RCP area
+        _rcp_images = [
+            {"area_label": s.get("sub_label") or f"RCP-{i+1}", "image_data": s.get("image_data", "")}
+            for i, s in enumerate(rcp_snippets)
+            if s.get("image_data")
+        ]
+        emit(f"Checker independently reviewing count ({len(_rcp_images)} RCP area(s) via vision)...")
+        for _rcp in _rcp_images:
+            emit(f"Checker independently reviewing {_rcp['area_label']}...")
         checker_response = self.checker.generate_attacks(
-            counter_output, fixture_schedule, area_counts, plan_notes, panel_data
+            counter_output, fixture_schedule, area_counts, plan_notes, panel_data,
+            rcp_images=_rcp_images,
         )
         checker_attacks = checker_response.data.get("attacks", [])
         if not checker_response.data and checker_response.raw_response:

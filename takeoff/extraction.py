@@ -149,25 +149,37 @@ def extract_json_from_response(response_text: str, agent_name: str = "Extractor"
 
 # ─── Vision Client ───────────────────────────────────────────────────────────
 
+# Lazy-initialized module-level client — created once, reused across all extraction
+# calls within a process. Avoids redundant TLS handshakes and connection-pool churn
+# when multiple futures call extraction concurrently via ThreadPoolExecutor.
+_vision_client: 'Optional[anthropic.Anthropic]' = None
+_vision_client_lock = threading.Lock()
+
+
 def _get_vision_client() -> 'anthropic.Anthropic':
-    """Return an Anthropic client for vision calls.
+    """Return the shared Anthropic client for vision calls (created once, reused).
 
     Raises:
         RuntimeError: If anthropic package is missing or API key is not set.
     """
+    global _vision_client
     if not HAS_ANTHROPIC:
         raise RuntimeError(
             "[TAKEOFF] FATAL: 'anthropic' package not installed. "
             "Run: pip install anthropic"
         )
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise RuntimeError(
-            "[TAKEOFF] FATAL: ANTHROPIC_API_KEY not set. "
-            "Cannot run vision extraction. Set the key and retry."
-        )
-    timeout = float(os.getenv("TAKEOFF_VISION_TIMEOUT", "180"))
-    return anthropic.Anthropic(api_key=api_key, timeout=timeout)
+    if _vision_client is None:
+        with _vision_client_lock:
+            if _vision_client is None:
+                api_key = os.getenv("ANTHROPIC_API_KEY", "")
+                if not api_key:
+                    raise RuntimeError(
+                        "[TAKEOFF] FATAL: ANTHROPIC_API_KEY not set. "
+                        "Cannot run vision extraction. Set the key and retry."
+                    )
+                timeout = float(os.getenv("TAKEOFF_VISION_TIMEOUT", "180"))
+                _vision_client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
+    return _vision_client
 
 
 def _call_vision(
@@ -458,6 +470,8 @@ def extract_rcp_counts(
     if fixture_schedule.fixtures:
         lines = ["Known fixture types from the schedule:"]
         for tag, info in fixture_schedule.fixtures.items():
+            if not isinstance(info, dict):
+                logger.warning("[EXTRACTION] Fixture '%s' info is not a dict (got %s) — Counter may receive garbled description", tag, type(info).__name__)
             desc = info.get("description", "unknown") if isinstance(info, dict) else str(info)
             lines.append(f"  Type {tag}: {desc}")
         schedule_context = "\n".join(lines)

@@ -189,8 +189,9 @@ def _area_fuzzy_match(expected: str, covered_set: set) -> bool:
         cand_nums = set(re.findall(r'\d+', candidate))
         cand_words = {w for w in candidate.split() if w not in _AREA_STOPWORDS and len(w) > 1}
 
-        # Numeric tokens must match exactly — "Level 1" must not match "Level 2"
-        if exp_nums and exp_nums != cand_nums:
+        # Numeric tokens must match exactly — "Level 1" must not match "Level 2",
+        # and "Level" must not match "Level 1" (one has numerics, the other doesn't)
+        if exp_nums != cand_nums:
             continue
 
         # Word overlap: ≥50% of significant words must be shared.
@@ -336,7 +337,9 @@ def check_emergency_fixtures(fixture_counts: list) -> list:
         tag = count.get("type_tag", "").lower()
         notes = count.get("notes", "").lower()
 
-        if any(kw in desc or kw in tag or kw in notes for kw in EMERGENCY_KEYWORDS):
+        import re as _re
+        if any(_re.search(r'\b' + _re.escape(kw) + r'\b', desc + " " + tag + " " + notes, _re.IGNORECASE)
+               for kw in EMERGENCY_KEYWORDS):
             has_emergency_tracking = True
             break
 
@@ -420,7 +423,13 @@ def check_non_negative_counts(fixture_counts: list) -> list:
                 "explanation": f"Type '{tag}' has a negative total count ({total}). Counts must be ≥ 0."
             })
         for area, count in fc.get("counts_by_area", {}).items():
-            if isinstance(count, (int, float)) and count < 0:
+            if not isinstance(count, int) and isinstance(count, float):
+                violations.append({
+                    "rule": "Non-Negative Counts",
+                    "severity": "MAJOR",
+                    "explanation": f"Type '{tag}' area '{area}' has a non-integer count ({count}). Fixture counts must be whole numbers."
+                })
+            elif isinstance(count, (int, float)) and count < 0:
                 violations.append({
                     "rule": "Non-Negative Counts",
                     "severity": "FATAL",

@@ -29,6 +29,8 @@ class TakeoffDB:
         # Enable WAL mode (following Atlantis pattern)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
+        # Enforce foreign key constraints (SQLite disables them by default)
+        self.conn.execute("PRAGMA foreign_keys=ON")
 
         self._create_tables()
 
@@ -251,7 +253,7 @@ class TakeoffDB:
                         count,
                         fc.get("confidence"),
                         fc.get("difficulty_code") or fc.get("difficulty", "S"),
-                        json.dumps(fc.get("flags", []))
+                        json.dumps(fc.get("flags", []), default=str)
                     ))
             self.conn.commit()
 
@@ -321,11 +323,11 @@ class TakeoffDB:
                 confidence_score,
                 confidence_band,
                 confidence_features,
-                json.dumps(violations),
-                json.dumps(flags),
+                json.dumps(violations, default=str),
+                json.dumps(flags, default=str),
                 judge_verdict,
                 time.time() if judge_verdict == "PASS" else None,
-                json.dumps(full_result) if full_result else None
+                json.dumps(full_result, default=str) if full_result else None
             ))
             self.conn.commit()
 
@@ -367,7 +369,7 @@ class TakeoffDB:
                             count,
                             fc.get("confidence"),
                             fc.get("difficulty_code") or fc.get("difficulty", "S"),
-                            json.dumps(fc.get("flags", []))
+                            json.dumps(fc.get("flags", []), default=str)
                         ))
 
                 # Adversarial log
@@ -408,11 +410,11 @@ class TakeoffDB:
                     confidence_score,
                     confidence_band,
                     confidence_features,
-                    json.dumps(violations),
-                    json.dumps(flags),
+                    json.dumps(violations, default=str),
+                    json.dumps(flags, default=str),
                     judge_verdict,
                     time.time() if judge_verdict == "PASS" else None,
-                    json.dumps(full_result) if full_result else None
+                    json.dumps(full_result, default=str) if full_result else None
                 ))
 
                 cur.execute("COMMIT")
@@ -476,5 +478,6 @@ class TakeoffDB:
         return [dict(r) for r in rows]
 
     def close(self):
-        """Close database connection."""
-        self.conn.close()
+        """Close database connection, waiting for any active write to finish."""
+        with self._lock:
+            self.conn.close()
