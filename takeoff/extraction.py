@@ -132,7 +132,8 @@ def _get_vision_client() -> 'anthropic.Anthropic':
             "[TAKEOFF] FATAL: ANTHROPIC_API_KEY not set. "
             "Cannot run vision extraction. Set the key and retry."
         )
-    return anthropic.Anthropic(api_key=api_key, timeout=30.0)
+    timeout = float(os.getenv("TAKEOFF_VISION_TIMEOUT", "180"))
+    return anthropic.Anthropic(api_key=api_key, timeout=timeout)
 
 
 def _call_vision(
@@ -161,9 +162,17 @@ def _call_vision(
     if model is None:
         model = os.getenv("TAKEOFF_VISION_MODEL", "claude-sonnet-4-5-20250929")
 
-    # Strip data URI prefix if present
+    # Detect media type and strip data URI prefix if present
+    detected_media_type = "image/png"
     if image_base64.startswith("data:"):
-        image_base64 = image_base64.split(",", 1)[1]
+        header, image_base64 = image_base64.split(",", 1)
+        # header looks like "data:image/jpeg;base64"
+        if "image/jpeg" in header or "image/jpg" in header:
+            detected_media_type = "image/jpeg"
+        elif "image/webp" in header:
+            detected_media_type = "image/webp"
+        elif "image/gif" in header:
+            detected_media_type = "image/gif"
 
     response = client.messages.create(
         model=model,
@@ -177,7 +186,7 @@ def _call_vision(
                     "type": "image",
                     "source": {
                         "type": "base64",
-                        "media_type": "image/png",
+                        "media_type": detected_media_type,
                         "data": image_base64
                     }
                 },
@@ -201,8 +210,9 @@ def _call_vision_with_retry(
     model: Optional[str] = None,
     max_retries: int = 2
 ) -> str:
-    """Call vision API with retry on transient failures (2 retries, 2s delay)."""
+    """Call vision API with exponential backoff retry on transient failures."""
     import time
+    import random
     last_error = None
     for attempt in range(max_retries + 1):
         try:
@@ -210,8 +220,9 @@ def _call_vision_with_retry(
         except Exception as e:
             last_error = e
             if attempt < max_retries:
-                print(f"[EXTRACTION] Vision call failed (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in 2s...")
-                time.sleep(2)
+                delay = (2 ** (attempt + 1)) + random.uniform(0, 1)
+                print(f"[EXTRACTION] Vision call failed (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay:.1f}s...")
+                time.sleep(delay)
             else:
                 print(f"[EXTRACTION] Vision call failed after {max_retries + 1} attempts: {e}")
     raise last_error

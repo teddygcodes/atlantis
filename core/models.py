@@ -49,6 +49,12 @@ class ModelRouter:
         "sydyn_adversary": 0.7,
         "sydyn_critic": 0.7,
         "sydyn_judge": 0.2,
+        # Takeoff task temperatures
+        "takeoff_extraction": 0.0,      # Zero temp for deterministic extraction
+        "takeoff_counter": 0.3,         # Low temp for careful counting
+        "takeoff_checker": 0.5,         # Medium temp for creative attack finding
+        "takeoff_reconciler": 0.3,      # Low temp for careful defense
+        "takeoff_judge": 0.2,           # Low temp for consistent judging
     }
 
     # Approximate Anthropic prices (USD / 1M tokens)

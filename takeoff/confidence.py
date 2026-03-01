@@ -4,7 +4,7 @@ import json
 from typing import List, Dict, Optional
 
 
-# Feature weights — sum of positive weights = 0.95, fast_mode_penalty is a deduction
+# Feature weights — all positive, sum = 1.00
 FEATURE_WEIGHTS = {
     "schedule_match_rate": 0.25,        # % of counted fixtures that trace to schedule
     "area_coverage": 0.20,              # % of visible RCP areas accounted for
@@ -12,7 +12,7 @@ FEATURE_WEIGHTS = {
     "constitutional_clean": 0.15,       # No violations = boost
     "cross_reference_match": 0.10,      # Panel schedule alignment
     "note_compliance": 0.10,            # Plan notes addressed
-    "fast_mode_penalty": -0.05          # Fast mode skips Reconciler
+    "reconciler_coverage": 0.05         # Reconciler ran (strict/liability mode) = full credit; fast mode = 0
 }
 
 
@@ -27,7 +27,8 @@ def calculate_confidence(
     mode: str,
     has_panel_schedule: bool = False,
     has_plan_notes: bool = False,
-    notes_addressed: bool = False
+    notes_addressed: bool = False,
+    total_corrected: bool = False
 ) -> Dict:
     """Calculate feature-based confidence score for a lighting takeoff.
 
@@ -123,11 +124,13 @@ def calculate_confidence(
     else:
         features["note_compliance"] = 0.5  # Neutral — no notes provided
 
-    # Feature 7: Fast mode penalty (intentional by design — fast mode skips Reconciler)
-    features["fast_mode_penalty"] = 1.0 if mode == "fast" else 0.0
+    # Feature 7: Reconciler coverage — 1.0 when Reconciler ran (strict/liability), 0.0 for fast mode
+    features["reconciler_coverage"] = 0.0 if mode == "fast" else 1.0
 
     # Calculate weighted confidence
-    base_confidence = 0.5
+    # Base starts at 0.20 so worst-case (all features 0.0) resolves to VERY_LOW,
+    # not the misleading MODERATE that a 0.50 base produced.
+    base_confidence = 0.20
 
     print(f"\n[TAKEOFF CONFIDENCE] Feature Breakdown:")
     print(f"  Base: {base_confidence:.3f}")
@@ -144,6 +147,11 @@ def calculate_confidence(
     print(f"  Weighted Sum: {weighted_sum:+.3f}")
     confidence_score = base_confidence + weighted_sum
     print(f"  Pre-override Score: {confidence_score:.3f}")
+
+    # Penalize if Counter's grand_total required auto-correction (math error)
+    if total_corrected:
+        confidence_score -= 0.05
+        print(f"  Auto-correct penalty (grand_total mismatch): -0.05 → {confidence_score:.3f}")
 
     # Apply HARD penalties for constitutional violations
     violation_penalty = 0.0
@@ -173,16 +181,19 @@ def calculate_confidence(
 
     if fatal_count > 0:
         confidence_score = 0.25
-        confidence_band = "VERY_LOW"
         print(f"  [HARD OVERRIDE] BLOCK verdict ({fatal_count} FATAL) → 0.25 (VERY_LOW)")
     elif major_count > 0:
         original = confidence_score
-        confidence_score = max(confidence_score - 0.20, 0.40)
-        print(f"  [HARD OVERRIDE] WARN with MAJOR → {original:.3f} - 0.20 = {confidence_score:.3f}")
+        # Proportional cap: each additional MAJOR tightens by 0.05, floor at 0.20
+        major_cap = max(0.20, 0.40 - (major_count - 1) * 0.05)
+        confidence_score = min(confidence_score, major_cap)
+        print(f"  [HARD OVERRIDE] WARN with {major_count} MAJOR → cap {original:.3f} at {major_cap:.2f} = {confidence_score:.3f}")
     elif minor_count > 0:
         original = confidence_score
-        confidence_score = max(confidence_score - 0.10, 0.50)
-        print(f"  [HARD OVERRIDE] WARN with MINOR → {original:.3f} - 0.10 = {confidence_score:.3f}")
+        # Proportional cap: each additional MINOR tightens by 0.03, floor at 0.35
+        minor_cap = max(0.35, 0.50 - (minor_count - 1) * 0.03)
+        confidence_score = min(confidence_score, minor_cap)
+        print(f"  [HARD OVERRIDE] WARN with {minor_count} MINOR → cap {original:.3f} at {minor_cap:.2f} = {confidence_score:.3f}")
     else:
         print(f"  [VERDICT] PASS — using calculated score {confidence_score:.3f}")
 
@@ -264,9 +275,10 @@ def format_confidence_explanation(confidence_result: Dict) -> str:
     else:
         lines.append("- Panel cross-reference: wattage discrepancy flagged")
 
-    # Fast mode penalty (by design — Reconciler skipped)
-    if features.get("fast_mode_penalty", 0.0) > 0:
-        lines.append("- Fast mode: Reconciler review skipped (-5%)")
+    # Reconciler coverage
+    reconciler_cov = features.get("reconciler_coverage", 1.0)
+    if reconciler_cov < 1.0:
+        lines.append("- Fast mode: Reconciler review skipped (no credit for reconciler_coverage)")
 
     # Feature breakdown table
     lines.append("\nFeature Breakdown:")

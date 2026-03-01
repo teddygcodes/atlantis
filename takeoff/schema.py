@@ -2,6 +2,7 @@
 
 import sqlite3
 import json
+import threading
 import time
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -18,6 +19,7 @@ class TakeoffDB:
         """
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
         self.conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
 
@@ -120,9 +122,16 @@ class TakeoffDB:
                 flags_json TEXT,
                 judge_verdict TEXT,
                 approved_at REAL,
+                full_result_json TEXT,
                 FOREIGN KEY (job_id) REFERENCES takeoff_jobs(job_id)
             )
         """)
+        # Migrate: add full_result_json if upgrading an existing database
+        try:
+            self.conn.execute("ALTER TABLE results ADD COLUMN full_result_json TEXT")
+            self.conn.commit()
+        except Exception:
+            pass  # Column already exists
 
         # Create indexes
         self.conn.execute("""
@@ -151,11 +160,12 @@ class TakeoffDB:
         snippet_count: Optional[int] = None
     ) -> None:
         """Create a new takeoff job record."""
-        self.conn.execute("""
-            INSERT INTO takeoff_jobs (job_id, created_at, drawing_name, total_pages, snippet_count, mode, status)
-            VALUES (?, ?, ?, ?, ?, ?, 'running')
-        """, (job_id, time.time(), drawing_name, total_pages, snippet_count, mode))
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute("""
+                INSERT INTO takeoff_jobs (job_id, created_at, drawing_name, total_pages, snippet_count, mode, status)
+                VALUES (?, ?, ?, ?, ?, ?, 'running')
+            """, (job_id, time.time(), drawing_name, total_pages, snippet_count, mode))
+            self.conn.commit()
 
     def update_job_status(
         self,
@@ -165,72 +175,80 @@ class TakeoffDB:
         cost_usd: Optional[float] = None
     ) -> None:
         """Update job status and metrics."""
-        self.conn.execute("""
-            UPDATE takeoff_jobs
-            SET status = ?, latency_ms = ?, cost_usd = ?
-            WHERE job_id = ?
-        """, (status, latency_ms, cost_usd, job_id))
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute("""
+                UPDATE takeoff_jobs
+                SET status = ?, latency_ms = ?, cost_usd = ?
+                WHERE job_id = ?
+            """, (status, latency_ms, cost_usd, job_id))
+            self.conn.commit()
 
     def store_snippets(self, job_id: str, snippets: List[Dict]) -> None:
         """Store snippet metadata (not images)."""
-        for s in snippets:
-            self.conn.execute("""
-                INSERT OR REPLACE INTO snippets
-                (snippet_id, job_id, page_number, label, sub_label, bbox_json, image_path)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                s.get("id", ""),
-                job_id,
-                s.get("page_number"),
-                s.get("label", ""),
-                s.get("sub_label"),
-                json.dumps(s.get("bbox")) if s.get("bbox") else None,
-                s.get("image_path")
-            ))
-        self.conn.commit()
+        with self._lock:
+            for s in snippets:
+                snippet_id = s.get("id", "")
+                if not snippet_id:
+                    print(f"[DB] WARNING: Snippet missing 'id' field for job {job_id} — skipping")
+                    continue
+                self.conn.execute("""
+                    INSERT OR REPLACE INTO snippets
+                    (snippet_id, job_id, page_number, label, sub_label, bbox_json, image_path)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    snippet_id,
+                    job_id,
+                    s.get("page_number"),
+                    s.get("label", ""),
+                    s.get("sub_label"),
+                    json.dumps(s.get("bbox")) if s.get("bbox") else None,
+                    s.get("image_path")
+                ))
+            self.conn.commit()
 
     def store_fixture_schedule(self, job_id: str, schedule: Dict) -> None:
         """Store extracted fixture schedule entries."""
-        fixtures = schedule.get("fixtures", {})
-        for tag, info in fixtures.items():
-            self.conn.execute("""
-                INSERT INTO fixture_schedule
-                (job_id, type_tag, description, manufacturer, catalog_number,
-                 voltage, mounting, dimming, wattage, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                job_id, tag,
-                info.get("description"),
-                info.get("manufacturer"),
-                info.get("catalog_number"),
-                info.get("voltage"),
-                info.get("mounting"),
-                info.get("dimming"),
-                info.get("wattage"),
-                info.get("notes")
-            ))
-        self.conn.commit()
+        with self._lock:
+            fixtures = schedule.get("fixtures", {})
+            for tag, info in fixtures.items():
+                self.conn.execute("""
+                    INSERT INTO fixture_schedule
+                    (job_id, type_tag, description, manufacturer, catalog_number,
+                     voltage, mounting, dimming, wattage, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    job_id, tag,
+                    info.get("description"),
+                    info.get("manufacturer"),
+                    info.get("catalog_number"),
+                    info.get("voltage"),
+                    info.get("mounting"),
+                    info.get("dimming"),
+                    info.get("wattage"),
+                    info.get("notes")
+                ))
+            self.conn.commit()
 
     def store_fixture_counts(self, job_id: str, fixture_counts: List[Dict]) -> None:
         """Store per-area fixture counts."""
-        for fc in fixture_counts:
-            counts_by_area = fc.get("counts_by_area", {})
-            for area, count in counts_by_area.items():
-                self.conn.execute("""
-                    INSERT INTO fixture_counts
-                    (job_id, type_tag, area, count, confidence, difficulty_code, flags)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    job_id,
-                    fc.get("type_tag", ""),
-                    area,
-                    count,
-                    fc.get("confidence"),
-                    fc.get("difficulty", "S"),
-                    json.dumps(fc.get("flags", []))
-                ))
-        self.conn.commit()
+        with self._lock:
+            for fc in fixture_counts:
+                counts_by_area = fc.get("counts_by_area", {})
+                for area, count in counts_by_area.items():
+                    self.conn.execute("""
+                        INSERT INTO fixture_counts
+                        (job_id, type_tag, area, count, confidence, difficulty_code, flags)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        job_id,
+                        fc.get("type_tag", ""),
+                        area,
+                        count,
+                        fc.get("confidence"),
+                        fc.get("difficulty", "S"),
+                        json.dumps(fc.get("flags", []))
+                    ))
+            self.conn.commit()
 
     def store_adversarial_log(
         self,
@@ -239,32 +257,33 @@ class TakeoffDB:
         reconciler_responses: List[Dict]
     ) -> None:
         """Store the full adversarial exchange log."""
-        # Store attacks
-        for attack in attacks:
-            self.conn.execute("""
-                INSERT INTO adversarial_log
-                (job_id, agent, attack_id, severity, category, description, resolution, final_verdict)
-                VALUES (?, 'checker', ?, ?, ?, ?, NULL, NULL)
-            """, (
-                job_id,
-                attack.get("attack_id"),
-                attack.get("severity"),
-                attack.get("category"),
-                attack.get("description")
-            ))
+        with self._lock:
+            # Store attacks
+            for attack in attacks:
+                self.conn.execute("""
+                    INSERT INTO adversarial_log
+                    (job_id, agent, attack_id, severity, category, description, resolution, final_verdict)
+                    VALUES (?, 'checker', ?, ?, ?, ?, NULL, NULL)
+                """, (
+                    job_id,
+                    attack.get("attack_id"),
+                    attack.get("severity"),
+                    attack.get("category"),
+                    attack.get("description")
+                ))
 
-        # Update with reconciler responses
-        for resp in reconciler_responses:
-            attack_id = resp.get("attack_id")
-            verdict = resp.get("verdict")
-            explanation = resp.get("explanation")
-            self.conn.execute("""
-                UPDATE adversarial_log
-                SET resolution = ?, final_verdict = ?
-                WHERE job_id = ? AND attack_id = ?
-            """, (explanation, verdict, job_id, attack_id))
+            # Update with reconciler responses
+            for resp in reconciler_responses:
+                attack_id = resp.get("attack_id")
+                verdict = resp.get("verdict")
+                explanation = resp.get("explanation")
+                self.conn.execute("""
+                    UPDATE adversarial_log
+                    SET resolution = ?, final_verdict = ?
+                    WHERE job_id = ? AND attack_id = ?
+                """, (explanation, verdict, job_id, attack_id))
 
-        self.conn.commit()
+            self.conn.commit()
 
     def store_result(
         self,
@@ -275,26 +294,38 @@ class TakeoffDB:
         confidence_features: str,
         violations: List[Dict],
         flags: List[str],
-        judge_verdict: str
+        judge_verdict: str,
+        full_result: Optional[Dict] = None
     ) -> None:
         """Store final takeoff result."""
-        self.conn.execute("""
-            INSERT OR REPLACE INTO results
-            (job_id, grand_total, confidence_score, confidence_band, confidence_features,
-             violations_json, flags_json, judge_verdict, approved_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            job_id,
-            grand_total,
-            confidence_score,
-            confidence_band,
-            confidence_features,
-            json.dumps(violations),
-            json.dumps(flags),
-            judge_verdict,
-            time.time() if judge_verdict == "PASS" else None
-        ))
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute("""
+                INSERT OR REPLACE INTO results
+                (job_id, grand_total, confidence_score, confidence_band, confidence_features,
+                 violations_json, flags_json, judge_verdict, approved_at, full_result_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                job_id,
+                grand_total,
+                confidence_score,
+                confidence_band,
+                confidence_features,
+                json.dumps(violations),
+                json.dumps(flags),
+                judge_verdict,
+                time.time() if judge_verdict == "PASS" else None,
+                json.dumps(full_result) if full_result else None
+            ))
+            self.conn.commit()
+
+    def get_full_result(self, job_id: str) -> Optional[Dict]:
+        """Retrieve the full formatted result for a completed job."""
+        row = self.conn.execute(
+            "SELECT full_result_json FROM results WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        if row and row["full_result_json"]:
+            return json.loads(row["full_result_json"])
+        return None
 
     def get_job(self, job_id: str) -> Optional[Dict]:
         """Retrieve a job record."""

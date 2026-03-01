@@ -294,14 +294,17 @@ Check for: missed areas, double-counted overlapping views, wrong fixture type as
             data = extract_json_from_response(response.content, "CHECKER")
             attacks = data.get("attacks", [])
 
-            # Deduplicate attacks by (category, affected_type_tag, affected_area)
+            # Deduplicate attacks by (category, affected_type_tag, affected_area, full description).
+            # Using the full description prevents two genuinely distinct attacks on the same
+            # type/area from collapsing if their first 60 chars happen to match.
             seen: set = set()
             deduped = []
             for attack in attacks:
                 key = (
                     attack.get("category", ""),
                     (attack.get("affected_type_tag") or "").upper(),
-                    (attack.get("affected_area") or "").lower().strip()
+                    (attack.get("affected_area") or "").lower().strip(),
+                    re.sub(r'\s+', ' ', (attack.get("description") or "")).strip().lower()
                 )
                 if key not in seen:
                     seen.add(key)
@@ -341,7 +344,8 @@ class Reconciler:
         counter_output: dict,
         checker_attacks: List[Dict],
         fixture_schedule: FixtureSchedule,
-        area_counts: List[AreaCount]
+        area_counts: List[AreaCount],
+        plan_notes: Optional[List] = None
     ) -> TakeoffResponse:
         """Address each Checker attack — defend or concede.
 
@@ -350,6 +354,7 @@ class Reconciler:
             checker_attacks: Attack list from Checker
             fixture_schedule: Fixture schedule for reference
             area_counts: Original RCP extraction data
+            plan_notes: Plan notes constraints — Reconciler verifies these were applied
 
         Returns:
             TakeoffResponse with responses and revised counts
@@ -400,8 +405,18 @@ Output format:
     "C": {"total": 6, "delta": "+6", "reason": "Conceded ATK-001 — missed break room"}
   },
   "revised_grand_total": 148,
+  "notes_compliance": [
+    {"note": "all corridor fixtures on emergency circuit", "applied": true, "finding": "Type B correctly flagged as emergency circuit in Counter output"},
+    {"note": "provide occupancy sensor for type A", "applied": false, "finding": "Counter listed type A accessories as 'mounting clips' only — no occupancy sensor"}
+  ],
   "reasoning": "3 of 4 attacks valid. Grand total increased from 142 to 148."
 }"""
+
+        # Build plan notes context for semantic compliance verification
+        notes_text = "No plan notes provided."
+        if plan_notes:
+            notes_lines = [f"  - [{n.constraint_type}] {n.text}" for n in plan_notes]
+            notes_text = "\n".join(notes_lines)
 
         user_prompt = f"""Counter's original counts:
 {orig_text}
@@ -410,7 +425,10 @@ Counter's original grand total: {counter_output.get('grand_total_fixtures', 0)}
 Checker's attacks:
 {attacks_text}
 
-Address each attack and provide revised counts."""
+PLAN NOTE CONSTRAINTS (verify each was applied in the count):
+{notes_text}
+
+Address each attack and provide revised counts. For each plan note constraint, explicitly state in your reasoning whether the Counter applied it correctly (e.g. correct circuit assignment, correct accessory, correct quantity). If a constraint was not applied, treat it as a concede."""
 
         try:
             response = self.model_router.complete(
@@ -585,3 +603,45 @@ Evaluate against all 6 constitutional hard rules and issue your ruling."""
                 "ruling_summary": "Parse error — blocking by default. Resubmit for review.",
                 "raw_response": response.content
             }
+
+
+# ─── Grand Total Validation ───────────────────────────────────────────────────
+
+@dataclass
+class GrandTotalResult:
+    """Result of validate_grand_total — avoids fragile tuple unpacking."""
+    counts: dict
+    was_corrected: bool
+
+
+def validate_grand_total(agent_output: dict, agent_name: str = "Agent") -> GrandTotalResult:
+    """Validate that grand_total_fixtures matches the sum of per-type totals.
+
+    If the reported grand_total differs from the computed sum by more than 5%,
+    log a warning and correct it.
+
+    Returns:
+        GrandTotalResult with corrected counts dict and was_corrected flag
+    """
+    fixture_counts = agent_output.get("fixture_counts", [])
+    reported_total = agent_output.get("grand_total_fixtures", 0) or 0
+
+    if not fixture_counts:
+        return GrandTotalResult(counts=agent_output, was_corrected=False)
+
+    computed_total = sum(fc.get("total", 0) for fc in fixture_counts)
+    if computed_total == 0:
+        return GrandTotalResult(counts=agent_output, was_corrected=False)
+
+    discrepancy = abs(reported_total - computed_total) / computed_total
+    if discrepancy > 0.05:
+        print(
+            f"[{agent_name}] WARNING: grand_total_fixtures={reported_total} "
+            f"differs from computed sum={computed_total} "
+            f"({discrepancy * 100:.1f}% discrepancy). Using computed sum."
+        )
+        corrected = dict(agent_output)
+        corrected["grand_total_fixtures"] = computed_total
+        return GrandTotalResult(counts=corrected, was_corrected=True)
+
+    return GrandTotalResult(counts=agent_output, was_corrected=False)

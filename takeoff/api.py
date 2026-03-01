@@ -130,7 +130,7 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
     import threading
     import time as _time
 
-    status_queue = queue.Queue()
+    status_queue = queue.Queue(maxsize=200)
     result_container = []
     done_event = threading.Event()  # set in finally so always fires on thread exit
 
@@ -139,7 +139,7 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
 
     def run_job():
         try:
-            snippets = [s.dict() for s in request.snippets]
+            snippets = [s.model_dump() for s in request.snippets]
             mode = request.mode or "strict"
             result = engine.run_takeoff(
                 snippets=snippets,
@@ -164,9 +164,10 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
 
     try:
         while True:
+            # Drain any queued messages before checking done_event
+            # to avoid missing messages produced just before thread exit
             try:
-                msg = status_queue.get(timeout=0.1)
-
+                msg = status_queue.get_nowait()
                 if msg["type"] == "status":
                     yield f"data: {json.dumps(msg)}\n\n"
                 elif msg["type"] == "error":
@@ -174,15 +175,29 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
                     break
                 elif msg["type"] == "done":
                     break
+                continue
             except queue.Empty:
-                # Thread finished but sent nothing — exit loop
-                if done_event.is_set():
-                    break
-                # Hard timeout guard
-                if _time.time() - start_time > MAX_WAIT_SECONDS:
-                    yield f"data: {json.dumps({'type': 'error', 'message': 'Takeoff pipeline timed out after 10 minutes'})}\n\n"
-                    return
-                await asyncio.sleep(0.05)
+                pass
+
+            # Queue is empty — now check if the thread has finished
+            if done_event.is_set():
+                # Drain any final messages that arrived before event was checked
+                while True:
+                    try:
+                        msg = status_queue.get_nowait()
+                        if msg["type"] == "status":
+                            yield f"data: {json.dumps(msg)}\n\n"
+                        elif msg["type"] in ("error", "done"):
+                            break
+                    except queue.Empty:
+                        break
+                break
+
+            # Hard timeout guard
+            if _time.time() - start_time > MAX_WAIT_SECONDS:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Takeoff pipeline timed out after 10 minutes'})}\n\n"
+                return
+            await asyncio.sleep(0.05)
 
         if not result_container:
             yield f"data: {json.dumps({'type': 'error', 'message': 'Takeoff failed to produce result'})}\n\n"
@@ -257,6 +272,24 @@ async def run_takeoff(request: TakeoffRequest):
     if not request.snippets:
         raise HTTPException(status_code=400, detail="At least one snippet is required")
 
+    # Guard against oversized requests (max 30 snippets, each image ≤ 15MB base64, total ≤ 50MB)
+    MAX_SNIPPETS = 30
+    MAX_IMAGE_B64_BYTES = 15 * 1024 * 1024  # 15 MB base64 ≈ 11 MB image
+    MAX_TOTAL_B64_BYTES = 50 * 1024 * 1024  # 50 MB total across all snippets
+    if len(request.snippets) > MAX_SNIPPETS:
+        raise HTTPException(status_code=400, detail=f"Too many snippets (max {MAX_SNIPPETS})")
+    total_size = 0
+    for snip in request.snippets:
+        img_size = len(snip.image_data)
+        if img_size > MAX_IMAGE_B64_BYTES:
+            raise HTTPException(status_code=400, detail=f"Snippet '{snip.id}' image_data exceeds 15 MB limit")
+        total_size += img_size
+    if total_size > MAX_TOTAL_B64_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Total snippet payload {total_size // (1024 * 1024)} MB exceeds 50 MB limit"
+        )
+
     fixture_snippets = [s for s in request.snippets if s.label == "fixture_schedule"]
     rcp_snippets = [s for s in request.snippets if s.label == "rcp"]
 
@@ -306,6 +339,32 @@ async def get_job(job_id: str):
     }
 
 
+@app.get("/takeoff/result/{job_id}")
+async def get_result(job_id: str):
+    """Retrieve the full formatted result for a completed takeoff job.
+
+    Useful for clients that disconnected from the SSE stream before receiving the result.
+    Returns the same format as the SSE 'result' event payload.
+    """
+    if not engine:
+        raise HTTPException(status_code=503, detail="Takeoff engine not initialized")
+
+    job = engine.db.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    full_result = engine.db.get_full_result(job_id)
+    if not full_result:
+        # Job exists but result not yet stored (still running or failed before completion)
+        status = job.get("status", "unknown")
+        raise HTTPException(
+            status_code=404,
+            detail=f"No result available for job {job_id} (status: {status})"
+        )
+
+    return full_result
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API info."""
@@ -317,6 +376,7 @@ async def root():
             "health": "GET /takeoff/health",
             "run": "POST /takeoff/run",
             "jobs": "GET /takeoff/jobs",
-            "job": "GET /takeoff/jobs/{job_id}"
+            "job": "GET /takeoff/jobs/{job_id}",
+            "result": "GET /takeoff/result/{job_id}"
         }
     }

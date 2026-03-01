@@ -139,8 +139,16 @@ def check_schedule_traceability(fixture_counts: list, fixture_schedule: dict) ->
 
 
 def _normalize_area_label(label: str) -> str:
-    """Normalize area label for comparison (lowercase, strip, collapse separators)."""
-    return label.strip().lower().replace("-", " ").replace("_", " ")
+    """Normalize area label for comparison (lowercase, strip, collapse separators).
+
+    Also strips trailing parenthetical suffixes like '(Copy)', '(Rev A)', '(1)', etc.
+    so that sub_labels like 'Floor 2 North (Copy)' match 'Floor 2 North'.
+    """
+    import re
+    label = label.strip().lower().replace("-", " ").replace("_", " ")
+    # Remove trailing parenthetical, e.g. "(copy)", "(rev a)", "(1)"
+    label = re.sub(r"\s*\([^)]*\)\s*$", "", label).strip()
+    return label
 
 
 def check_complete_coverage(areas_covered: list, rcp_snippets: list) -> list:
@@ -264,14 +272,59 @@ def check_emergency_fixtures(fixture_counts: list) -> list:
             has_emergency_tracking = True
             break
 
-    # Only flag if we have a substantial count (>20 fixtures) and no emergency tracking
-    # Small jobs may legitimately have no emergency fixtures
-    if not has_emergency_tracking and len(fixture_counts) > 0:
+    # Only flag if there are more than 5 fixture types and no emergency tracking.
+    # Small jobs (≤5 types) may legitimately have no emergency fixtures in scope.
+    if not has_emergency_tracking and len(fixture_counts) > 5:
         violations.append({
             "rule": "Emergency Fixture Tracking",
             "severity": "MAJOR",
             "explanation": "No emergency fixtures (exit signs, battery packs, emergency circuits) appear to be tracked. Verify these are not required or add them."
         })
+
+    return violations
+
+
+def check_flag_assumptions(fixture_counts: list) -> list:
+    """Check that ambiguous fixtures are explicitly flagged, not silently guessed.
+
+    Looks for entries that have counts but no flags, while their description or
+    notes contain ambiguity-indicating language. Also checks that any fixture
+    tagged 'UNKNOWN' is flagged as assumed.
+
+    Args:
+        fixture_counts: List of fixture count dicts with type_tag, flags, description, notes
+
+    Returns:
+        List of violations
+    """
+    ASSUMPTION_KEYWORDS = [
+        "assume", "assumed", "unclear", "ambiguous", "unknown", "uncertain",
+        "estimated", "approximate", "guess", "possibly", "likely", "probable"
+    ]
+    violations = []
+
+    for fc in fixture_counts:
+        tag = fc.get("type_tag", "")
+        flags = fc.get("flags") or []
+        description = (fc.get("description") or "").lower()
+        notes = (fc.get("notes") or "").lower()
+        combined = f"{description} {notes}"
+
+        # Any fixture tagged UNKNOWN must have a flag explaining it
+        if tag.upper() == "UNKNOWN" and not flags:
+            violations.append({
+                "rule": "Flag Assumptions",
+                "severity": "MAJOR",
+                "explanation": f"Fixture type 'UNKNOWN' counted but not flagged as assumed. Ambiguous fixtures must be explicitly flagged."
+            })
+
+        # Fixtures with assumption language in description/notes but no flags
+        elif any(kw in combined for kw in ASSUMPTION_KEYWORDS) and not flags:
+            violations.append({
+                "rule": "Flag Assumptions",
+                "severity": "MAJOR",
+                "explanation": f"Type '{tag}': description/notes contain ambiguous language ('{combined[:80]}...') but no flags set. Assumed quantities must be explicitly flagged."
+            })
 
     return violations
 
@@ -311,6 +364,9 @@ def enforce_constitution(
 
     # Rule 5: Emergency Fixture Tracking
     all_violations.extend(check_emergency_fixtures(fixture_counts))
+
+    # Rule 6: Flag Assumptions
+    all_violations.extend(check_flag_assumptions(fixture_counts))
 
     # Determine verdict
     fatal_count = sum(1 for v in all_violations if v.get("severity") == "FATAL")

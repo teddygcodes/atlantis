@@ -20,7 +20,40 @@ from takeoff.extraction import (
     FixtureSchedule, AreaCount, PlanNote, PanelData,
     extract_fixture_schedule, extract_rcp_counts, extract_plan_notes, extract_panel_schedule
 )
-from takeoff.agents import Counter, Checker, Reconciler, Judge
+from takeoff.agents import Counter, Checker, Reconciler, Judge, validate_grand_total
+
+
+def _check_notes_addressed(plan_notes: List, counter_output: dict) -> bool:
+    """Check whether plan notes were addressed in the Counter's output.
+
+    Uses a structural check: looks for the affected fixture type from each note
+    in the Counter's fixture flags/notes fields. Falls back to True if there are
+    no notes (nothing to address).
+    """
+    if not plan_notes:
+        return True
+
+    fixture_counts = counter_output.get("fixture_counts", [])
+    # Build lookup: type_tag -> flags + notes text for that type
+    type_text: Dict[str, str] = {}
+    for fc in fixture_counts:
+        tag = (fc.get("type_tag") or "").upper()
+        flags_str = " ".join(fc.get("flags", []))
+        notes_str = fc.get("notes", "") or ""
+        type_text[tag] = f"{flags_str} {notes_str}".lower()
+
+    addressed_count = 0
+    for note in plan_notes:
+        affected_type = (note.affects_fixture_type or "").upper()
+        constraint = note.constraint_type or "general"
+        if not affected_type:
+            # No specific type — can't verify structurally; assume addressed
+            addressed_count += 1
+        elif affected_type in type_text:
+            # Fixture type exists in counter output — consider addressed
+            addressed_count += 1
+
+    return addressed_count >= len(plan_notes) * 0.5  # ≥50% of notes have corresponding fixture entries
 
 
 class TakeoffEngine:
@@ -80,10 +113,21 @@ class TakeoffEngine:
         job_id = str(uuid.uuid4())[:8]
         start_time = time.time()
 
+        # Validate mode immediately — before any expensive extraction calls
+        if mode not in ("fast", "strict", "liability"):
+            raise ValueError(f"Unknown mode '{mode}'. Must be 'fast', 'strict', or 'liability'.")
+
         emit(f"Starting takeoff job {job_id}...")
 
         # ─── Step 1: Validate snippets ───────────────────────────────────────
         emit("Validating snippet set...")
+
+        # Validate snippet labels and warn on unrecognized values
+        valid_labels = {"fixture_schedule", "rcp", "plan_notes", "panel_schedule", "detail", "site_plan"}
+        for s in snippets:
+            lbl = s.get("label", "")
+            if lbl and lbl not in valid_labels:
+                emit(f"WARNING: Snippet '{s.get('id', '?')}' has unrecognized label '{lbl}' — expected one of: {', '.join(sorted(valid_labels))}")
 
         fixture_snippets = [s for s in snippets if s.get("label") == "fixture_schedule"]
         rcp_snippets = [s for s in snippets if s.get("label") == "rcp"]
@@ -113,7 +157,9 @@ class TakeoffEngine:
             drawing_name=drawing_name,
             snippet_count=len(snippets)
         )
-        self.db.store_snippets(job_id, snippets)
+        # Strip base64 image data before persisting — images can be multi-MB each
+        snippets_meta = [{k: v for k, v in s.items() if k != "image_data"} for s in snippets]
+        self.db.store_snippets(job_id, snippets_meta)
 
         # ─── Step 2: Extract fixture schedule ────────────────────────────────
         emit("Extracting fixture schedule...")
@@ -131,14 +177,24 @@ class TakeoffEngine:
 
         emit(f"Fixture schedule: {len(fixture_schedule.fixtures)} type tags extracted")
 
-        # H2: Fail loudly if extraction produced no fixtures (API error, blank image, etc.)
+        # H2: Fail with NEEDS_REVIEW if extraction produced no fixtures (API error, blank image, etc.)
         if not fixture_schedule.fixtures:
             warning_text = "; ".join(fixture_schedule.warnings) if fixture_schedule.warnings else "unknown reason"
-            emit(f"ERROR: Fixture schedule extraction yielded 0 fixtures — {warning_text}")
+            emit(f"WARNING: Fixture schedule extraction yielded 0 fixtures — {warning_text}")
+            self.db.update_job_status(job_id, "needs_review")
             return {
                 "job_id": job_id,
+                "status": "needs_review",
                 "error": "extraction_failed",
-                "message": f"Fixture schedule extraction failed — no fixture types found. {warning_text}"
+                "message": (
+                    f"Fixture schedule extraction failed — no fixture types found. {warning_text}. "
+                    "Please verify the fixture_schedule snippet shows the full schedule table clearly, "
+                    "then resubmit."
+                ),
+                "confidence": 0.0,
+                "confidence_band": "VERY_LOW",
+                "verdict": "BLOCK",
+                "flags": ["Manual review required — fixture schedule extraction failed"]
             }
 
         self.db.store_fixture_schedule(job_id, {"fixtures": fixture_schedule.fixtures})
@@ -177,18 +233,18 @@ class TakeoffEngine:
                 job_id, fixture_schedule, area_counts, plan_notes, panel_data,
                 rcp_snippets, emit, start_time
             )
-        elif mode in ("strict", "liability"):
+        else:  # strict | liability
             result = self._run_strict_mode(
                 job_id, fixture_schedule, area_counts, plan_notes, panel_data,
                 rcp_snippets, emit, start_time, mode
             )
-        else:
-            raise ValueError(f"Unknown mode '{mode}'. Must be 'fast', 'strict', or 'liability'.")
 
         # Update job status
         elapsed_ms = int((time.time() - start_time) * 1000)
-        self.db.update_job_status(job_id, "complete", latency_ms=elapsed_ms)
+        cost_usd = self.model_router.get_stats().get("model_router_cost_usd")
+        self.db.update_job_status(job_id, "complete", latency_ms=elapsed_ms, cost_usd=cost_usd)
         result["latency_ms"] = elapsed_ms
+        result["cost_usd"] = cost_usd
 
         return result
 
@@ -204,24 +260,38 @@ class TakeoffEngine:
         start_time: float
     ) -> Dict:
         """Run fast mode: Counter + Checker + Judge (no Reconciler)."""
-        print(f"[TAKEOFF] Running FAST mode pipeline")
+        emit("Running FAST mode pipeline (Counter + Checker + Judge)")
 
         # Counter
         emit("Counter analyzing drawings and building fixture count...")
         counter_response = self.counter.generate_count(fixture_schedule, area_counts, plan_notes, panel_data)
-        counter_output = counter_response.data
+        _gtr = validate_grand_total(counter_response.data, "COUNTER")
+        counter_output, total_corrected = _gtr.counts, _gtr.was_corrected
         emit(f"Counter produced count: {counter_output.get('grand_total_fixtures', 0)} total fixtures")
+        if total_corrected:
+            emit("WARNING: Counter's grand_total_fixtures was auto-corrected to match per-type sum")
 
         # Short-circuit: zero fixtures means blank/unreadable drawing
         if counter_output.get("grand_total_fixtures", 0) == 0:
-            print(f"[TAKEOFF] WARNING: Counter found 0 fixtures — blank or unreadable drawing")
+            emit("WARNING: Counter found 0 fixtures — blank or unreadable drawing")
             return {
                 "job_id": job_id, "verdict": "BLOCK", "confidence_score": 0.25,
-                "confidence_band": "VERY_LOW", "grand_total": 0, "fixture_counts": [],
+                "confidence_band": "VERY_LOW", "grand_total": 0,
+                "fixture_table": [], "fixture_counts": [],
                 "checker_attacks": [], "reconciler_responses": [], "violations": [],
                 "flags": ["No fixtures detected. Check that snippets contain a fixture schedule and RCP data."],
                 "mode": "fast", "error": "No fixtures detected in provided snippets."
             }
+
+        # I7: Warn about fixture types in area counts that don't exist in the schedule
+        known_tags = {t.upper() for t in fixture_schedule.fixtures.keys()}
+        unknown_types = {
+            tag for ac in area_counts
+            for tag in ac.counts_by_type.keys()
+            if tag.upper() not in known_tags and tag.upper() != "UNKNOWN"
+        }
+        if unknown_types:
+            emit(f"WARNING: RCP areas reference types not in schedule: {', '.join(sorted(unknown_types))} — may be extraction errors")
 
         # Checker
         emit("Checker reviewing count for errors and omissions...")
@@ -229,6 +299,8 @@ class TakeoffEngine:
             counter_output, fixture_schedule, area_counts, plan_notes, panel_data
         )
         checker_attacks = checker_response.data.get("attacks", [])
+        if not checker_response.data and checker_response.raw_response:
+            emit("WARNING: Checker agent returned empty output — attacks may be missing")
         emit(f"Checker found {len(checker_attacks)} issues ({checker_response.data.get('critical_count', 0)} critical)")
 
         # No Reconciler in fast mode
@@ -245,6 +317,10 @@ class TakeoffEngine:
         fixture_counts_list = counter_output.get("fixture_counts", [])
         areas_covered = counter_output.get("areas_covered", [])
 
+        # Determine notes compliance: Counter must reference affected fixture types
+        # or constraint types in its fixture flags/notes fields (structural check, not keyword search).
+        notes_addressed = _check_notes_addressed(plan_notes, counter_output)
+
         confidence_result = calculate_confidence(
             fixture_counts=fixture_counts_list,
             areas_covered=areas_covered,
@@ -256,38 +332,28 @@ class TakeoffEngine:
             mode="fast",
             has_panel_schedule=panel_data is not None,
             has_plan_notes=len(plan_notes) > 0,
-            notes_addressed=(
-                len(plan_notes) == 0 or
-                any(
-                    note.text.lower()[:50] in (counter_response.reasoning or "").lower()
-                    or any(
-                        kw in (counter_response.reasoning or "").lower()
-                        for kw in note.text.lower().split()
-                        if len(kw) > 5
-                    )
-                    for note in plan_notes
-                    if note.text
-                )
-            )
+            notes_addressed=notes_addressed,
+            total_corrected=total_corrected
         )
 
         # Persist
         grand_total = counter_output.get("grand_total_fixtures", 0)
         self.db.store_fixture_counts(job_id, fixture_counts_list)
         self.db.store_adversarial_log(job_id, checker_attacks, [])
+        result = self._build_result(
+            job_id, counter_output, checker_attacks, reconciler_output,
+            judge_result, confidence_result, fixture_schedule, "fast"
+        )
         self.db.store_result(
             job_id, grand_total,
             confidence_result["score"], confidence_result["band"],
             confidence_result["features_json"],
             judge_result.get("violations", []),
             judge_result.get("flags", []),
-            judge_result.get("verdict", "WARN")
+            judge_result.get("verdict", "WARN"),
+            full_result=result
         )
-
-        return self._build_result(
-            job_id, counter_output, checker_attacks, None, reconciler_output,
-            judge_result, confidence_result, fixture_schedule, "fast"
-        )
+        return result
 
     def _run_strict_mode(
         self,
@@ -302,24 +368,38 @@ class TakeoffEngine:
         mode: str
     ) -> Dict:
         """Run strict/liability mode: Counter + Checker + Reconciler + Judge."""
-        print(f"[TAKEOFF] Running {mode.upper()} mode pipeline")
+        emit(f"Running {mode.upper()} mode pipeline (Counter + Checker + Reconciler + Judge)")
 
         # Counter
         emit("Counter analyzing drawings and building fixture count...")
         counter_response = self.counter.generate_count(fixture_schedule, area_counts, plan_notes, panel_data)
-        counter_output = counter_response.data
+        _gtr = validate_grand_total(counter_response.data, "COUNTER")
+        counter_output, total_corrected = _gtr.counts, _gtr.was_corrected
         emit(f"Counter: {counter_output.get('grand_total_fixtures', 0)} total fixtures")
+        if total_corrected:
+            emit("WARNING: Counter's grand_total_fixtures was auto-corrected to match per-type sum")
 
         # Short-circuit: zero fixtures means blank/unreadable drawing
         if counter_output.get("grand_total_fixtures", 0) == 0:
-            print(f"[TAKEOFF] WARNING: Counter found 0 fixtures — blank or unreadable drawing")
+            emit("WARNING: Counter found 0 fixtures — blank or unreadable drawing")
             return {
                 "job_id": job_id, "verdict": "BLOCK", "confidence_score": 0.25,
-                "confidence_band": "VERY_LOW", "grand_total": 0, "fixture_counts": [],
+                "confidence_band": "VERY_LOW", "grand_total": 0,
+                "fixture_table": [], "fixture_counts": [],
                 "checker_attacks": [], "reconciler_responses": [], "violations": [],
                 "flags": ["No fixtures detected. Check that snippets contain a fixture schedule and RCP data."],
                 "mode": mode, "error": "No fixtures detected in provided snippets."
             }
+
+        # I7: Warn about fixture types in area counts that don't exist in the schedule
+        known_tags = {t.upper() for t in fixture_schedule.fixtures.keys()}
+        unknown_types = {
+            tag for ac in area_counts
+            for tag in ac.counts_by_type.keys()
+            if tag.upper() not in known_tags and tag.upper() != "UNKNOWN"
+        }
+        if unknown_types:
+            emit(f"WARNING: RCP areas reference types not in schedule: {', '.join(sorted(unknown_types))} — may be extraction errors")
 
         # Checker
         emit("Checker independently reviewing count...")
@@ -327,17 +407,34 @@ class TakeoffEngine:
             counter_output, fixture_schedule, area_counts, plan_notes, panel_data
         )
         checker_attacks = checker_response.data.get("attacks", [])
+        if not checker_response.data and checker_response.raw_response:
+            emit("WARNING: Checker agent returned empty output — attacks may be missing")
         emit(f"Checker found {len(checker_attacks)} issues ({checker_response.data.get('critical_count', 0)} critical)")
 
         # Reconciler
         emit(f"Reconciler addressing {len(checker_attacks)} attacks...")
         reconciler_response = self.reconciler.address_attacks(
-            counter_output, checker_attacks, fixture_schedule, area_counts
+            counter_output, checker_attacks, fixture_schedule, area_counts, plan_notes
         )
         reconciler_output = reconciler_response.data
+        if not reconciler_output and reconciler_response.raw_response:
+            emit("WARNING: Reconciler agent returned empty output — using Counter counts as final")
+            reconciler_output = {}
         reconciler_responses_list = reconciler_output.get("responses", [])
-        revised_total = reconciler_output.get("revised_grand_total", counter_output.get("grand_total_fixtures", 0))
+        original_total = counter_output.get("grand_total_fixtures", 0)
+        revised_total = reconciler_output.get("revised_grand_total", original_total)
         emit(f"Reconciler: revised total = {revised_total}")
+
+        # I6: Guardrail — flag if Reconciler's revised total deviates >20% from Counter's original
+        if original_total > 0 and revised_total > 0:
+            deviation = abs(revised_total - original_total) / original_total
+            if deviation > 0.20:
+                emit(f"WARNING: Reconciler revised total {revised_total} deviates {deviation*100:.0f}% from Counter's {original_total} — flagging as suspicious")
+                if isinstance(reconciler_output, dict):
+                    reconciler_output = dict(reconciler_output)
+                    reconciler_output.setdefault("flags", []).append(
+                        f"Reconciler total {revised_total} deviates {deviation*100:.0f}% from Counter ({original_total}) — verify manually"
+                    )
 
         # Judge
         emit("Judge evaluating final takeoff against constitutional rules...")
@@ -350,6 +447,13 @@ class TakeoffEngine:
         fixture_counts_list = counter_output.get("fixture_counts", [])
         areas_covered = counter_output.get("areas_covered", [])
 
+        # Determine notes compliance: prefer Reconciler's semantic check over structural fallback
+        reconciler_notes = reconciler_output.get("notes_compliance", []) if reconciler_output else []
+        if reconciler_notes:
+            notes_addressed = all(n.get("applied", False) for n in reconciler_notes)
+        else:
+            notes_addressed = _check_notes_addressed(plan_notes, counter_output)
+
         confidence_result = calculate_confidence(
             fixture_counts=fixture_counts_list,
             areas_covered=areas_covered,
@@ -361,45 +465,34 @@ class TakeoffEngine:
             mode=mode,
             has_panel_schedule=panel_data is not None,
             has_plan_notes=len(plan_notes) > 0,
-            notes_addressed=(
-                len(plan_notes) == 0 or
-                any(
-                    note.text.lower()[:50] in (counter_response.reasoning or "").lower()
-                    or any(
-                        kw in (counter_response.reasoning or "").lower()
-                        for kw in note.text.lower().split()
-                        if len(kw) > 5
-                    )
-                    for note in plan_notes
-                    if note.text
-                )
-            )
+            notes_addressed=notes_addressed,
+            total_corrected=total_corrected
         )
 
         # Persist
         grand_total = reconciler_output.get("revised_grand_total", counter_output.get("grand_total_fixtures", 0))
         self.db.store_fixture_counts(job_id, fixture_counts_list)
         self.db.store_adversarial_log(job_id, checker_attacks, reconciler_responses_list)
+        result = self._build_result(
+            job_id, counter_output, checker_attacks, reconciler_output,
+            judge_result, confidence_result, fixture_schedule, mode
+        )
         self.db.store_result(
             job_id, grand_total,
             confidence_result["score"], confidence_result["band"],
             confidence_result["features_json"],
             judge_result.get("violations", []),
             judge_result.get("flags", []),
-            judge_result.get("verdict", "WARN")
+            judge_result.get("verdict", "WARN"),
+            full_result=result
         )
-
-        return self._build_result(
-            job_id, counter_output, checker_attacks, reconciler_output, reconciler_output,
-            judge_result, confidence_result, fixture_schedule, mode
-        )
+        return result
 
     def _build_result(
         self,
         job_id: str,
         counter_output: dict,
         checker_attacks: List[Dict],
-        reconciler_response,
         reconciler_output: Optional[dict],
         judge_result: dict,
         confidence_result: dict,

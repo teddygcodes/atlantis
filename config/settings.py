@@ -115,6 +115,12 @@ MODEL_ALLOCATION = {
     "sydyn_judge": "sonnet",
     "sydyn_verify_citations": "haiku",
     "sydyn_query_classifier": "haiku",
+    # Takeoff: adversarial lighting takeoff (all Sonnet — needs vision capability)
+    "takeoff_extraction": "sonnet",     # Needs vision for fixture schedule / RCP
+    "takeoff_counter": "sonnet",        # Needs vision for counting
+    "takeoff_checker": "sonnet",        # Needs vision for independent verification
+    "takeoff_reconciler": "sonnet",     # Needs vision for reconciliation
+    "takeoff_judge": "sonnet",          # Constitutional ruling
 }
 
 MODEL_IDS = {
