@@ -89,7 +89,7 @@ Rules:
 3. Assign difficulty codes: S=Standard (troffer), M=Moderate (recessed), D=Difficult (needs lift), E=Extreme (custom)
 4. List accessories for each fixture type (mounting clips, flex whips, J-boxes, sensors)
 5. Flag any type tags that appear in area counts but NOT in the fixture schedule as "UNSCHEDULED"
-6. Flag any ambiguous or assumed quantities
+6. CRITICAL — Flag all assumptions: any fixture type_tag you cannot definitively identify (e.g., "UNKNOWN", "TBD", "?", or any type not clearly described in the schedule) MUST have flags: ["ASSUMPTION: <reason why uncertain>"]. Do not guess silently.
 7. Cross-reference with plan notes — add quantities specified in notes if not already in RCP counts
 
 CRITICAL: Respond with ONLY a valid JSON object. No markdown. No explanation before or after.
@@ -294,17 +294,16 @@ Check for: missed areas, double-counted overlapping views, wrong fixture type as
             data = extract_json_from_response(response.content, "CHECKER")
             attacks = data.get("attacks", [])
 
-            # Deduplicate attacks by (category, affected_type_tag, affected_area, full description).
-            # Using the full description prevents two genuinely distinct attacks on the same
-            # type/area from collapsing if their first 60 chars happen to match.
+            # Deduplicate attacks by (category, affected_type_tag, affected_area).
+            # Full description is excluded from the key — the same underlying issue on the
+            # same type/area should not appear twice even if worded differently.
             seen: set = set()
             deduped = []
             for attack in attacks:
                 key = (
                     attack.get("category", ""),
                     (attack.get("affected_type_tag") or "").upper(),
-                    (attack.get("affected_area") or "").lower().strip(),
-                    re.sub(r'\s+', ' ', (attack.get("description") or "")).strip().lower()
+                    (attack.get("affected_area") or "").lower().strip()
                 )
                 if key not in seen:
                     seen.add(key)

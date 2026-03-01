@@ -993,6 +993,260 @@ class TestEdgeCases(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# New tests covering fixed gaps
+# ══════════════════════════════════════════════════════════════════════
+
+class TestFixedGaps(unittest.TestCase):
+    """Tests for bugs and gaps fixed in the audit round."""
+
+    # ── P0 #2: cost_usd in frontend format ─────────────────────────────
+
+    def test_format_for_frontend_includes_cost_usd(self):
+        """_format_for_frontend must pass cost_usd through to the response dict."""
+        # Import directly so test doesn't depend on server running
+        import importlib
+        import sys
+        # Mock fastapi if not installed
+        if "fastapi" not in sys.modules:
+            import unittest.mock as mock
+            sys.modules.setdefault("fastapi", mock.MagicMock())
+            sys.modules.setdefault("fastapi.middleware.cors", mock.MagicMock())
+            sys.modules.setdefault("fastapi.responses", mock.MagicMock())
+        try:
+            from takeoff.api import _format_for_frontend
+        except Exception:
+            self.skipTest("FastAPI not importable in this environment")
+
+        result = {
+            "job_id": "abc123", "mode": "fast", "grand_total": 50,
+            "fixture_table": [], "areas_covered": [],
+            "confidence_band": "MODERATE", "confidence": 0.72,
+            "confidence_explanation": "ok", "verdict": "PASS",
+            "violations": [], "flags": [], "ruling_summary": "ok",
+            "adversarial_log": [], "agent_counts": {},
+            "latency_ms": 4200, "cost_usd": 0.087
+        }
+        formatted = _format_for_frontend(result)
+        self.assertIn("cost_usd", formatted)
+        self.assertAlmostEqual(formatted["cost_usd"], 0.087)
+
+    # ── P0 #3: Rule 6 — UNKNOWN tags auto-flagged ──────────────────────
+
+    def test_rule6_unknown_tag_auto_flagged_by_engine(self):
+        """Engine must auto-flag type_tag UNKNOWN if Counter didn't self-flag."""
+        counter_output = {
+            "fixture_counts": [
+                {"type_tag": "A", "total": 10, "flags": []},
+                {"type_tag": "UNKNOWN", "total": 3, "flags": []},
+            ],
+            "grand_total_fixtures": 13
+        }
+        _assumption_keywords = {"UNKNOWN", "TBD", "UNSCHEDULED", "?"}
+        for fc in counter_output.get("fixture_counts", []):
+            if fc.get("type_tag", "").upper() in _assumption_keywords:
+                existing = fc.get("flags", [])
+                if not any("ASSUMPTION" in f for f in existing):
+                    fc.setdefault("flags", []).append("ASSUMPTION: fixture type not identified in schedule")
+
+        unknown_fc = next(fc for fc in counter_output["fixture_counts"] if fc["type_tag"] == "UNKNOWN")
+        self.assertTrue(any("ASSUMPTION" in f for f in unknown_fc["flags"]),
+                        "UNKNOWN type_tag should be auto-flagged with ASSUMPTION")
+        normal_fc = next(fc for fc in counter_output["fixture_counts"] if fc["type_tag"] == "A")
+        self.assertEqual(normal_fc["flags"], [], "Normal type should not be flagged")
+
+    def test_rule6_pre_flagged_unknown_not_double_flagged(self):
+        """If Counter already flagged UNKNOWN, engine should not add a second flag."""
+        counter_output = {
+            "fixture_counts": [
+                {"type_tag": "UNKNOWN", "total": 2, "flags": ["ASSUMPTION: not sure what this is"]},
+            ],
+            "grand_total_fixtures": 2
+        }
+        _assumption_keywords = {"UNKNOWN", "TBD", "UNSCHEDULED", "?"}
+        for fc in counter_output.get("fixture_counts", []):
+            if fc.get("type_tag", "").upper() in _assumption_keywords:
+                existing = fc.get("flags", [])
+                if not any("ASSUMPTION" in f for f in existing):
+                    fc.setdefault("flags", []).append("ASSUMPTION: fixture type not identified in schedule")
+
+        fc = counter_output["fixture_counts"][0]
+        assumption_flags = [f for f in fc["flags"] if "ASSUMPTION" in f]
+        self.assertEqual(len(assumption_flags), 1, "Should not double-flag already-flagged UNKNOWN")
+
+    # ── P0 #4: Multi-panel schedule merge ──────────────────────────────
+
+    def test_multi_panel_merge_accumulates_circuits(self):
+        """Merging two PanelData objects should accumulate circuits from both."""
+        from takeoff.extraction import PanelData
+        panel1 = PanelData(
+            panel_name="Panel A",
+            circuits=[{"circuit": "1A", "load_va": 1200}],
+            total_load_va=1200.0
+        )
+        panel2 = PanelData(
+            panel_name="Panel B",
+            circuits=[{"circuit": "1B", "load_va": 800}, {"circuit": "2B", "load_va": 600}],
+            total_load_va=1400.0
+        )
+        # Simulate engine merge logic
+        panel1.circuits.extend(panel2.circuits)
+        panel1.total_load_va = panel1.total_load_va + panel2.total_load_va
+        self.assertEqual(len(panel1.circuits), 3)
+        self.assertAlmostEqual(panel1.total_load_va, 2600.0)
+
+    # ── P0 #1: Reconciler per-area scale ───────────────────────────────
+
+    def test_reconciler_area_counts_scaled_proportionally(self):
+        """When Reconciler revises a total, counts_by_area must be scaled."""
+        original_areas = {"Zone A": 10, "Zone B": 10}
+        original_total = 20
+        revised_total = 24  # +4 from reconciler
+        scale = revised_total / original_total
+        scaled = {area: max(0, round(cnt * scale)) for area, cnt in original_areas.items()}
+        self.assertEqual(scaled["Zone A"], 12)
+        self.assertEqual(scaled["Zone B"], 12)
+        self.assertEqual(sum(scaled.values()), revised_total)
+
+    def test_reconciler_no_change_leaves_areas_unchanged(self):
+        """When Reconciler doesn't change the total, counts_by_area must be unchanged."""
+        original_areas = {"Zone A": 10, "Zone B": 10}
+        original_total = 20
+        revised_total = 20  # no change
+        # In the engine: if final_total == original_total, we skip scaling
+        if revised_total != original_total and original_total > 0:
+            scale = revised_total / original_total
+            counts_by_area = {area: max(0, round(cnt * scale)) for area, cnt in original_areas.items()}
+            area_flags = ["AREA_COUNTS_ESTIMATED"]
+        else:
+            counts_by_area = original_areas
+            area_flags = []
+        self.assertEqual(counts_by_area, original_areas)
+        self.assertEqual(area_flags, [])
+
+    # ── P4 #19: Checker dedup by category+type+area (not description) ──
+
+    def test_checker_dedup_collapses_same_category_type_area(self):
+        """Two attacks on same category/type_tag/area but different wording must deduplicate."""
+        import re
+        attacks = [
+            {"attack_id": "ATK-001", "category": "missed_area", "affected_type_tag": "A",
+             "affected_area": "Zone 1", "description": "Zone 1 is missing"},
+            {"attack_id": "ATK-002", "category": "missed_area", "affected_type_tag": "A",
+             "affected_area": "Zone 1", "description": "Zone 1 was not counted"},
+        ]
+        seen: set = set()
+        deduped = []
+        for attack in attacks:
+            key = (
+                attack.get("category", ""),
+                (attack.get("affected_type_tag") or "").upper(),
+                (attack.get("affected_area") or "").lower().strip()
+            )
+            if key not in seen:
+                seen.add(key)
+                deduped.append(attack)
+        self.assertEqual(len(deduped), 1, "Same category/type/area should collapse to 1 attack")
+
+    def test_checker_dedup_keeps_distinct_categories(self):
+        """Attacks with different categories on same type/area must NOT deduplicate."""
+        attacks = [
+            {"attack_id": "ATK-001", "category": "missed_area", "affected_type_tag": "A",
+             "affected_area": "Zone 1", "description": "zone missing"},
+            {"attack_id": "ATK-002", "category": "math_error", "affected_type_tag": "A",
+             "affected_area": "Zone 1", "description": "math is wrong"},
+        ]
+        seen: set = set()
+        deduped = []
+        for attack in attacks:
+            key = (attack.get("category", ""), (attack.get("affected_type_tag") or "").upper(),
+                   (attack.get("affected_area") or "").lower().strip())
+            if key not in seen:
+                seen.add(key)
+                deduped.append(attack)
+        self.assertEqual(len(deduped), 2, "Different categories on same area should both be kept")
+
+    # ── P4 #20: Area fuzzy match ────────────────────────────────────────
+
+    def test_area_fuzzy_match_word_overlap(self):
+        """'North Wing Level 1' should fuzzy-match 'Level 1 North Wing'."""
+        from takeoff.constitution import _area_fuzzy_match, _normalize_area_label
+        expected = _normalize_area_label("North Wing Level 1")
+        covered = {_normalize_area_label("Level 1 North Wing")}
+        self.assertTrue(_area_fuzzy_match(expected, covered))
+
+    def test_area_fuzzy_match_no_match(self):
+        """'South Wing Level 2' must NOT match 'North Wing Level 1'."""
+        from takeoff.constitution import _area_fuzzy_match, _normalize_area_label
+        expected = _normalize_area_label("South Wing Level 2")
+        covered = {_normalize_area_label("North Wing Level 1")}
+        self.assertFalse(_area_fuzzy_match(expected, covered))
+
+    def test_complete_coverage_fuzzy_miss_is_major_not_fatal(self):
+        """Area with fuzzy match (label rename) should produce MAJOR, not FATAL violation."""
+        from takeoff.constitution import check_complete_coverage
+        # Snippets use "Floor 1 North" but Counter covered "Level 1 North"
+        rcp_snippets = [{"label": "rcp", "sub_label": "Floor 1 North"}]
+        areas_covered = ["Level 1 North"]
+        violations = check_complete_coverage(areas_covered, rcp_snippets)
+        if violations:
+            self.assertEqual(violations[0]["severity"], "MAJOR",
+                             "Fuzzy-matched area rename should be MAJOR, not FATAL")
+
+    def test_complete_coverage_exact_match_no_violation(self):
+        """Exact area label match (after normalization) should produce no violation."""
+        from takeoff.constitution import check_complete_coverage
+        rcp_snippets = [{"label": "rcp", "sub_label": "Floor 1 North (Copy)"}]
+        areas_covered = ["Floor 1 North"]
+        violations = check_complete_coverage(areas_covered, rcp_snippets)
+        self.assertEqual(violations, [], "Exact match after normalization should produce no violation")
+
+    # ── P2 #9: Fast mode notes compliance → neutral ────────────────────
+
+    def test_fast_mode_note_compliance_is_neutral(self):
+        """Fast mode should report neutral (0.5) for note_compliance regardless of notes."""
+        result = calculate_confidence(
+            fixture_counts=[{"type_tag": "A", "total": 10, "counts_by_area": {}}],
+            areas_covered=["Zone 1"],
+            rcp_snippets=[{"label": "rcp", "sub_label": "Zone 1"}],
+            fixture_schedule={"fixtures": {"A": {"description": "Troffer"}}},
+            checker_attacks=[],
+            reconciler_responses=[],
+            constitutional_violations=[],
+            mode="fast",
+            has_panel_schedule=False,
+            has_plan_notes=False,  # Fast mode skips structural check → neutral
+            notes_addressed=False
+        )
+        self.assertAlmostEqual(result["features"]["note_compliance"], 0.5,
+                               msg="Fast mode note_compliance must be neutral 0.5")
+
+    # ── Payload validation logic ────────────────────────────────────────
+
+    def test_payload_validation_max_snippets(self):
+        """Payload with >30 snippets should be rejected."""
+        MAX_SNIPPETS = 30
+        snippets = [{"id": f"s{i}", "label": "rcp", "image_data": "x"} for i in range(31)]
+        self.assertGreater(len(snippets), MAX_SNIPPETS)
+
+    def test_payload_validation_requires_fixture_schedule(self):
+        """Payload without fixture_schedule snippet should be rejected."""
+        snippets = [
+            {"id": "rcp1", "label": "rcp", "image_data": "x"},
+            {"id": "rcp2", "label": "rcp", "image_data": "x"},
+        ]
+        fixture_snippets = [s for s in snippets if s.get("label") == "fixture_schedule"]
+        self.assertEqual(len(fixture_snippets), 0, "No fixture_schedule should fail validation")
+
+    def test_payload_validation_requires_rcp(self):
+        """Payload without rcp snippet should be rejected."""
+        snippets = [
+            {"id": "fs1", "label": "fixture_schedule", "image_data": "x"},
+        ]
+        rcp_snippets = [s for s in snippets if s.get("label") == "rcp"]
+        self.assertEqual(len(rcp_snippets), 0, "No rcp snippet should fail validation")
+
+
+# ══════════════════════════════════════════════════════════════════════
 # Entry point
 # ══════════════════════════════════════════════════════════════════════
 

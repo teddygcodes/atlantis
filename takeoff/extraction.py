@@ -160,7 +160,7 @@ def _call_vision(
         Response text content
     """
     if model is None:
-        model = os.getenv("TAKEOFF_VISION_MODEL", "claude-sonnet-4-5-20250929")
+        model = os.getenv("TAKEOFF_VISION_MODEL", "claude-sonnet-4-6")
 
     # Detect media type and strip data URI prefix if present
     detected_media_type = "image/png"

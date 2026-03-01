@@ -220,12 +220,20 @@ class TakeoffEngine:
 
         # ─── Step 5: Extract panel schedule ───────────────────────────────────
         panel_data: Optional[PanelData] = None
-        for panel_snippet in panel_snippets:
+        for i, panel_snippet in enumerate(panel_snippets):
             image_data = panel_snippet.get("image_data", "")
-            if image_data:
-                emit("Extracting panel schedule for cross-reference...")
-                panel_data = extract_panel_schedule(image_data)
-                break  # Use first panel schedule
+            if not image_data:
+                continue
+            emit(f"Extracting panel schedule {i + 1}/{len(panel_snippets)} for cross-reference...")
+            extracted = extract_panel_schedule(image_data)
+            if panel_data is None:
+                panel_data = extracted
+            else:
+                # Merge circuits from additional panels into the first
+                panel_data.circuits.extend(extracted.circuits)
+                if extracted.total_load_va and panel_data.total_load_va:
+                    panel_data.total_load_va = panel_data.total_load_va + extracted.total_load_va
+                panel_data.warnings.extend(extracted.warnings)
 
         # ─── Step 6: Run agent pipeline ───────────────────────────────────────
         if mode == "fast":
@@ -293,6 +301,15 @@ class TakeoffEngine:
         if unknown_types:
             emit(f"WARNING: RCP areas reference types not in schedule: {', '.join(sorted(unknown_types))} — may be extraction errors")
 
+        # Rule 6 enforcement: auto-flag any UNKNOWN/TBD type tags Counter didn't self-flag
+        _assumption_keywords = {"UNKNOWN", "TBD", "UNSCHEDULED", "?"}
+        for fc in counter_output.get("fixture_counts", []):
+            if fc.get("type_tag", "").upper() in _assumption_keywords:
+                existing_flags = fc.get("flags", [])
+                if not any("ASSUMPTION" in f for f in existing_flags):
+                    fc.setdefault("flags", []).append("ASSUMPTION: fixture type not identified in schedule")
+                    emit(f"WARNING: Auto-flagged assumption on type_tag '{fc.get('type_tag')}' per Rule 6")
+
         # Checker
         emit("Checker reviewing count for errors and omissions...")
         checker_response = self.checker.generate_attacks(
@@ -317,10 +334,8 @@ class TakeoffEngine:
         fixture_counts_list = counter_output.get("fixture_counts", [])
         areas_covered = counter_output.get("areas_covered", [])
 
-        # Determine notes compliance: Counter must reference affected fixture types
-        # or constraint types in its fixture flags/notes fields (structural check, not keyword search).
-        notes_addressed = _check_notes_addressed(plan_notes, counter_output)
-
+        # Fast mode: skip structural notes check (it's unreliable — only checks type presence,
+        # not constraint application). Pass has_plan_notes=False so confidence uses neutral 0.5.
         confidence_result = calculate_confidence(
             fixture_counts=fixture_counts_list,
             areas_covered=areas_covered,
@@ -331,8 +346,8 @@ class TakeoffEngine:
             constitutional_violations=judge_result.get("violations", []),
             mode="fast",
             has_panel_schedule=panel_data is not None,
-            has_plan_notes=len(plan_notes) > 0,
-            notes_addressed=notes_addressed,
+            has_plan_notes=False,  # Neutral — structural check is not semantically meaningful
+            notes_addressed=False,
             total_corrected=total_corrected
         )
 
@@ -400,6 +415,15 @@ class TakeoffEngine:
         }
         if unknown_types:
             emit(f"WARNING: RCP areas reference types not in schedule: {', '.join(sorted(unknown_types))} — may be extraction errors")
+
+        # Rule 6 enforcement: auto-flag any UNKNOWN/TBD type tags Counter didn't self-flag
+        _assumption_keywords = {"UNKNOWN", "TBD", "UNSCHEDULED", "?"}
+        for fc in counter_output.get("fixture_counts", []):
+            if fc.get("type_tag", "").upper() in _assumption_keywords:
+                existing_flags = fc.get("flags", [])
+                if not any("ASSUMPTION" in f for f in existing_flags):
+                    fc.setdefault("flags", []).append("ASSUMPTION: fixture type not identified in schedule")
+                    emit(f"WARNING: Auto-flagged assumption on type_tag '{fc.get('type_tag')}' per Rule 6")
 
         # Checker
         emit("Checker independently reviewing count...")
@@ -513,11 +537,23 @@ class TakeoffEngine:
         for fc in counter_output.get("fixture_counts", []):
             tag = fc.get("type_tag", "")
             revised = revised_counts.get(tag, {})
-            final_total = revised.get("total", fc.get("total", 0)) if revised else fc.get("total", 0)
+            original_total = fc.get("total", 0)
+            final_total = revised.get("total", original_total) if revised else original_total
             delta = revised.get("delta", "0") if revised else "0"
 
             schedule_entry = fixture_schedule.fixtures.get(tag, {})
             desc = schedule_entry.get("description", fc.get("description", "")) if isinstance(schedule_entry, dict) else fc.get("description", "")
+
+            # If Reconciler revised the total, proportionally scale per-area counts.
+            # Reconciler only returns type-level totals, so area splits are estimated.
+            original_areas = fc.get("counts_by_area", {})
+            if revised and final_total != original_total and original_total > 0:
+                scale = final_total / original_total
+                counts_by_area = {area: max(0, round(cnt * scale)) for area, cnt in original_areas.items()}
+                area_flags = ["AREA_COUNTS_ESTIMATED: proportionally scaled after reconciliation"]
+            else:
+                counts_by_area = original_areas
+                area_flags = []
 
             fixture_table.append({
                 "type_tag": tag,
@@ -526,8 +562,8 @@ class TakeoffEngine:
                 "delta": delta,
                 "difficulty": fc.get("difficulty", "S"),
                 "accessories": fc.get("accessories", []),
-                "flags": fc.get("flags", []),
-                "counts_by_area": fc.get("counts_by_area", {})
+                "flags": fc.get("flags", []) + area_flags,
+                "counts_by_area": counts_by_area
             })
 
         # Adversarial log summary

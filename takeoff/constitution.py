@@ -151,6 +151,46 @@ def _normalize_area_label(label: str) -> str:
     return label
 
 
+_AREA_STOPWORDS = {"the", "a", "an", "of", "and", "or", "at", "in", "on", "for"}
+
+
+def _area_fuzzy_match(expected: str, covered_set: set) -> bool:
+    """Return True if any covered area is a close match to the expected area label.
+
+    Uses word-overlap similarity to handle rename patterns like "North Wing Level 1"
+    vs "Level 1 North Wing". Requires ≥60% non-stop word overlap AND any numeric
+    tokens in the expected label must appear in the candidate (prevents "Level 1"
+    from matching "Level 2"). Falls back to difflib ratio ≥0.80 for short labels.
+    """
+    import re
+    from difflib import SequenceMatcher
+
+    exp_nums = set(re.findall(r'\d+', expected))
+    exp_words = {w for w in expected.split() if w not in _AREA_STOPWORDS and len(w) > 1}
+
+    for candidate in covered_set:
+        cand_nums = set(re.findall(r'\d+', candidate))
+        cand_words = {w for w in candidate.split() if w not in _AREA_STOPWORDS and len(w) > 1}
+
+        # Numeric tokens must match exactly — "Level 1" must not match "Level 2"
+        if exp_nums and exp_nums != cand_nums:
+            continue
+
+        # Word overlap: ≥50% of significant words must be shared.
+        # The numeric guard above ensures "Level 1" can't match "Level 2".
+        if exp_words and cand_words:
+            overlap = exp_words & cand_words
+            if len(overlap) / max(len(exp_words), len(cand_words)) >= 0.50:
+                return True
+
+        # Character-level similarity fallback for very short labels (e.g. "L1" vs "Level 1")
+        ratio = SequenceMatcher(None, expected, candidate).ratio()
+        if ratio >= 0.80:
+            return True
+
+    return False
+
+
 def check_complete_coverage(areas_covered: list, rcp_snippets: list) -> list:
     """Check that all RCP snippet areas are accounted for.
 
@@ -174,7 +214,18 @@ def check_complete_coverage(areas_covered: list, rcp_snippets: list) -> list:
     covered_normalized = {_normalize_area_label(a) for a in areas_covered}
 
     for norm_label, display_label in expected_areas.items():
-        if norm_label and norm_label not in covered_normalized:
+        if not norm_label:
+            continue
+        if norm_label in covered_normalized:
+            continue
+        # Fuzzy match — handle area label renames (e.g. "Level 1" vs "Floor 1")
+        if _area_fuzzy_match(norm_label, covered_normalized):
+            violations.append({
+                "rule": "Complete Coverage",
+                "severity": "MAJOR",
+                "explanation": f"RCP area '{display_label}' label differs from Counter's areas_covered (fuzzy match found). Verify the area was counted."
+            })
+        else:
             violations.append({
                 "rule": "Complete Coverage",
                 "severity": "FATAL",

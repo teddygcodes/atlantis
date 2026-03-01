@@ -9,7 +9,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -121,6 +121,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Optional API key guard — set TAKEOFF_API_KEY env var to enable
+_TAKEOFF_API_KEY = os.getenv("TAKEOFF_API_KEY")
+
+@app.middleware("http")
+async def api_key_guard(request: Request, call_next):
+    """Require X-API-Key header if TAKEOFF_API_KEY env var is set."""
+    if _TAKEOFF_API_KEY:
+        # Health check and root are always open
+        if request.url.path not in ("/takeoff/health", "/"):
+            provided = request.headers.get("X-API-Key", "")
+            if provided != _TAKEOFF_API_KEY:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=403, content={"detail": "Invalid or missing API key"})
+    return await call_next(request)
+
+
+# ─── Concurrency Limiter ──────────────────────────────────────────────────────
+
+_MAX_CONCURRENT_JOBS = int(os.getenv("TAKEOFF_MAX_CONCURRENT_JOBS", "3"))
+_job_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_JOBS)
+
 
 # ─── SSE Streaming ────────────────────────────────────────────────────────────
 
@@ -154,12 +175,13 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
         finally:
             done_event.set()  # always signals completion even on exception
 
-    # Run job in background thread
+    # Run job in background thread under concurrency semaphore
+    await _job_semaphore.acquire()
     job_thread = threading.Thread(target=run_job, daemon=True)
     job_thread.start()
 
-    # Stream status updates with 10-minute hard timeout
-    MAX_WAIT_SECONDS = 600
+    # Stream status updates with 5-minute hard timeout (matches frontend AbortController)
+    MAX_WAIT_SECONDS = 300
     start_time = _time.time()
 
     try:
@@ -195,7 +217,7 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
 
             # Hard timeout guard
             if _time.time() - start_time > MAX_WAIT_SECONDS:
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Takeoff pipeline timed out after 10 minutes'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Takeoff pipeline timed out after 5 minutes'})}\n\n"
                 return
             await asyncio.sleep(0.05)
 
@@ -220,6 +242,8 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
         error_msg = str(e)
         print(f"[TAKEOFF API] Error: {error_msg}")
         yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
+    finally:
+        _job_semaphore.release()
 
 
 def _format_for_frontend(result: dict) -> dict:
@@ -239,7 +263,8 @@ def _format_for_frontend(result: dict) -> dict:
         "ruling_summary": result.get("ruling_summary", ""),
         "adversarial_log": result.get("adversarial_log", []),
         "agent_counts": result.get("agent_counts", {}),
-        "latency_ms": result.get("latency_ms", 0)
+        "latency_ms": result.get("latency_ms", 0),
+        "cost_usd": result.get("cost_usd", 0.0)
     }
 
 
@@ -298,6 +323,9 @@ async def run_takeoff(request: TakeoffRequest):
 
     if not rcp_snippets:
         raise HTTPException(status_code=400, detail="At least 1 rcp snippet is required")
+
+    if not _job_semaphore._value:  # noqa: SLF001 — check without acquiring
+        raise HTTPException(status_code=429, detail=f"Server at capacity ({_MAX_CONCURRENT_JOBS} concurrent jobs max). Retry shortly.")
 
     return StreamingResponse(
         generate_takeoff_stream(request),
