@@ -151,8 +151,9 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
     import threading
     import time as _time
 
+    # Bounded queue carries status messages AND the final result — no separate
+    # result_container list needed, which eliminates the unsynchronized list-read race.
     status_queue = queue.Queue(maxsize=200)
-    result_container = []
     done_event = threading.Event()  # set in finally so always fires on thread exit
 
     def status_callback(message: str):
@@ -168,8 +169,9 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
                 drawing_name=request.drawing_name,
                 status_callback=status_callback
             )
-            result_container.append(result)
-            status_queue.put({"type": "done"})
+            # Put result into the queue before setting done_event so the
+            # SSE generator always sees it when it drains after done.
+            status_queue.put({"type": "result_ready", "data": result})
         except Exception as e:
             status_queue.put({"type": "error", "message": str(e)})
         finally:
@@ -183,6 +185,7 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
     # Stream status updates with 5-minute hard timeout (matches frontend AbortController)
     MAX_WAIT_SECONDS = 300
     start_time = _time.time()
+    result = None
 
     try:
         while True:
@@ -194,8 +197,9 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
                     yield f"data: {json.dumps(msg)}\n\n"
                 elif msg["type"] == "error":
                     yield f"data: {json.dumps(msg)}\n\n"
-                    break
-                elif msg["type"] == "done":
+                    return
+                elif msg["type"] == "result_ready":
+                    result = msg["data"]
                     break
                 continue
             except queue.Empty:
@@ -209,8 +213,11 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
                         msg = status_queue.get_nowait()
                         if msg["type"] == "status":
                             yield f"data: {json.dumps(msg)}\n\n"
-                        elif msg["type"] in ("error", "done"):
-                            break
+                        elif msg["type"] == "error":
+                            yield f"data: {json.dumps(msg)}\n\n"
+                            return
+                        elif msg["type"] == "result_ready":
+                            result = msg["data"]
                     except queue.Empty:
                         break
                 break
@@ -221,11 +228,9 @@ async def generate_takeoff_stream(request: TakeoffRequest) -> AsyncGenerator[str
                 return
             await asyncio.sleep(0.05)
 
-        if not result_container:
+        if result is None:
             yield f"data: {json.dumps({'type': 'error', 'message': 'Takeoff failed to produce result'})}\n\n"
             return
-
-        result = result_container[0]
 
         if result.get("error"):
             yield f"data: {json.dumps({'type': 'error', 'message': result.get('message', result['error'])})}\n\n"
@@ -324,7 +329,7 @@ async def run_takeoff(request: TakeoffRequest):
     if not rcp_snippets:
         raise HTTPException(status_code=400, detail="At least 1 rcp snippet is required")
 
-    if not _job_semaphore._value:  # noqa: SLF001 — check without acquiring
+    if _job_semaphore.locked():
         raise HTTPException(status_code=429, detail=f"Server at capacity ({_MAX_CONCURRENT_JOBS} concurrent jobs max). Retry shortly.")
 
     return StreamingResponse(

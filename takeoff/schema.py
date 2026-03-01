@@ -318,6 +318,91 @@ class TakeoffDB:
             ))
             self.conn.commit()
 
+    def store_job_results_atomic(
+        self,
+        job_id: str,
+        fixture_counts: List[Dict],
+        attacks: List[Dict],
+        reconciler_responses: List[Dict],
+        grand_total: int,
+        confidence_score: float,
+        confidence_band: str,
+        confidence_features: str,
+        violations: List[Dict],
+        flags: List[str],
+        judge_verdict: str,
+        full_result: Optional[Dict] = None
+    ) -> None:
+        """Store fixture counts, adversarial log, and result in one atomic transaction.
+
+        All three writes commit together or roll back together — prevents the DB from
+        being left in a partial state if the process crashes mid-write.
+        """
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("BEGIN")
+            try:
+                # Fixture counts
+                for fc in fixture_counts:
+                    for area, count in fc.get("counts_by_area", {}).items():
+                        cur.execute("""
+                            INSERT INTO fixture_counts
+                            (job_id, type_tag, area, count, confidence, difficulty_code, flags)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            job_id,
+                            fc.get("type_tag", ""),
+                            area,
+                            count,
+                            fc.get("confidence"),
+                            fc.get("difficulty", "S"),
+                            json.dumps(fc.get("flags", []))
+                        ))
+
+                # Adversarial log
+                for attack in attacks:
+                    cur.execute("""
+                        INSERT INTO adversarial_log
+                        (job_id, agent, attack_id, severity, category, description, resolution, final_verdict)
+                        VALUES (?, 'checker', ?, ?, ?, ?, NULL, NULL)
+                    """, (
+                        job_id,
+                        attack.get("attack_id"),
+                        attack.get("severity"),
+                        attack.get("category"),
+                        attack.get("description")
+                    ))
+                for resp in reconciler_responses:
+                    cur.execute("""
+                        UPDATE adversarial_log
+                        SET resolution = ?, final_verdict = ?
+                        WHERE job_id = ? AND attack_id = ?
+                    """, (resp.get("explanation"), resp.get("verdict"), job_id, resp.get("attack_id")))
+
+                # Result
+                cur.execute("""
+                    INSERT OR REPLACE INTO results
+                    (job_id, grand_total, confidence_score, confidence_band, confidence_features,
+                     violations_json, flags_json, judge_verdict, approved_at, full_result_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    job_id,
+                    grand_total,
+                    confidence_score,
+                    confidence_band,
+                    confidence_features,
+                    json.dumps(violations),
+                    json.dumps(flags),
+                    judge_verdict,
+                    time.time() if judge_verdict == "PASS" else None,
+                    json.dumps(full_result) if full_result else None
+                ))
+
+                cur.execute("COMMIT")
+            except Exception:
+                cur.execute("ROLLBACK")
+                raise
+
     def get_full_result(self, job_id: str) -> Optional[Dict]:
         """Retrieve the full formatted result for a completed job."""
         row = self.conn.execute(

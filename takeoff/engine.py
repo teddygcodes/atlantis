@@ -21,6 +21,34 @@ from takeoff.extraction import (
     extract_fixture_schedule, extract_rcp_counts, extract_plan_notes, extract_panel_schedule
 )
 from takeoff.agents import Counter, Checker, Reconciler, Judge, validate_grand_total
+from takeoff.extraction import reset_vision_cost, get_vision_cost_usd
+
+
+def _scale_area_counts(original_areas: dict, target_total: int) -> dict:
+    """Scale per-area counts to a new total using the largest-remainder algorithm.
+
+    Guarantees sum(result.values()) == target_total without off-by-one rounding errors.
+    """
+    if not original_areas:
+        return {}
+    original_total = sum(original_areas.values())
+    if original_total == 0:
+        return {area: 0 for area in original_areas}
+
+    scale = target_total / original_total
+    floored = {area: int(cnt * scale) for area, cnt in original_areas.items()}
+    remainder = target_total - sum(floored.values())
+
+    # Distribute leftover units to the areas with the largest fractional parts
+    sorted_by_frac = sorted(
+        original_areas.keys(),
+        key=lambda a: (original_areas[a] * scale) - int(original_areas[a] * scale),
+        reverse=True
+    )
+    for i in range(remainder):
+        floored[sorted_by_frac[i % len(sorted_by_frac)]] += 1
+
+    return {area: max(0, cnt) for area, cnt in floored.items()}
 
 
 def _check_notes_addressed(plan_notes: List, counter_output: dict) -> bool:
@@ -119,6 +147,9 @@ class TakeoffEngine:
 
         emit(f"Starting takeoff job {job_id}...")
 
+        # Reset vision token cost accumulator for this job
+        reset_vision_cost()
+
         # ─── Step 1: Validate snippets ───────────────────────────────────────
         emit("Validating snippet set...")
 
@@ -169,8 +200,12 @@ class TakeoffEngine:
             image_data = fs_snippet.get("image_data", "")
             if image_data:
                 extracted = extract_fixture_schedule(image_data)
-                # Merge if multiple schedule snippets
-                fixture_schedule.fixtures.update(extracted.fixtures)
+                # Merge if multiple schedule snippets — keep first definition on collision
+                for tag, info in extracted.fixtures.items():
+                    if tag in fixture_schedule.fixtures:
+                        emit(f"WARNING: Fixture type '{tag}' defined in multiple schedule snippets — keeping first definition")
+                    else:
+                        fixture_schedule.fixtures[tag] = info
                 fixture_schedule.warnings.extend(extracted.warnings)
                 if not fixture_schedule.raw_notes:
                     fixture_schedule.raw_notes = extracted.raw_notes
@@ -247,9 +282,11 @@ class TakeoffEngine:
                 rcp_snippets, emit, start_time, mode
             )
 
-        # Update job status
+        # Update job status — combine agent LLM costs and vision extraction costs
         elapsed_ms = int((time.time() - start_time) * 1000)
-        cost_usd = self.model_router.get_stats().get("model_router_cost_usd")
+        agent_cost_usd = self.model_router.get_stats().get("model_router_cost_usd") or 0.0
+        vision_cost_usd = get_vision_cost_usd()
+        cost_usd = round(agent_cost_usd + vision_cost_usd, 6)
         self.db.update_job_status(job_id, "complete", latency_ms=elapsed_ms, cost_usd=cost_usd)
         result["latency_ms"] = elapsed_ms
         result["cost_usd"] = cost_usd
@@ -351,21 +388,24 @@ class TakeoffEngine:
             total_corrected=total_corrected
         )
 
-        # Persist
+        # Persist all writes atomically — if any fails, all roll back
         grand_total = counter_output.get("grand_total_fixtures", 0)
-        self.db.store_fixture_counts(job_id, fixture_counts_list)
-        self.db.store_adversarial_log(job_id, checker_attacks, [])
         result = self._build_result(
             job_id, counter_output, checker_attacks, reconciler_output,
             judge_result, confidence_result, fixture_schedule, "fast"
         )
-        self.db.store_result(
-            job_id, grand_total,
-            confidence_result["score"], confidence_result["band"],
-            confidence_result["features_json"],
-            judge_result.get("violations", []),
-            judge_result.get("flags", []),
-            judge_result.get("verdict", "WARN"),
+        self.db.store_job_results_atomic(
+            job_id=job_id,
+            fixture_counts=fixture_counts_list,
+            attacks=checker_attacks,
+            reconciler_responses=[],
+            grand_total=grand_total,
+            confidence_score=confidence_result["score"],
+            confidence_band=confidence_result["band"],
+            confidence_features=confidence_result["features_json"],
+            violations=judge_result.get("violations", []),
+            flags=judge_result.get("flags", []),
+            judge_verdict=judge_result.get("verdict", "WARN"),
             full_result=result
         )
         return result
@@ -493,21 +533,24 @@ class TakeoffEngine:
             total_corrected=total_corrected
         )
 
-        # Persist
+        # Persist all writes atomically — if any fails, all roll back
         grand_total = reconciler_output.get("revised_grand_total", counter_output.get("grand_total_fixtures", 0))
-        self.db.store_fixture_counts(job_id, fixture_counts_list)
-        self.db.store_adversarial_log(job_id, checker_attacks, reconciler_responses_list)
         result = self._build_result(
             job_id, counter_output, checker_attacks, reconciler_output,
             judge_result, confidence_result, fixture_schedule, mode
         )
-        self.db.store_result(
-            job_id, grand_total,
-            confidence_result["score"], confidence_result["band"],
-            confidence_result["features_json"],
-            judge_result.get("violations", []),
-            judge_result.get("flags", []),
-            judge_result.get("verdict", "WARN"),
+        self.db.store_job_results_atomic(
+            job_id=job_id,
+            fixture_counts=fixture_counts_list,
+            attacks=checker_attacks,
+            reconciler_responses=reconciler_responses_list,
+            grand_total=grand_total,
+            confidence_score=confidence_result["score"],
+            confidence_band=confidence_result["band"],
+            confidence_features=confidence_result["features_json"],
+            violations=judge_result.get("violations", []),
+            flags=judge_result.get("flags", []),
+            judge_verdict=judge_result.get("verdict", "WARN"),
             full_result=result
         )
         return result
@@ -546,10 +589,10 @@ class TakeoffEngine:
 
             # If Reconciler revised the total, proportionally scale per-area counts.
             # Reconciler only returns type-level totals, so area splits are estimated.
+            # Uses largest-remainder algorithm to guarantee sum == final_total.
             original_areas = fc.get("counts_by_area", {})
             if revised and final_total != original_total and original_total > 0:
-                scale = final_total / original_total
-                counts_by_area = {area: max(0, round(cnt * scale)) for area, cnt in original_areas.items()}
+                counts_by_area = _scale_area_counts(original_areas, final_total)
                 area_flags = ["AREA_COUNTS_ESTIMATED: proportionally scaled after reconciliation"]
             else:
                 counts_by_area = original_areas

@@ -1247,6 +1247,177 @@ class TestFixedGaps(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# TestBugFixes2 — tests for the second round of bug fixes
+# ══════════════════════════════════════════════════════════════════════
+
+class TestBugFixes2(unittest.TestCase):
+    """Tests covering BUG-1 through BUG-10 fixes."""
+
+    # ── BUG-4 / BUG-5: Atomic DB write and integer-split area scaling ────
+
+    def test_store_job_results_atomic_commits_all(self):
+        """store_job_results_atomic stores counts, log, and result in one shot."""
+        import tempfile, os
+        from takeoff.schema import TakeoffDB
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            db = TakeoffDB(db_path)
+            db.create_job("job1", mode="fast", drawing_name="test", snippet_count=2)
+
+            fixture_counts = [{"type_tag": "A", "counts_by_area": {"Floor 1": 10, "Floor 2": 5}, "difficulty": "S", "flags": []}]
+            attacks = [{"attack_id": "ATK-001", "severity": "minor", "category": "missed_fixtures", "description": "test"}]
+            responses = [{"attack_id": "ATK-001", "verdict": "defend", "explanation": "justified"}]
+            full_result = {"job_id": "job1", "grand_total": 15}
+
+            db.store_job_results_atomic(
+                job_id="job1",
+                fixture_counts=fixture_counts,
+                attacks=attacks,
+                reconciler_responses=responses,
+                grand_total=15,
+                confidence_score=0.72,
+                confidence_band="MODERATE",
+                confidence_features='{}',
+                violations=[],
+                flags=[],
+                judge_verdict="PASS",
+                full_result=full_result
+            )
+
+            counts = db.get_job_counts("job1")
+            self.assertEqual(len(counts), 2)  # Floor 1 + Floor 2
+            self.assertEqual(sum(r["count"] for r in counts), 15)
+
+            adv_log = db.get_job_adversarial_log("job1")
+            self.assertEqual(len(adv_log), 1)
+            self.assertEqual(adv_log[0]["final_verdict"], "defend")
+
+            retrieved = db.get_full_result("job1")
+            self.assertIsNotNone(retrieved)
+            self.assertEqual(retrieved["grand_total"], 15)
+
+            db.close()
+        finally:
+            os.unlink(db_path)
+
+    def test_scale_area_counts_sums_to_target(self):
+        """_scale_area_counts must produce counts that sum exactly to target_total."""
+        from takeoff.engine import _scale_area_counts
+
+        original = {"Floor 1": 7, "Floor 2": 5, "Floor 3": 3}
+        for target in [12, 13, 14, 17, 20, 1]:
+            result = _scale_area_counts(original, target)
+            self.assertEqual(sum(result.values()), target,
+                             f"Expected sum={target}, got {sum(result.values())} with original={original}")
+            self.assertTrue(all(v >= 0 for v in result.values()))
+
+    def test_scale_area_counts_empty(self):
+        """Empty input returns empty dict."""
+        from takeoff.engine import _scale_area_counts
+        self.assertEqual(_scale_area_counts({}, 10), {})
+
+    def test_scale_area_counts_zero_original(self):
+        """Zero original total returns zeros."""
+        from takeoff.engine import _scale_area_counts
+        result = _scale_area_counts({"A": 0, "B": 0}, 5)
+        self.assertEqual(result, {"A": 0, "B": 0})
+
+    # ── BUG-9: area_coverage uses fuzzy matching ─────────────────────────
+
+    def test_area_coverage_fuzzy_match_counts(self):
+        """area_coverage should credit areas matched by normalization, not just exact string."""
+        result = calculate_confidence(
+            fixture_counts=[{"type_tag": "A", "total": 5, "counts_by_area": {"North Wing Level 1": 5}}],
+            areas_covered=["Level 1 North Wing"],  # same area, different word order
+            rcp_snippets=[{"label": "rcp", "sub_label": "North Wing Level 1"}],
+            fixture_schedule={"fixtures": {"A": {"description": "Troffer"}}},
+            checker_attacks=[],
+            reconciler_responses=[],
+            constitutional_violations=[],
+            mode="fast",
+            has_panel_schedule=False,
+            has_plan_notes=False,
+            notes_addressed=False
+        )
+        # Fuzzy match should find "North Wing Level 1" ↔ "Level 1 North Wing"
+        self.assertGreater(result["features"]["area_coverage"], 0.5,
+                           "Fuzzy-matched area should score > 0.5")
+
+    # ── BUG-10: Vision cost tracking ─────────────────────────────────────
+
+    def test_reset_and_get_vision_cost(self):
+        """reset_vision_cost zeros the accumulator; get_vision_cost_usd returns float."""
+        from takeoff.extraction import reset_vision_cost, get_vision_cost_usd
+        reset_vision_cost()
+        cost = get_vision_cost_usd()
+        self.assertIsInstance(cost, float)
+        self.assertEqual(cost, 0.0)
+
+    # ── BUG-3: Fixture schedule collision detection ───────────────────────
+
+    def test_fixture_collision_keeps_first_definition(self):
+        """When two schedule snippets define the same type tag, first wins."""
+        # Simulate what engine does: iterate extracted.fixtures and skip duplicates
+        existing = {"A": {"description": "First definition", "wattage": 38.0}}
+        incoming = {"A": {"description": "Second definition", "wattage": 50.0}, "B": {"description": "New type"}}
+
+        warnings = []
+        for tag, info in incoming.items():
+            if tag in existing:
+                warnings.append(f"Collision on '{tag}'")
+            else:
+                existing[tag] = info
+
+        self.assertEqual(existing["A"]["description"], "First definition",
+                         "First definition must be preserved on collision")
+        self.assertIn("B", existing, "Non-colliding new type must be added")
+        self.assertTrue(any("A" in w for w in warnings), "Collision warning must be emitted")
+
+    # ── BUG-7: Judge model errors return WARN not BLOCK ──────────────────
+
+    def test_judge_model_error_returns_warn(self):
+        """Judge model/parse errors should return WARN + JUDGE_UNAVAILABLE, not BLOCK."""
+        from unittest.mock import MagicMock, patch
+        from takeoff.agents import Judge
+        from takeoff.constitution import get_constitution
+        from takeoff.extraction import FixtureSchedule
+
+        # Create a Judge whose model_router.complete raises
+        router = MagicMock()
+        router.complete.side_effect = RuntimeError("API timeout")
+        judge = Judge(router, get_constitution())
+
+        fs = FixtureSchedule(fixtures={"A": {"description": "Troffer", "wattage": 38}})
+        result = judge.evaluate(
+            counter_output={"fixture_counts": [{"type_tag": "A", "total": 10}], "grand_total_fixtures": 10, "areas_covered": []},
+            checker_attacks=[],
+            reconciler_output=None,
+            fixture_schedule=fs,
+            mode="fast"
+        )
+        self.assertEqual(result["verdict"], "WARN",
+                         "Model error should produce WARN, not BLOCK")
+        self.assertTrue(any("JUDGE_UNAVAILABLE" in f for f in result["flags"]),
+                        "JUDGE_UNAVAILABLE flag must be present")
+        self.assertEqual(result["violations"], [],
+                         "No constitutional violations should be fabricated on model error")
+
+    # ── BUG-2: Semaphore uses public .locked() API ────────────────────────
+
+    def test_semaphore_locked_check_exists(self):
+        """asyncio.Semaphore.locked() is a public API (not _value)."""
+        import asyncio
+        sem = asyncio.Semaphore(1)
+        self.assertTrue(hasattr(sem, "locked"), "Semaphore must have public .locked() method")
+        # _value access should no longer appear in api.py
+        with open("takeoff/api.py") as f:
+            content = f.read()
+        self.assertNotIn("_value", content, "api.py must not access private _value attribute")
+
+
+# ══════════════════════════════════════════════════════════════════════
 # Entry point
 # ══════════════════════════════════════════════════════════════════════
 

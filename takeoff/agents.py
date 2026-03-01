@@ -207,10 +207,7 @@ class Checker:
         # Panel cross-reference
         panel_text = "No panel data."
         if panel_data and panel_data.total_load_va:
-            # Heuristic: small round thousands likely entered as watts instead of VA
-            if panel_data.total_load_va % 1000 == 0 and panel_data.total_load_va < 5000:
-                print(f"[CHECKER] WARNING: Panel load {panel_data.total_load_va} may be in watts, not VA. Verify units.")
-            # Estimate counter wattage
+            # Estimate counter wattage for cross-reference
             estimated_va = 0
             for fc in counter_counts:
                 tag = fc.get("type_tag")
@@ -219,7 +216,12 @@ class Checker:
                     wattage = info.get("wattage", 0) if isinstance(info, dict) else 0
                     if wattage:
                         estimated_va += (fc.get("total", 0) * wattage)
-            panel_text = f"Panel total load: {panel_data.total_load_va} VA. Estimated Counter wattage: {estimated_va}W. Discrepancy: {abs(panel_data.total_load_va - estimated_va)} VA."
+            # Heuristic: small round thousands likely entered as watts instead of VA —
+            # surface this in the prompt so the LLM can issue a cross_reference attack.
+            unit_warning = ""
+            if panel_data.total_load_va % 1000 == 0 and panel_data.total_load_va < 5000:
+                unit_warning = f" UNIT CONCERN: {panel_data.total_load_va} is a small round multiple of 1000 — value may be in watts or kVA rather than VA. Flag this as a cross_reference attack."
+            panel_text = f"Panel total load: {panel_data.total_load_va} VA.{unit_warning} Estimated Counter wattage: {estimated_va}W. Discrepancy: {abs(panel_data.total_load_va - estimated_va)} VA."
 
         system_prompt = """You are the CHECKER agent in the Takeoff adversarial system — the second estimator doing an independent review.
 
@@ -569,20 +571,20 @@ Evaluate against all 6 constitutional hard rules and issue your ruling."""
                 max_tokens=2000
             )
         except Exception as e:
-            print(f"[JUDGE] ERROR: Model router failed: {e}")
+            # Model/network error — return WARN not BLOCK so users can distinguish
+            # "pipeline blocked my count" from "API was temporarily unavailable"
             return {
-                "verdict": "BLOCK",
-                "violations": [{"rule": "Model Error", "severity": "FATAL", "explanation": f"Judge model call failed: {e}"}],
+                "verdict": "WARN",
+                "violations": [],
                 "approved_counts": {},
-                "flags": ["Judge model error — takeoff blocked by default"],
-                "ruling_summary": f"Model error: {e}",
+                "flags": [f"JUDGE_UNAVAILABLE: Judge model call failed ({e}). Manual review required."],
+                "ruling_summary": f"Judge unavailable due to model error: {e}. Takeoff not evaluated — manual review required.",
                 "raw_response": f"[MODEL ERROR: {e}]"
             }
 
         try:
             data = extract_json_from_response(response.content, "JUDGE")
             verdict = data.get("verdict", "WARN")
-            print(f"[JUDGE] Verdict: {verdict} | {len(data.get('violations', []))} violations | {len(data.get('flags', []))} flags")
             return {
                 "verdict": verdict,
                 "violations": data.get("violations", []),
@@ -592,14 +594,14 @@ Evaluate against all 6 constitutional hard rules and issue your ruling."""
                 "raw_response": response.content
             }
         except (json.JSONDecodeError, ValueError) as e:
-            print(f"[JUDGE] ERROR: Failed to parse JSON response: {e}")
-            print(f"[JUDGE] Raw response snippet: {response.content[:200]}")
+            # Parse error — also WARN not BLOCK; the takeoff data is intact even if
+            # the Judge response was malformed
             return {
-                "verdict": "BLOCK",
-                "violations": [{"rule": "Parse Error", "severity": "FATAL", "explanation": f"Judge produced invalid JSON: {e}"}],
+                "verdict": "WARN",
+                "violations": [],
                 "approved_counts": {},
-                "flags": ["Judge response parse error — takeoff blocked by default"],
-                "ruling_summary": "Parse error — blocking by default. Resubmit for review.",
+                "flags": [f"JUDGE_UNAVAILABLE: Judge response could not be parsed ({e}). Manual review required."],
+                "ruling_summary": "Judge response parse error. Takeoff data is intact but constitutional evaluation could not complete — review manually.",
                 "raw_response": response.content
             }
 

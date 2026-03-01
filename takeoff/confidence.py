@@ -1,7 +1,12 @@
 """Feature-based confidence scoring for lighting takeoffs (not vibes)."""
 
 import json
+import logging
 from typing import List, Dict, Optional
+
+from takeoff.constitution import _normalize_area_label, _area_fuzzy_match
+
+logger = logging.getLogger(__name__)
 
 
 # Feature weights — all positive, sum = 1.00
@@ -48,14 +53,12 @@ def calculate_confidence(
     Returns:
         Dict with confidence score and features
     """
-    print(f"\n[TAKEOFF CONFIDENCE] Inputs:")
-    print(f"  Fixture counts: {len(fixture_counts)} types")
-    print(f"  Areas covered: {len(areas_covered)}")
-    print(f"  RCP snippets: {len([s for s in rcp_snippets if s.get('label') == 'rcp'])}")
-    print(f"  Checker attacks: {len(checker_attacks)}")
-    print(f"  Reconciler responses: {len(reconciler_responses)}")
-    print(f"  Constitutional violations: {len(constitutional_violations)}")
-    print(f"  Mode: {mode}")
+    logger.debug(
+        "[TAKEOFF CONFIDENCE] Inputs: counts=%d areas=%d rcp=%d attacks=%d responses=%d violations=%d mode=%s",
+        len(fixture_counts), len(areas_covered),
+        len([s for s in rcp_snippets if s.get("label") == "rcp"]),
+        len(checker_attacks), len(reconciler_responses), len(constitutional_violations), mode
+    )
 
     features = {}
 
@@ -72,13 +75,19 @@ def calculate_confidence(
         features["schedule_match_rate"] = 0.5
 
     # Feature 2: Area coverage
-    # % of RCP snippets that have corresponding areas in the count
-    rcp_snippet_areas = {s.get("sub_label", "").strip() for s in rcp_snippets if s.get("label") == "rcp" and s.get("sub_label")}
-    covered_set = {a.strip() for a in areas_covered}
+    # % of RCP snippets that have corresponding areas in the count.
+    # Uses the same normalization + fuzzy matching as constitution Rule 2 so that
+    # a job passing programmatic coverage check also scores well here.
+    rcp_snippet_areas = [s.get("sub_label", "").strip() for s in rcp_snippets if s.get("label") == "rcp" and s.get("sub_label")]
+    covered_normalized = {_normalize_area_label(a) for a in areas_covered}
 
     if rcp_snippet_areas:
-        coverage = len(rcp_snippet_areas & covered_set) / len(rcp_snippet_areas)
-        features["area_coverage"] = coverage
+        matched_count = 0
+        for raw_label in rcp_snippet_areas:
+            norm = _normalize_area_label(raw_label)
+            if norm in covered_normalized or _area_fuzzy_match(norm, covered_normalized):
+                matched_count += 1
+        features["area_coverage"] = matched_count / len(rcp_snippet_areas)
     else:
         features["area_coverage"] = 1.0  # No named RCP areas to check
 
@@ -132,26 +141,25 @@ def calculate_confidence(
     # not the misleading MODERATE that a 0.50 base produced.
     base_confidence = 0.20
 
-    print(f"\n[TAKEOFF CONFIDENCE] Feature Breakdown:")
-    print(f"  Base: {base_confidence:.3f}")
-    for feature, weight in FEATURE_WEIGHTS.items():
-        value = features.get(feature, 0.0)
-        contribution = value * weight
-        print(f"  {feature}: {value:.3f} × {weight:+.3f} = {contribution:+.3f}")
-
     weighted_sum = sum(
         features.get(feature, 0.0) * weight
         for feature, weight in FEATURE_WEIGHTS.items()
     )
 
-    print(f"  Weighted Sum: {weighted_sum:+.3f}")
     confidence_score = base_confidence + weighted_sum
-    print(f"  Pre-override Score: {confidence_score:.3f}")
+
+    if logger.isEnabledFor(logging.DEBUG):
+        breakdown = "  ".join(
+            f"{f}={features.get(f, 0.0):.3f}×{w:+.3f}={features.get(f, 0.0)*w:+.3f}"
+            for f, w in FEATURE_WEIGHTS.items()
+        )
+        logger.debug("[TAKEOFF CONFIDENCE] base=%.3f weighted_sum=%.3f pre_override=%.3f | %s",
+                     base_confidence, weighted_sum, confidence_score, breakdown)
 
     # Penalize if Counter's grand_total required auto-correction (math error)
     if total_corrected:
         confidence_score -= 0.05
-        print(f"  Auto-correct penalty (grand_total mismatch): -0.05 → {confidence_score:.3f}")
+        logger.debug("[TAKEOFF CONFIDENCE] auto-correct penalty -0.05 → %.3f", confidence_score)
 
     # Apply HARD penalties for constitutional violations
     violation_penalty = 0.0
@@ -159,17 +167,14 @@ def calculate_confidence(
         severity = v.get("severity", "MINOR")
         if severity == "FATAL":
             violation_penalty += 0.25
-            print(f"  FATAL violation penalty: -0.25")
         elif severity == "MAJOR":
             violation_penalty += 0.15
-            print(f"  MAJOR violation penalty: -0.15")
         elif severity == "MINOR":
             violation_penalty += 0.05
-            print(f"  MINOR violation penalty: -0.05")
 
     if violation_penalty > 0:
         confidence_score -= violation_penalty
-        print(f"  After violation penalties (-{violation_penalty:.3f}): {confidence_score:.3f}")
+        logger.debug("[TAKEOFF CONFIDENCE] violation penalties -%.3f → %.3f", violation_penalty, confidence_score)
 
     # Clamp to [0.0, 1.0]
     confidence_score = max(0.0, min(1.0, confidence_score))
@@ -181,21 +186,17 @@ def calculate_confidence(
 
     if fatal_count > 0:
         confidence_score = 0.25
-        print(f"  [HARD OVERRIDE] BLOCK verdict ({fatal_count} FATAL) → 0.25 (VERY_LOW)")
+        logger.debug("[TAKEOFF CONFIDENCE] HARD OVERRIDE: %d FATAL → 0.25 (VERY_LOW)", fatal_count)
     elif major_count > 0:
-        original = confidence_score
-        # Proportional cap: each additional MAJOR tightens by 0.05, floor at 0.20
         major_cap = max(0.20, 0.40 - (major_count - 1) * 0.05)
         confidence_score = min(confidence_score, major_cap)
-        print(f"  [HARD OVERRIDE] WARN with {major_count} MAJOR → cap {original:.3f} at {major_cap:.2f} = {confidence_score:.3f}")
+        logger.debug("[TAKEOFF CONFIDENCE] HARD OVERRIDE: %d MAJOR → cap %.2f → %.3f", major_count, major_cap, confidence_score)
     elif minor_count > 0:
-        original = confidence_score
-        # Proportional cap: each additional MINOR tightens by 0.03, floor at 0.35
         minor_cap = max(0.35, 0.50 - (minor_count - 1) * 0.03)
         confidence_score = min(confidence_score, minor_cap)
-        print(f"  [HARD OVERRIDE] WARN with {minor_count} MINOR → cap {original:.3f} at {minor_cap:.2f} = {confidence_score:.3f}")
+        logger.debug("[TAKEOFF CONFIDENCE] HARD OVERRIDE: %d MINOR → cap %.2f → %.3f", minor_count, minor_cap, confidence_score)
     else:
-        print(f"  [VERDICT] PASS — using calculated score {confidence_score:.3f}")
+        logger.debug("[TAKEOFF CONFIDENCE] PASS — final score %.3f", confidence_score)
 
     # Determine band
     if confidence_score >= 0.85:
@@ -207,7 +208,7 @@ def calculate_confidence(
     else:
         confidence_band = "VERY_LOW"
 
-    print(f"  Final Score: {confidence_score:.3f} ({confidence_band})")
+    logger.debug("[TAKEOFF CONFIDENCE] Final: %.3f (%s)", confidence_score, confidence_band)
 
     return {
         "score": round(confidence_score, 3),

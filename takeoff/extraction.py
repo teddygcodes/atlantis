@@ -8,22 +8,54 @@ text-only prompts. All extraction functions send base64 images to Claude Sonnet.
 """
 
 import json
+import logging
 import os
 import re
+import threading
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict
+
+logger = logging.getLogger(__name__)
 
 try:
     import anthropic
     HAS_ANTHROPIC = True
 except ImportError:
     HAS_ANTHROPIC = False
-    import sys
-    print(
-        "[TAKEOFF WARNING] 'anthropic' package not installed. "
-        "Vision extraction will fail at runtime. Run: pip install anthropic",
-        file=sys.stderr
+    logger.warning(
+        "'anthropic' package not installed. "
+        "Vision extraction will fail at runtime. Run: pip install anthropic"
     )
+
+
+# ─── Vision Cost Tracking ─────────────────────────────────────────────────────
+
+# Accumulated token counts across all vision calls in the current process.
+# Thread-safe via _cost_lock; reset per-job by calling reset_vision_cost().
+_vision_cost_lock = threading.Lock()
+_vision_input_tokens: int = 0
+_vision_output_tokens: int = 0
+
+# Approximate cost per token for claude-sonnet-4-6 vision (input/output)
+_VISION_INPUT_COST_PER_TOKEN = 3e-6    # $3 / 1M tokens
+_VISION_OUTPUT_COST_PER_TOKEN = 15e-6  # $15 / 1M tokens
+
+
+def reset_vision_cost() -> None:
+    """Reset accumulated vision token counts. Call at the start of each job."""
+    global _vision_input_tokens, _vision_output_tokens
+    with _vision_cost_lock:
+        _vision_input_tokens = 0
+        _vision_output_tokens = 0
+
+
+def get_vision_cost_usd() -> float:
+    """Return accumulated vision extraction cost in USD since last reset."""
+    with _vision_cost_lock:
+        return (
+            _vision_input_tokens * _VISION_INPUT_COST_PER_TOKEN
+            + _vision_output_tokens * _VISION_OUTPUT_COST_PER_TOKEN
+        )
 
 
 # ─── Data Classes ───────────────────────────────────────────────────────────
@@ -84,7 +116,7 @@ def extract_json_from_response(response_text: str, agent_name: str = "Extractor"
 
     Mirrors sydyn/agents.py extract_json_from_response exactly.
     """
-    print(f"[{agent_name}] Raw response preview: {response_text[:500]}...")
+    logger.debug("[%s] Raw response preview: %s...", agent_name, response_text[:500])
 
     # Strategy 1: Direct parse
     try:
@@ -109,7 +141,7 @@ def extract_json_from_response(response_text: str, agent_name: str = "Extractor"
         except json.JSONDecodeError:
             pass
 
-    print(f"[{agent_name}] ERROR: Failed to extract valid JSON")
+    logger.warning("[%s] ERROR: Failed to extract valid JSON", agent_name)
     raise json.JSONDecodeError("Could not extract valid JSON", response_text, 0)
 
 
@@ -197,6 +229,14 @@ def _call_vision(
             ]
         }]
     )
+
+    # Accumulate token usage for cost tracking
+    global _vision_input_tokens, _vision_output_tokens
+    if hasattr(response, "usage") and response.usage:
+        with _vision_cost_lock:
+            _vision_input_tokens += getattr(response.usage, "input_tokens", 0)
+            _vision_output_tokens += getattr(response.usage, "output_tokens", 0)
+
     return response.content[0].text
 
 
@@ -221,10 +261,11 @@ def _call_vision_with_retry(
             last_error = e
             if attempt < max_retries:
                 delay = (2 ** (attempt + 1)) + random.uniform(0, 1)
-                print(f"[EXTRACTION] Vision call failed (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay:.1f}s...")
+                logger.warning("[EXTRACTION] Vision call failed (attempt %d/%d): %s. Retrying in %.1fs...",
+                               attempt + 1, max_retries + 1, e, delay)
                 time.sleep(delay)
             else:
-                print(f"[EXTRACTION] Vision call failed after {max_retries + 1} attempts: {e}")
+                logger.error("[EXTRACTION] Vision call failed after %d attempts: %s", max_retries + 1, e)
     raise last_error
 
 
@@ -380,11 +421,11 @@ Return ONLY valid JSON (no markdown fences):
             extraction_confidence=data.get("extraction_confidence", "medium"),
             warnings=data.get("warnings", [])
         )
-        print(f"[EXTRACTION] Fixture schedule: {len(fixtures_raw)} types extracted")
+        logger.info("[EXTRACTION] Fixture schedule: %d types extracted", len(fixtures_raw))
         return fixture_schedule
 
     except Exception as e:
-        print(f"[EXTRACTION] ERROR extracting fixture schedule: {e}")
+        logger.error("[EXTRACTION] ERROR extracting fixture schedule: %s", e)
         return FixtureSchedule(warnings=[f"Extraction failed: {str(e)}"])
 
 
@@ -455,11 +496,11 @@ Return ONLY valid JSON:
         )
 
         total = sum(area_count.counts_by_type.values())
-        print(f"[EXTRACTION] RCP '{area_label}': {total} fixtures across {len(area_count.counts_by_type)} types")
+        logger.info("[EXTRACTION] RCP '%s': %d fixtures across %d types", area_label, total, len(area_count.counts_by_type))
         return area_count
 
     except Exception as e:
-        print(f"[EXTRACTION] ERROR extracting RCP counts for '{area_label}': {e}")
+        logger.error("[EXTRACTION] ERROR extracting RCP counts for '%s': %s", area_label, e)
         return AreaCount(area_label=area_label, warnings=[f"Extraction failed: {str(e)}"])
 
 
@@ -512,11 +553,11 @@ Return ONLY valid JSON:
                 constraint_type=n.get("constraint_type", "general")
             ))
 
-        print(f"[EXTRACTION] Plan notes: {len(notes)} constraints extracted")
+        logger.info("[EXTRACTION] Plan notes: %d constraints extracted", len(notes))
         return notes
 
     except Exception as e:
-        print(f"[EXTRACTION] ERROR extracting plan notes: {e}")
+        logger.error("[EXTRACTION] ERROR extracting plan notes: %s", e)
         return []
 
 
@@ -571,9 +612,9 @@ Return ONLY valid JSON:
             warnings=data.get("warnings", [])
         )
 
-        print(f"[EXTRACTION] Panel '{panel.panel_name}': {len(panel.circuits)} circuits, {panel.total_load_va} VA total")
+        logger.info("[EXTRACTION] Panel '%s': %d circuits, %s VA total", panel.panel_name, len(panel.circuits), panel.total_load_va)
         return panel
 
     except Exception as e:
-        print(f"[EXTRACTION] ERROR extracting panel schedule: {e}")
+        logger.error("[EXTRACTION] ERROR extracting panel schedule: %s", e)
         return PanelData(warnings=[f"Extraction failed: {str(e)}"])
